@@ -1,0 +1,276 @@
+mod db;
+mod pty;
+
+use pty::{
+    PlatformPtyBackend, PtyBackend, PtyBackendStatus, PtyError, PtyOutput, PtySessionId, PtySize,
+    ShellProfile, ShellProfileKind,
+};
+use serde::Serialize;
+use serde_json::Value;
+use std::fs;
+use std::path::PathBuf;
+use std::sync::Arc;
+use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, State};
+
+struct PtyState {
+    backend: Arc<dyn PtyBackend>,
+}
+
+const GITHUB_OWNER: &str = "devjuliusotto";
+const GITHUB_REPO: &str = "cortex";
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PtyDataEvent {
+    session_id: PtySessionId,
+    data: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PtyExitEvent {
+    session_id: PtySessionId,
+    code: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PtyErrorEvent {
+    session_id: PtySessionId,
+    error: String,
+}
+
+fn create_pty_state(app: AppHandle) -> PtyState {
+    let backend = PlatformPtyBackend::new(move |session_id, output| match output {
+        PtyOutput::Data(data) => {
+            let _ = app.emit("pty-output", PtyDataEvent { session_id, data });
+        }
+        PtyOutput::Exit { code } => {
+            let _ = app.emit("pty-exit", PtyExitEvent { session_id, code });
+        }
+        PtyOutput::Error(error) => {
+            let _ = app.emit("pty-error", PtyErrorEvent { session_id, error });
+        }
+    });
+
+    PtyState {
+        backend: Arc::new(backend),
+    }
+}
+
+fn pty_error(error: PtyError) -> String {
+    error.to_string()
+}
+
+fn is_allowed_external_url(url: &str) -> bool {
+    url.starts_with(&format!(
+        "https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}/issues/new"
+    ))
+}
+
+fn app_state_path(app: &AppHandle) -> Result<PathBuf, String> {
+    app.path()
+        .app_data_dir()
+        .map(|dir| dir.join("cortex-state.json"))
+        .map_err(|error| error.to_string())
+}
+
+fn normalize_persisted_state(mut state: Value) -> Value {
+    if let Some(sessions) = state.get_mut("sessions").and_then(Value::as_array_mut) {
+        for session in sessions {
+            if let Some(status) = session.get_mut("status") {
+                *status = Value::String("inactive".into());
+            }
+        }
+    }
+
+    state
+}
+
+fn restore_window_state(app: &AppHandle) {
+    let Ok(path) = app_state_path(app) else {
+        return;
+    };
+    let Ok(raw) = fs::read_to_string(path) else {
+        return;
+    };
+    let Ok(state) = serde_json::from_str::<Value>(&raw) else {
+        return;
+    };
+    let Some(window_state) = state.get("windowState") else {
+        return;
+    };
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
+
+    if let (Some(width), Some(height)) = (
+        window_state.get("width").and_then(Value::as_u64),
+        window_state.get("height").and_then(Value::as_u64),
+    ) {
+        let _ = window.set_size(PhysicalSize::new(width as u32, height as u32));
+    }
+
+    if let (Some(x), Some(y)) = (
+        window_state.get("x").and_then(Value::as_i64),
+        window_state.get("y").and_then(Value::as_i64),
+    ) {
+        let _ = window.set_position(PhysicalPosition::new(x as i32, y as i32));
+    }
+
+    if window_state
+        .get("maximized")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+    {
+        let _ = window.maximize();
+    }
+}
+
+#[tauri::command]
+fn list_shell_profiles() -> Vec<ShellProfile> {
+    vec![
+        ShellProfile::new(ShellProfileKind::PowerShell),
+        ShellProfile::new(ShellProfileKind::Cmd),
+        ShellProfile::new(ShellProfileKind::Wsl),
+    ]
+}
+
+#[tauri::command]
+fn pty_backend_status() -> PtyBackendStatus {
+    PtyBackendStatus::current()
+}
+
+#[tauri::command]
+fn load_persisted_state(app: AppHandle) -> Result<Option<Value>, String> {
+    let path = app_state_path(&app)?;
+    if !path.exists() {
+        return Ok(None);
+    }
+
+    let raw = fs::read_to_string(path).map_err(|error| error.to_string())?;
+    let state = serde_json::from_str::<Value>(&raw).map_err(|error| error.to_string())?;
+    Ok(Some(normalize_persisted_state(state)))
+}
+
+#[tauri::command]
+fn save_persisted_state(app: AppHandle, state: Value) -> Result<(), String> {
+    let path = app_state_path(&app)?;
+    let parent = path
+        .parent()
+        .ok_or_else(|| "App data path has no parent directory".to_string())?;
+    fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    let state = normalize_persisted_state(state);
+    let raw = serde_json::to_string_pretty(&state).map_err(|error| error.to_string())?;
+    fs::write(path, raw).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn open_external_url(url: String) -> Result<(), String> {
+    if !is_allowed_external_url(&url) {
+        return Err("Only Cortex GitHub issue URLs can be opened from this action".into());
+    }
+
+    #[cfg(windows)]
+    {
+        std::process::Command::new("rundll32.exe")
+            .args(["url.dll,FileProtocolHandler", &url])
+            .spawn()
+            .map_err(|error| error.to_string())?;
+        return Ok(());
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(&url)
+            .spawn()
+            .map_err(|error| error.to_string())?;
+        return Ok(());
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(&url)
+            .spawn()
+            .map_err(|error| error.to_string())?;
+        return Ok(());
+    }
+
+    #[allow(unreachable_code)]
+    Err("Opening external URLs is not supported on this platform".into())
+}
+
+#[tauri::command]
+fn spawn_terminal(
+    state: State<'_, PtyState>,
+    profile_id: String,
+    cwd: Option<String>,
+    rows: u16,
+    cols: u16,
+) -> Result<PtySessionId, String> {
+    let profile = ShellProfile::from_id(&profile_id)
+        .ok_or_else(|| format!("Unknown shell profile: {profile_id}"))?;
+    state
+        .backend
+        .spawn(profile, cwd, PtySize { rows, cols })
+        .map_err(pty_error)
+}
+
+#[tauri::command]
+fn write_terminal(
+    state: State<'_, PtyState>,
+    session_id: PtySessionId,
+    data: String,
+) -> Result<(), String> {
+    state
+        .backend
+        .write(session_id, data.as_bytes())
+        .map_err(pty_error)
+}
+
+#[tauri::command]
+fn resize_terminal(
+    state: State<'_, PtyState>,
+    session_id: PtySessionId,
+    rows: u16,
+    cols: u16,
+) -> Result<(), String> {
+    state
+        .backend
+        .resize(session_id, PtySize { rows, cols })
+        .map_err(pty_error)
+}
+
+#[tauri::command]
+fn terminate_terminal(state: State<'_, PtyState>, session_id: PtySessionId) -> Result<(), String> {
+    match state.backend.terminate(session_id) {
+        Ok(()) | Err(PtyError::SessionNotFound) => Ok(()),
+        Err(error) => Err(pty_error(error)),
+    }
+}
+
+pub fn run() {
+    tauri::Builder::default()
+        .plugin(tauri_plugin_sql::Builder::default().build())
+        .invoke_handler(tauri::generate_handler![
+            list_shell_profiles,
+            pty_backend_status,
+            load_persisted_state,
+            save_persisted_state,
+            open_external_url,
+            spawn_terminal,
+            write_terminal,
+            resize_terminal,
+            terminate_terminal
+        ])
+        .setup(|app| {
+            db::prepare_app_storage(app)?;
+            app.manage(create_pty_state(app.handle().clone()));
+            restore_window_state(app.handle());
+            Ok(())
+        })
+        .run(tauri::generate_context!())
+        .expect("error while running Cortex");
+}

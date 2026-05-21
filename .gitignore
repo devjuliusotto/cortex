@@ -1,0 +1,43 @@
+# Node
+node_modules/
+dist/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Tauri / Rust
+src-tauri/target/
+src-tauri/gen/
+**/*.rs.bk
+
+# Local configuration
+.env
+.env.*
+!.env.example
+*.local
+*.local.*
+
+# Local app data and databases
+*.db
+*.sqlite
+*.sqlite3
+*.db-shm
+*.db-wal
+cortex-state.json
+*state.json
+app-data/
+user-data/
+
+# Build outputs and logs
+*.log
+logs/
+out/
+build/
+release/
+
+# Editors / OS
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
