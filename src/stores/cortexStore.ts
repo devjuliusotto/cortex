@@ -15,6 +15,7 @@ export type TerminalProfile = {
 export type Workspace = {
   id: string;
   name: string;
+  defaultWorkingDirectory?: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -25,6 +26,7 @@ export type TerminalSession = {
   name: string;
   profileId: TerminalProfileId;
   status: SessionStatus;
+  terminalHistory: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -57,12 +59,19 @@ export type WindowState = {
   maximized: boolean;
 };
 
+export type UpdateCheckMode = "manual";
+
+export type CortexSettings = {
+  updateCheckMode: UpdateCheckMode;
+};
+
 export type CortexPersistedState = {
   version: 1;
   workspaces: Workspace[];
   sessions: TerminalSession[];
   templateInstances: TemplateInstance[];
   layouts: WorkspaceLayout[];
+  settings: CortexSettings;
   activeWorkspaceId: string | null;
   windowState: WindowState | null;
 };
@@ -73,10 +82,12 @@ type CortexState = CortexPersistedState & {
   hydrate: () => Promise<void>;
   createWorkspace: () => void;
   renameWorkspace: (workspaceId: string, name: string) => void;
+  setWorkspaceDefaultWorkingDirectory: (workspaceId: string, path: string) => void;
   deleteWorkspace: (workspaceId: string) => void;
   setActiveWorkspace: (workspaceId: string) => void;
   createSession: (workspaceId: string, profileId?: TerminalProfileId) => void;
   renameSession: (sessionId: string, name: string) => void;
+  appendTerminalHistory: (sessionId: string, output: string) => void;
   deleteSession: (sessionId: string) => void;
   createTemplateInstance: (
     workspaceId: string,
@@ -92,6 +103,9 @@ type CortexState = CortexPersistedState & {
   setSplitPanePreview: (workspaceId: string, visible: boolean) => void;
   saveNow: () => Promise<void>;
 };
+
+export const MAX_TERMINAL_HISTORY_LINES = 10_000;
+export const MAX_TERMINAL_HISTORY_BYTES = 1_000_000;
 
 const profiles: TerminalProfile[] = [
   {
@@ -120,6 +134,9 @@ const emptyState: CortexPersistedState = {
   sessions: [],
   templateInstances: [],
   layouts: [],
+  settings: {
+    updateCheckMode: "manual",
+  },
   activeWorkspaceId: null,
   windowState: null,
 };
@@ -143,6 +160,20 @@ function sessionName(sessions: TerminalSession[], workspaceId: string) {
   return `Terminal ${count + 1}`;
 }
 
+function trimTerminalHistory(history: string) {
+  let trimmed = history;
+  if (trimmed.length > MAX_TERMINAL_HISTORY_BYTES) {
+    trimmed = trimmed.slice(trimmed.length - MAX_TERMINAL_HISTORY_BYTES);
+  }
+
+  const lines = trimmed.split(/\r\n|\n|\r/);
+  if (lines.length > MAX_TERMINAL_HISTORY_LINES) {
+    trimmed = lines.slice(lines.length - MAX_TERMINAL_HISTORY_LINES).join("\n");
+  }
+
+  return trimmed;
+}
+
 function persisted(state: CortexState): CortexPersistedState {
   return {
     version: 1,
@@ -150,9 +181,11 @@ function persisted(state: CortexState): CortexPersistedState {
     sessions: state.sessions.map((session) => ({
       ...session,
       status: "inactive",
+      terminalHistory: trimTerminalHistory(session.terminalHistory),
     })),
     templateInstances: state.templateInstances,
     layouts: state.layouts,
+    settings: state.settings,
     activeWorkspaceId: state.activeWorkspaceId,
     windowState: state.windowState,
   };
@@ -196,6 +229,7 @@ function normalizeLoadedState(state: CortexPersistedState): CortexPersistedState
     sessions: (state.sessions ?? []).map((session) => ({
       ...session,
       status: "inactive",
+      terminalHistory: trimTerminalHistory(session.terminalHistory ?? ""),
     })),
     templateInstances: state.templateInstances ?? [],
     layouts: (state.layouts ?? []).map((layout) => ({
@@ -204,6 +238,9 @@ function normalizeLoadedState(state: CortexPersistedState): CortexPersistedState
       tabOrder: layout.tabOrder ?? [],
     })),
     workspaces: state.workspaces ?? [],
+    settings: {
+      updateCheckMode: state.settings?.updateCheckMode ?? "manual",
+    },
     activeWorkspaceId: state.activeWorkspaceId ?? null,
     windowState: state.windowState ?? null,
   };
@@ -291,6 +328,25 @@ export const useCortexStore = create<CortexState>((set) => ({
       return next;
     }),
 
+  setWorkspaceDefaultWorkingDirectory: (workspaceId, path) =>
+    set((state) => {
+      const cleanPath = path.trim();
+      const next = {
+        ...state,
+        workspaces: state.workspaces.map((workspace) =>
+          workspace.id === workspaceId
+            ? {
+                ...workspace,
+                defaultWorkingDirectory: cleanPath || undefined,
+                updatedAt: now(),
+              }
+            : workspace,
+        ),
+      };
+      saveState(next);
+      return next;
+    }),
+
   deleteWorkspace: (workspaceId) =>
     set((state) => {
       const workspaces = state.workspaces.filter((workspace) => workspace.id !== workspaceId);
@@ -328,6 +384,7 @@ export const useCortexStore = create<CortexState>((set) => ({
         name: sessionName(state.sessions, workspaceId),
         profileId,
         status: "running",
+        terminalHistory: "",
         createdAt: timestamp,
         updatedAt: timestamp,
       };
@@ -374,6 +431,28 @@ export const useCortexStore = create<CortexState>((set) => ({
         sessions: state.sessions.map((session) =>
           session.id === sessionId
             ? { ...session, name: cleanName, updatedAt: now() }
+            : session,
+        ),
+      };
+      saveState(next);
+      return next;
+    }),
+
+  appendTerminalHistory: (sessionId, output) =>
+    set((state) => {
+      if (!output) {
+        return state;
+      }
+
+      const next = {
+        ...state,
+        sessions: state.sessions.map((session) =>
+          session.id === sessionId
+            ? {
+                ...session,
+                terminalHistory: trimTerminalHistory(`${session.terminalHistory}${output}`),
+                updatedAt: now(),
+              }
             : session,
         ),
       };

@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import type { TerminalProfileId } from "@/stores/cortexStore";
+import { useCortexStore, type TerminalProfileId } from "@/stores/cortexStore";
 
 type PtySessionId = string;
 type TerminalStatus = "idle" | "loading" | "connected" | "exited" | "error";
@@ -27,6 +27,11 @@ type PtyExitEvent = {
 type PtyErrorEvent = {
   sessionId: PtySessionId;
   error: string;
+};
+
+type ValidatedWorkingDirectory = {
+  cwd: string | null;
+  warning: string | null;
 };
 
 type SessionSubscriber = {
@@ -70,6 +75,7 @@ export async function ensureTerminalSession(
   profileId: TerminalProfileId,
   rows: number,
   cols: number,
+  cwd?: string,
 ) {
   ensureEventListeners();
   const existing = processesByAppSession.get(appSessionId);
@@ -84,8 +90,10 @@ export async function ensureTerminalSession(
 
   notifyStatus(appSessionId, "loading", null);
   try {
+    const workingDirectory = await validateWorkingDirectory(profileId, cwd);
     const ptySessionId = await invoke<PtySessionId>("spawn_terminal", {
       profileId,
+      cwd: workingDirectory.cwd,
       rows,
       cols,
     });
@@ -99,7 +107,7 @@ export async function ensureTerminalSession(
     };
     processesByAppSession.set(appSessionId, process);
     appSessionByPtySession.set(ptySessionId, appSessionId);
-    notifyStatus(appSessionId, "connected", null);
+    notifyStatus(appSessionId, "connected", workingDirectory.warning);
     return ptySessionId;
   } catch (error) {
     const message = String(error);
@@ -114,6 +122,17 @@ export async function ensureTerminalSession(
     notifyStatus(appSessionId, "error", message);
     throw error;
   }
+}
+
+async function validateWorkingDirectory(profileId: TerminalProfileId, cwd?: string) {
+  if (!cwd?.trim()) {
+    return { cwd: null, warning: null };
+  }
+
+  return invoke<ValidatedWorkingDirectory>("validate_working_directory", {
+    profileId,
+    cwd,
+  });
 }
 
 export async function writeTerminal(appSessionId: string, data: string) {
@@ -177,6 +196,7 @@ function ensureEventListeners() {
       if (process) {
         process.buffer += event.payload.data;
       }
+      useCortexStore.getState().appendTerminalHistory(appSessionId, event.payload.data);
 
       for (const subscriber of subscribers.get(appSessionId) ?? []) {
         subscriber.onData(event.payload.data);

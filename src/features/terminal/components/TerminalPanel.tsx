@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import { motion } from "framer-motion";
-import { AlertCircle, Columns3, FileText, Loader2, Plus, TerminalSquare } from "lucide-react";
+import { AlertCircle, Columns3, FilePlus2, FileText, Loader2, Plus, TerminalSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TerminalTabs } from "@/features/terminal/components/TerminalTabs";
 import {
@@ -20,13 +20,16 @@ type TerminalPanelProps = {
 
 export function TerminalPanel({ workspaceId }: TerminalPanelProps) {
   const terminalRef = useRef<HTMLDivElement | null>(null);
+  const [terminalStartToken, setTerminalStartToken] = useState(0);
   const [connectionState, setConnectionState] = useState<{
     status: "idle" | "loading" | "connected" | "exited" | "error";
     error: string | null;
   }>({ status: "idle", error: null });
   const {
     createSession,
+    createTemplateInstance,
     createWorkspace,
+    appendTerminalHistory,
     layouts,
     profiles,
     sessions,
@@ -42,9 +45,26 @@ export function TerminalPanel({ workspaceId }: TerminalPanelProps) {
   const activeSession = sessions.find((session) => session.id === activeItemId);
   const activeTemplate = templateInstances.find((template) => template.id === activeItemId);
   const activeProfile = profiles.find((profile) => profile.id === activeSession?.profileId);
+  const activeSessionId = activeSession?.id;
+  const activeSessionProfileId = activeSession?.profileId;
+  const activeSessionStatus = activeSession?.status;
+  const activeSessionHistory = activeSession?.terminalHistory ?? "";
+  const terminalStopped =
+    activeSessionStatus === "inactive" ||
+    activeSessionStatus === "completed" ||
+    activeSessionStatus === "error";
+  const startNewShell = () => {
+    if (!activeSession) {
+      return;
+    }
+
+    appendTerminalHistory(activeSession.id, "\r\n--- New terminal session started ---\r\n");
+    setSessionStatus(activeSession.id, "running");
+    setTerminalStartToken((value) => value + 1);
+  };
 
   useEffect(() => {
-    if (!terminalRef.current || !activeSession || !activeProfile) {
+    if (!terminalRef.current || !activeSessionId || !activeSessionProfileId || !activeProfile) {
       return;
     }
 
@@ -54,6 +74,7 @@ export function TerminalPanel({ workspaceId }: TerminalPanelProps) {
       fontFamily: '"Cascadia Mono", Consolas, monospace',
       fontSize: 13,
       lineHeight: 1.25,
+      scrollback: 10_000,
       theme: {
         background: "#0b0d10",
         foreground: "#dce7ef",
@@ -73,21 +94,24 @@ export function TerminalPanel({ workspaceId }: TerminalPanelProps) {
 
     terminal.loadAddon(fitAddon);
     terminal.open(terminalRef.current);
+    if (activeSessionHistory) {
+      terminal.write(activeSessionHistory);
+    }
     fitAddon.fit();
 
-    const unsubscribe = subscribeTerminalSession(activeSession.id, {
+    const unsubscribe = subscribeTerminalSession(activeSessionId, {
       onData: (data) => terminal.write(data),
       onStatus: (status, error) => {
         if (!disposed) {
           setConnectionState({ status, error });
           if (status === "connected") {
-            setSessionStatus(activeSession.id, "running");
+            setSessionStatus(activeSessionId, "running");
           } else if (status === "loading") {
-            setSessionStatus(activeSession.id, "waiting");
+            setSessionStatus(activeSessionId, "waiting");
           } else if (status === "exited") {
-            setSessionStatus(activeSession.id, "completed");
+            setSessionStatus(activeSessionId, "completed");
           } else if (status === "error") {
-            setSessionStatus(activeSession.id, "error");
+            setSessionStatus(activeSessionId, "error");
           }
         }
       },
@@ -95,24 +119,25 @@ export function TerminalPanel({ workspaceId }: TerminalPanelProps) {
 
     const syncSize = () => {
       fitAddon.fit();
-      void resizeTerminal(activeSession.id, terminal.rows, terminal.cols);
+      void resizeTerminal(activeSessionId, terminal.rows, terminal.cols);
     };
 
     const dataDisposable = terminal.onData((data) => {
-      void writeTerminal(activeSession.id, data);
+      void writeTerminal(activeSessionId, data);
     });
 
-    if (activeSession.status === "running" || activeSession.status === "waiting") {
+    if (activeSessionStatus === "running" || activeSessionStatus === "waiting") {
       setConnectionState({ status: "loading", error: null });
       void ensureTerminalSession(
-        activeSession.id,
-        activeSession.profileId,
+        activeSessionId,
+        activeSessionProfileId,
         terminal.rows,
         terminal.cols,
+        activeWorkspace?.defaultWorkingDirectory,
       ).catch((error) => {
         if (!disposed) {
           setConnectionState({ status: "error", error: String(error) });
-          setSessionStatus(activeSession.id, "error");
+          setSessionStatus(activeSessionId, "error");
         }
       });
     } else {
@@ -129,7 +154,14 @@ export function TerminalPanel({ workspaceId }: TerminalPanelProps) {
       resizeObserver.disconnect();
       terminal.dispose();
     };
-  }, [activeProfile, activeSession, setSessionStatus]);
+  }, [
+    activeProfile,
+    activeSessionId,
+    activeSessionProfileId,
+    activeWorkspace?.defaultWorkingDirectory,
+    setSessionStatus,
+    terminalStartToken,
+  ]);
 
   if (!activeWorkspace) {
     return (
@@ -148,15 +180,32 @@ export function TerminalPanel({ workspaceId }: TerminalPanelProps) {
       <section className="flex min-h-0 flex-1 flex-col overflow-hidden border-l border-border bg-cortex-graphite">
         <div className="flex h-11 items-center justify-between border-b border-border bg-card/80 px-3">
           <span className="text-sm text-muted-foreground">No workspace tabs</span>
-          <Button size="sm" onClick={() => createSession(activeWorkspace.id)}>
-            <Plus className="mr-2 h-4 w-4" />
-            New Terminal
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() =>
+                createTemplateInstance(activeWorkspace.id, {
+                  templateId: "workspace-note",
+                  kind: "note",
+                  title: "Untitled note",
+                  content: "",
+                })
+              }
+            >
+              <FilePlus2 className="mr-2 h-4 w-4" />
+              New Note
+            </Button>
+            <Button size="sm" onClick={() => createSession(activeWorkspace.id)}>
+              <Plus className="mr-2 h-4 w-4" />
+              New Terminal
+            </Button>
+          </div>
         </div>
         <EmptyPanel
           icon={<TerminalSquare className="h-6 w-6 text-primary" />}
           title="This workspace is empty"
-          description="Create a terminal session to add a tab to this workspace."
+          description="Create a terminal session or note to add a tab to this workspace."
           actionLabel="Create terminal"
           onAction={() => createSession(activeWorkspace.id)}
           framed={false}
@@ -208,6 +257,11 @@ export function TerminalPanel({ workspaceId }: TerminalPanelProps) {
                 </option>
               ))}
             </select>
+            {terminalStopped && (
+              <Button size="sm" variant="outline" onClick={startNewShell}>
+                Start new shell
+              </Button>
+            )}
           </div>
           <div className="relative min-h-0 flex-1 overflow-hidden">
             <div ref={terminalRef} className="h-full min-h-0" />
@@ -237,9 +291,9 @@ export function TerminalPanel({ workspaceId }: TerminalPanelProps) {
                   <Button
                     className="mt-4"
                     size="sm"
-                    onClick={() => setSessionStatus(activeSession.id, "running")}
+                    onClick={startNewShell}
                   >
-                    Start Terminal
+                    Start new shell
                   </Button>
                 </div>
               </div>

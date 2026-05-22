@@ -4,20 +4,21 @@ import {
   FolderTree,
   Package,
   Settings,
-  TerminalSquare,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
+import { CortexLogo } from "@/components/CortexLogo";
 import { WorkspaceList } from "@/features/workspace/components/WorkspaceList";
 import { cn } from "@/lib/utils";
 
 type SidebarProps = {
   collapsed: boolean;
   onMarketplaceOpen: () => void;
+  onSettingsOpen: () => void;
   onToggle: () => void;
 };
 
-export function Sidebar({ collapsed, onMarketplaceOpen, onToggle }: SidebarProps) {
+export function Sidebar({ collapsed, onMarketplaceOpen, onSettingsOpen, onToggle }: SidebarProps) {
   return (
     <motion.aside
       animate={{ width: collapsed ? 76 : 288 }}
@@ -26,9 +27,7 @@ export function Sidebar({ collapsed, onMarketplaceOpen, onToggle }: SidebarProps
     >
       <div className="flex h-14 items-center justify-between border-b border-border px-3">
         <div className={cn("flex items-center gap-3 overflow-hidden", collapsed && "justify-center")}>
-          <div className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-primary/30 bg-primary/10 shadow-glow">
-            <TerminalSquare className="h-4 w-4 text-primary" />
-          </div>
+          <CortexLogo className="h-8 w-8 shrink-0 rounded-md shadow-glow" />
           {!collapsed && (
               <div className="min-w-0">
                 <div className="truncate text-sm font-semibold tracking-wide">Cortex</div>
@@ -73,7 +72,9 @@ export function Sidebar({ collapsed, onMarketplaceOpen, onToggle }: SidebarProps
             "flex h-10 w-full items-center gap-3 rounded-md px-3 text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground",
             collapsed && "justify-center px-0",
           )}
+          onClick={onSettingsOpen}
           type="button"
+          title="Settings"
         >
           <Settings className="h-4 w-4 shrink-0" />
           {!collapsed && <span>Settings</span>}

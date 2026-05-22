@@ -1,4 +1,4 @@
-import { Edit3, FileText, SplitSquareHorizontal, TerminalSquare, Trash2 } from "lucide-react";
+import { Edit3, FilePlus2, FileText, SplitSquareHorizontal, TerminalSquare, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatusIndicator } from "@/features/terminal/components/StatusIndicator";
 import { terminateTerminal } from "@/features/terminal/terminalBridge";
@@ -12,6 +12,7 @@ type TerminalTabsProps = {
 export function TerminalTabs({ workspaceId }: TerminalTabsProps) {
   const {
     createSession,
+    createTemplateInstance,
     deleteSession,
     deleteTemplateInstance,
     layouts,
@@ -123,6 +124,21 @@ export function TerminalTabs({ workspaceId }: TerminalTabsProps) {
           title="Toggle split pane placeholder"
         >
           <SplitSquareHorizontal className="h-4 w-4" />
+        </Button>
+        <Button
+          size="icon"
+          variant="ghost"
+          onClick={() =>
+            createTemplateInstance(workspaceId, {
+              templateId: "workspace-note",
+              kind: "note",
+              title: "Untitled note",
+              content: "",
+            })
+          }
+          title="New note"
+        >
+          <FilePlus2 className="h-4 w-4" />
         </Button>
         <Button
           size="icon"

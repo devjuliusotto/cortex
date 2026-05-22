@@ -1,6 +1,8 @@
-import { FolderPlus, HardDrive, Plus, ShieldCheck, TerminalSquare } from "lucide-react";
+import { FolderPlus, HardDrive, Plus, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { CortexLogo } from "@/components/CortexLogo";
 import { MarketplaceModal } from "@/features/marketplace/components/MarketplaceModal";
+import { SettingsModal } from "@/features/settings/components/SettingsModal";
 import { TerminalPanel } from "@/features/terminal/components/TerminalPanel";
 import { terminateTerminals } from "@/features/terminal/terminalBridge";
 import { Sidebar } from "@/layouts/Sidebar";
@@ -10,6 +12,7 @@ import { useEffect, useState } from "react";
 export function AppShell() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [marketplaceOpen, setMarketplaceOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const {
     activeWorkspaceId,
     createSession,
@@ -46,15 +49,14 @@ export function AppShell() {
       <Sidebar
         collapsed={sidebarCollapsed}
         onMarketplaceOpen={() => setMarketplaceOpen(true)}
+        onSettingsOpen={() => setSettingsOpen(true)}
         onToggle={() => setSidebarCollapsed((value) => !value)}
       />
       <main className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-card/70 px-4">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <span className="grid h-6 w-6 place-items-center rounded-md border border-primary/20 bg-primary/10">
-                <TerminalSquare className="h-3.5 w-3.5 text-primary" />
-              </span>
+              <CortexLogo className="h-6 w-6 shrink-0 rounded-md" />
               <h1 className="truncate text-sm font-semibold">
                 {activeWorkspace?.name ?? "Cortex"}
               </h1>
@@ -95,6 +97,11 @@ export function AppShell() {
         <TerminalPanel workspaceId={activeWorkspaceId} />
       </main>
       <MarketplaceModal open={marketplaceOpen} onClose={() => setMarketplaceOpen(false)} />
+      <SettingsModal
+        open={settingsOpen}
+        workspace={activeWorkspace}
+        onClose={() => setSettingsOpen(false)}
+      />
     </div>
   );
 }

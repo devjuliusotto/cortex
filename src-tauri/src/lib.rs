@@ -8,7 +8,7 @@ use pty::{
 use serde::Serialize;
 use serde_json::Value;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, State};
 
@@ -38,6 +38,13 @@ struct PtyExitEvent {
 struct PtyErrorEvent {
     session_id: PtySessionId,
     error: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ValidatedWorkingDirectory {
+    cwd: Option<String>,
+    warning: Option<String>,
 }
 
 fn create_pty_state(app: AppHandle) -> PtyState {
@@ -202,6 +209,58 @@ fn open_external_url(url: String) -> Result<(), String> {
     Err("Opening external URLs is not supported on this platform".into())
 }
 
+fn home_dir() -> Option<String> {
+    std::env::var("USERPROFILE")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .or_else(|| std::env::var("HOME").ok())
+}
+
+fn is_windows_absolute_path(path: &str) -> bool {
+    let bytes = path.as_bytes();
+    bytes.len() >= 3 && bytes[1] == b':' && (bytes[2] == b'\\' || bytes[2] == b'/')
+}
+
+#[tauri::command]
+fn validate_working_directory(
+    profile_id: String,
+    cwd: Option<String>,
+) -> Result<ValidatedWorkingDirectory, String> {
+    let Some(raw_cwd) = cwd
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+    else {
+        return Ok(ValidatedWorkingDirectory {
+            cwd: None,
+            warning: None,
+        });
+    };
+
+    if profile_id.starts_with("wsl") && is_windows_absolute_path(&raw_cwd) {
+        return Ok(ValidatedWorkingDirectory {
+            cwd: None,
+            warning: Some(
+                "WSL terminals currently start in the WSL home directory when a Windows path is configured."
+                    .into(),
+            ),
+        });
+    }
+
+    if Path::new(&raw_cwd).is_dir() {
+        return Ok(ValidatedWorkingDirectory {
+            cwd: Some(raw_cwd),
+            warning: None,
+        });
+    }
+
+    Ok(ValidatedWorkingDirectory {
+        cwd: home_dir(),
+        warning: Some(format!(
+            "Default working directory was not found, so this terminal started in your home directory: {raw_cwd}"
+        )),
+    })
+}
+
 #[tauri::command]
 fn spawn_terminal(
     state: State<'_, PtyState>,
@@ -253,6 +312,8 @@ fn terminate_terminal(state: State<'_, PtyState>, session_id: PtySessionId) -> R
 
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_sql::Builder::default().build())
         .invoke_handler(tauri::generate_handler![
             list_shell_profiles,
@@ -260,6 +321,7 @@ pub fn run() {
             load_persisted_state,
             save_persisted_state,
             open_external_url,
+            validate_working_directory,
             spawn_terminal,
             write_terminal,
             resize_terminal,
