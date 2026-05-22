@@ -87,10 +87,23 @@ mod windows {
             PtyError::OperationFailed(error.to_string())
         }
 
-        fn build_command(profile: ShellProfile, cwd: Option<String>) -> CommandBuilder {
+        fn build_command(mut profile: ShellProfile, cwd: Option<String>) -> CommandBuilder {
+            let cwd = cwd.filter(|value| !value.trim().is_empty());
+            if matches!(profile.kind, crate::pty::ShellProfileKind::Wsl) {
+                if let Some(cwd) = cwd {
+                    profile.args.push("--cd".into());
+                    profile.args.push(cwd);
+                }
+                let mut command = CommandBuilder::new(profile.executable);
+                command.args(profile.args);
+                command.env("TERM", "xterm-256color");
+                command.env("COLORTERM", "truecolor");
+                return command;
+            }
+
             let mut command = CommandBuilder::new(profile.executable);
             command.args(profile.args);
-            if let Some(cwd) = cwd.filter(|value| !value.trim().is_empty()) {
+            if let Some(cwd) = cwd {
                 command.cwd(cwd);
             }
             command.env("TERM", "xterm-256color");

@@ -142,8 +142,8 @@ export function SettingsModal({ open, workspace, onClose }: SettingsModalProps) 
               </Button>
             </div>
             <p className="mt-2 text-xs leading-5 text-muted-foreground">
-              New PowerShell and CMD terminals use this path when it exists. WSL terminals currently
-              fall back to the WSL home directory when a Windows path is configured.
+              New PowerShell, CMD, and WSL Ubuntu terminals use this path when it exists.
+              Windows paths are converted for WSL; WSL-only paths outside /mnt cannot be validated yet.
             </p>
           </section>
 

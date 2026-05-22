@@ -209,6 +209,37 @@ fn open_external_url(url: String) -> Result<(), String> {
     Err("Opening external URLs is not supported on this platform".into())
 }
 
+#[tauri::command]
+fn read_clipboard_text() -> Result<String, String> {
+    #[cfg(windows)]
+    {
+        let output = std::process::Command::new("powershell.exe")
+            .args([
+                "-NoProfile",
+                "-Command",
+                "[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); [Console]::Out.Write((Get-Clipboard -Raw))",
+            ])
+            .output()
+            .map_err(|error| error.to_string())?;
+
+        if output.status.success() {
+            return String::from_utf8(output.stdout).map_err(|error| error.to_string());
+        }
+
+        let error = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(if error.is_empty() {
+            "Clipboard text could not be read".into()
+        } else {
+            error
+        });
+    }
+
+    #[cfg(not(windows))]
+    {
+        Ok(String::new())
+    }
+}
+
 fn home_dir() -> Option<String> {
     std::env::var("USERPROFILE")
         .ok()
@@ -221,44 +252,115 @@ fn is_windows_absolute_path(path: &str) -> bool {
     bytes.len() >= 3 && bytes[1] == b':' && (bytes[2] == b'\\' || bytes[2] == b'/')
 }
 
+fn windows_path_to_wsl_path(path: &str) -> Option<String> {
+    if !is_windows_absolute_path(path) {
+        return None;
+    }
+
+    let mut chars = path.chars();
+    let drive = chars.next()?.to_ascii_lowercase();
+    chars.next()?;
+    chars.next()?;
+
+    let rest = chars
+        .as_str()
+        .replace('\\', "/")
+        .trim_start_matches('/')
+        .to_string();
+
+    if rest.is_empty() {
+        Some(format!("/mnt/{drive}"))
+    } else {
+        Some(format!("/mnt/{drive}/{rest}"))
+    }
+}
+
+fn wsl_mount_path_to_windows_path(path: &str) -> Option<String> {
+    let normalized = path.replace('\\', "/");
+    let mut parts = normalized.split('/');
+    if parts.next()? != "" || parts.next()? != "mnt" {
+        return None;
+    }
+
+    let drive = parts.next()?;
+    if drive.len() != 1 || !drive.as_bytes()[0].is_ascii_alphabetic() {
+        return None;
+    }
+
+    let rest = parts.collect::<Vec<_>>().join("\\");
+    if rest.is_empty() {
+        Some(format!("{}:\\", drive.to_ascii_uppercase()))
+    } else {
+        Some(format!("{}:\\{rest}", drive.to_ascii_uppercase()))
+    }
+}
+
+fn resolve_working_directory(profile_id: &str, cwd: Option<String>) -> ValidatedWorkingDirectory {
+    let Some(raw_cwd) = cwd
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+    else {
+        return ValidatedWorkingDirectory {
+            cwd: None,
+            warning: None,
+        };
+    };
+
+    if profile_id.starts_with("wsl") {
+        if is_windows_absolute_path(&raw_cwd) {
+            if Path::new(&raw_cwd).is_dir() {
+                return ValidatedWorkingDirectory {
+                    cwd: windows_path_to_wsl_path(&raw_cwd),
+                    warning: None,
+                };
+            }
+
+            return ValidatedWorkingDirectory {
+                cwd: None,
+                warning: Some(format!(
+                    "Default working directory was not found, so this WSL terminal started in its home directory: {raw_cwd}"
+                )),
+            };
+        }
+
+        if let Some(windows_path) = wsl_mount_path_to_windows_path(&raw_cwd) {
+            if Path::new(&windows_path).is_dir() {
+                return ValidatedWorkingDirectory {
+                    cwd: Some(raw_cwd),
+                    warning: None,
+                };
+            }
+        }
+
+        return ValidatedWorkingDirectory {
+            cwd: None,
+            warning: Some(format!(
+                "WSL working directory could not be validated, so this terminal started in its home directory: {raw_cwd}"
+            )),
+        };
+    }
+
+    if Path::new(&raw_cwd).is_dir() {
+        return ValidatedWorkingDirectory {
+            cwd: Some(raw_cwd),
+            warning: None,
+        };
+    }
+
+    ValidatedWorkingDirectory {
+        cwd: home_dir(),
+        warning: Some(format!(
+            "Default working directory was not found, so this terminal started in your home directory: {raw_cwd}"
+        )),
+    }
+}
+
 #[tauri::command]
 fn validate_working_directory(
     profile_id: String,
     cwd: Option<String>,
 ) -> Result<ValidatedWorkingDirectory, String> {
-    let Some(raw_cwd) = cwd
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty())
-    else {
-        return Ok(ValidatedWorkingDirectory {
-            cwd: None,
-            warning: None,
-        });
-    };
-
-    if profile_id.starts_with("wsl") && is_windows_absolute_path(&raw_cwd) {
-        return Ok(ValidatedWorkingDirectory {
-            cwd: None,
-            warning: Some(
-                "WSL terminals currently start in the WSL home directory when a Windows path is configured."
-                    .into(),
-            ),
-        });
-    }
-
-    if Path::new(&raw_cwd).is_dir() {
-        return Ok(ValidatedWorkingDirectory {
-            cwd: Some(raw_cwd),
-            warning: None,
-        });
-    }
-
-    Ok(ValidatedWorkingDirectory {
-        cwd: home_dir(),
-        warning: Some(format!(
-            "Default working directory was not found, so this terminal started in your home directory: {raw_cwd}"
-        )),
-    })
+    Ok(resolve_working_directory(&profile_id, cwd))
 }
 
 #[tauri::command]
@@ -271,10 +373,41 @@ fn spawn_terminal(
 ) -> Result<PtySessionId, String> {
     let profile = ShellProfile::from_id(&profile_id)
         .ok_or_else(|| format!("Unknown shell profile: {profile_id}"))?;
+    let working_directory = resolve_working_directory(&profile_id, cwd);
     state
         .backend
-        .spawn(profile, cwd, PtySize { rows, cols })
+        .spawn(profile, working_directory.cwd, PtySize { rows, cols })
         .map_err(pty_error)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{windows_path_to_wsl_path, wsl_mount_path_to_windows_path};
+
+    #[test]
+    fn converts_windows_paths_to_wsl_paths() {
+        assert_eq!(
+            windows_path_to_wsl_path(r"C:\Users\Name\Projects\Test"),
+            Some("/mnt/c/Users/Name/Projects/Test".into())
+        );
+        assert_eq!(
+            windows_path_to_wsl_path(r"C:\Users\Name\OneDrive - Org\Projects\Test"),
+            Some("/mnt/c/Users/Name/OneDrive - Org/Projects/Test".into())
+        );
+    }
+
+    #[test]
+    fn converts_wsl_mount_paths_to_windows_paths() {
+        assert_eq!(
+            wsl_mount_path_to_windows_path("/mnt/c/Users/Name/Projects/Test"),
+            Some(r"C:\Users\Name\Projects\Test".into())
+        );
+        assert_eq!(
+            wsl_mount_path_to_windows_path("/mnt/c/Users/Name/OneDrive - Org/Projects/Test"),
+            Some(r"C:\Users\Name\OneDrive - Org\Projects\Test".into())
+        );
+        assert_eq!(wsl_mount_path_to_windows_path("/home/name/project"), None);
+    }
 }
 
 #[tauri::command]
@@ -321,6 +454,7 @@ pub fn run() {
             load_persisted_state,
             save_persisted_state,
             open_external_url,
+            read_clipboard_text,
             validate_working_directory,
             spawn_terminal,
             write_terminal,

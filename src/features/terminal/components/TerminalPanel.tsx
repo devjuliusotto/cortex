@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import { motion } from "framer-motion";
@@ -17,6 +18,47 @@ import { useCortexStore, type TerminalProfileId } from "@/stores/cortexStore";
 type TerminalPanelProps = {
   workspaceId: string | null;
 };
+
+function normalizePastedText(text: string) {
+  return text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+}
+
+async function readClipboardText(event?: ClipboardEvent) {
+  const clipboardText = event?.clipboardData?.getData("text/plain");
+  if (clipboardText) {
+    return clipboardText;
+  }
+
+  if (navigator.clipboard?.readText) {
+    try {
+      return await navigator.clipboard.readText();
+    } catch {
+      return invoke<string>("read_clipboard_text");
+    }
+  }
+
+  return invoke<string>("read_clipboard_text");
+}
+
+async function pasteFromClipboard(
+  sessionId: string,
+  terminal: Terminal,
+  event?: ClipboardEvent,
+) {
+  terminal.focus();
+  const text = await readClipboardText(event);
+  if (!text) {
+    return;
+  }
+
+  const normalizedText = normalizePastedText(text);
+  if ("paste" in terminal && typeof terminal.paste === "function") {
+    terminal.paste(normalizedText);
+    return;
+  }
+
+  await writeTerminal(sessionId, normalizedText.replace(/\n/g, "\r"));
+}
 
 export function TerminalPanel({ workspaceId }: TerminalPanelProps) {
   const terminalRef = useRef<HTMLDivElement | null>(null);
@@ -126,6 +168,50 @@ export function TerminalPanel({ workspaceId }: TerminalPanelProps) {
       void writeTerminal(activeSessionId, data);
     });
 
+    const pasteClipboard = (event?: ClipboardEvent) => {
+      event?.preventDefault();
+      event?.stopPropagation();
+      void pasteFromClipboard(activeSessionId, terminal, event).catch((error) => {
+        if (!disposed) {
+          setConnectionState({ status: "error", error: `Paste failed: ${String(error)}` });
+        }
+      });
+    };
+
+    const pasteListener = (event: ClipboardEvent) => {
+      pasteClipboard(event);
+    };
+
+    const keydownListener = (event: KeyboardEvent) => {
+      const isPasteShortcut =
+        (event.ctrlKey || event.metaKey) &&
+        !event.altKey &&
+        event.key.toLowerCase() === "v";
+
+      if (!isPasteShortcut) {
+        return;
+      }
+
+      pasteClipboard();
+      event.preventDefault();
+      event.stopPropagation();
+    };
+
+    const contextMenuListener = (event: MouseEvent) => {
+      if (event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) {
+        return;
+      }
+
+      pasteClipboard();
+      event.preventDefault();
+      event.stopPropagation();
+    };
+
+    const terminalElement = terminalRef.current;
+    terminalElement.addEventListener("paste", pasteListener, true);
+    terminalElement.addEventListener("keydown", keydownListener, true);
+    terminalElement.addEventListener("contextmenu", contextMenuListener, true);
+
     if (activeSessionStatus === "running" || activeSessionStatus === "waiting") {
       setConnectionState({ status: "loading", error: null });
       void ensureTerminalSession(
@@ -151,6 +237,9 @@ export function TerminalPanel({ workspaceId }: TerminalPanelProps) {
       disposed = true;
       unsubscribe();
       dataDisposable.dispose();
+      terminalElement.removeEventListener("paste", pasteListener, true);
+      terminalElement.removeEventListener("keydown", keydownListener, true);
+      terminalElement.removeEventListener("contextmenu", contextMenuListener, true);
       resizeObserver.disconnect();
       terminal.dispose();
     };
@@ -275,6 +364,12 @@ export function TerminalPanel({ workspaceId }: TerminalPanelProps) {
               <TerminalOverlay
                 icon={<AlertCircle className="h-4 w-4 text-cortex-red" />}
                 message={connectionState.error ?? "Terminal failed"}
+              />
+            )}
+            {connectionState.status === "connected" && connectionState.error && (
+              <TerminalOverlay
+                icon={<AlertCircle className="h-4 w-4 text-yellow-400" />}
+                message={connectionState.error}
               />
             )}
             {connectionState.status === "exited" && (

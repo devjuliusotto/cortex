@@ -150,13 +150,15 @@ Notes can be renamed or deleted from the tab row. They are local app state only 
 
 ## Default Working Directory
 
-Open `Settings` with a workspace selected and set `Default working directory`. New PowerShell and CMD terminals in that workspace start there when the path exists.
+Open `Settings` with a workspace selected and set `Default working directory`. New PowerShell, CMD, and WSL Ubuntu terminals in that workspace start there when the path exists.
 
-If the configured path is missing or invalid, Cortex shows a friendly warning in the terminal area and starts the terminal in the user's home directory. WSL currently falls back to the WSL home directory when a Windows path such as `C:\Projects\App` is configured; Windows-to-WSL path conversion is intentionally deferred until it can be handled safely.
+If the configured path is missing or invalid, Cortex shows a friendly warning in the terminal area and starts the terminal in the user's home directory. WSL Ubuntu converts Windows paths such as `C:\Projects\App` to `/mnt/c/Projects/App` before spawning. WSL-only paths outside `/mnt/<drive>/...` currently fall back to the WSL home directory because the Windows backend cannot validate them safely.
 
 Manual verification:
 
 - Set a valid workspace default path, create a new PowerShell terminal, and run `pwd`.
+- Set a valid workspace default path, create a new CMD terminal, and run `cd`.
+- Set a valid workspace default path, create a new WSL Ubuntu terminal, and run `pwd`.
 - Set an invalid path, create a terminal, and confirm the warning plus home-directory fallback.
 - Restart Cortex and confirm the workspace path and notes are restored.
 
