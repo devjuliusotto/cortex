@@ -247,6 +247,15 @@ fn home_dir() -> Option<String> {
         .or_else(|| std::env::var("HOME").ok())
 }
 
+fn fallback_working_directory(profile_id: &str) -> Option<String> {
+    let home = home_dir()?;
+    if profile_id.starts_with("wsl") && is_windows_absolute_path(&home) {
+        return windows_path_to_wsl_path(&home);
+    }
+
+    Some(home)
+}
+
 fn is_windows_absolute_path(path: &str) -> bool {
     let bytes = path.as_bytes();
     bytes.len() >= 3 && bytes[1] == b':' && (bytes[2] == b'\\' || bytes[2] == b'/')
@@ -301,7 +310,7 @@ fn resolve_working_directory(profile_id: &str, cwd: Option<String>) -> Validated
         .filter(|value| !value.is_empty())
     else {
         return ValidatedWorkingDirectory {
-            cwd: None,
+            cwd: fallback_working_directory(profile_id),
             warning: None,
         };
     };
@@ -316,7 +325,7 @@ fn resolve_working_directory(profile_id: &str, cwd: Option<String>) -> Validated
             }
 
             return ValidatedWorkingDirectory {
-                cwd: None,
+                cwd: fallback_working_directory(profile_id),
                 warning: Some(format!(
                     "Default working directory was not found, so this WSL terminal started in its home directory: {raw_cwd}"
                 )),
@@ -333,7 +342,7 @@ fn resolve_working_directory(profile_id: &str, cwd: Option<String>) -> Validated
         }
 
         return ValidatedWorkingDirectory {
-            cwd: None,
+            cwd: fallback_working_directory(profile_id),
             warning: Some(format!(
                 "WSL working directory could not be validated, so this terminal started in its home directory: {raw_cwd}"
             )),
@@ -348,7 +357,7 @@ fn resolve_working_directory(profile_id: &str, cwd: Option<String>) -> Validated
     }
 
     ValidatedWorkingDirectory {
-        cwd: home_dir(),
+        cwd: fallback_working_directory(profile_id),
         warning: Some(format!(
             "Default working directory was not found, so this terminal started in your home directory: {raw_cwd}"
         )),
@@ -446,6 +455,7 @@ fn terminate_terminal(state: State<'_, PtyState>, session_id: PtySessionId) -> R
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_sql::Builder::default().build())
         .invoke_handler(tauri::generate_handler![

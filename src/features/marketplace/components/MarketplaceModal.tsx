@@ -19,9 +19,11 @@ import {
   GITHUB_REPOSITORY,
   type FeedbackType,
 } from "@/config/marketplace";
-import { BUILT_IN_TEMPLATES } from "@/features/marketplace/templates";
+import {
+  ARCHIVED_MARKETPLACE_NOTE_TEMPLATES,
+  WORKSPACE_TEMPLATES_MARKETPLACE_ENABLED,
+} from "@/features/marketplace/templates";
 import { cn } from "@/lib/utils";
-import { useCortexStore } from "@/stores/cortexStore";
 
 type MarketplaceModalProps = {
   open: boolean;
@@ -204,8 +206,22 @@ function FeedbackTab() {
 }
 
 function TemplatesTab() {
-  const { activeWorkspaceId, createTemplateInstance, workspaces } = useCortexStore();
-  const activeWorkspace = workspaces.find((workspace) => workspace.id === activeWorkspaceId);
+  if (!WORKSPACE_TEMPLATES_MARKETPLACE_ENABLED) {
+    return (
+      <div className="max-w-3xl">
+        <h3 className="text-base font-semibold">Workspace Templates (Coming Soon)</h3>
+        <p className="mt-1 text-sm leading-6 text-muted-foreground">
+          Project templates are being moved out of the core Cortex experience and into optional
+          Marketplace add-ons. Cortex stays focused on terminals, workspaces, split layouts,
+          persistence, notes, and snippets.
+        </p>
+        <div className="mt-5 rounded-md border border-border bg-card/55 p-4 text-sm leading-6 text-muted-foreground">
+          Template definitions are archived behind a disabled Marketplace flag so the extension
+          path can be reused later without pushing templates into the default UI.
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -215,7 +231,7 @@ function TemplatesTab() {
       </p>
 
       <div className="mt-5 grid gap-3 md:grid-cols-2">
-        {BUILT_IN_TEMPLATES.map((template) => (
+        {ARCHIVED_MARKETPLACE_NOTE_TEMPLATES.map((template) => (
           <article
             className="rounded-md border border-border bg-card/55 p-4"
             key={template.templateId}
@@ -234,10 +250,9 @@ function TemplatesTab() {
             <Button
               size="sm"
               variant="outline"
-              disabled={!activeWorkspace}
-              onClick={() => activeWorkspaceId && createTemplateInstance(activeWorkspaceId, template)}
+              disabled
             >
-              Add to workspace
+              Disabled
             </Button>
           </article>
         ))}

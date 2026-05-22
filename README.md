@@ -1,47 +1,70 @@
 # Cortex
 
-Cortex is a Windows-first desktop terminal manager built with Tauri v2, React, TypeScript, Rust, xterm.js, TailwindCSS, and Zustand.
+![Cortex logo](src/assets/cortex-logo.svg)
 
-It is a downloadable desktop app, not a website or SaaS product. The v0.1 goal is to organize local terminal sessions into workspaces with real Windows terminal support for PowerShell, CMD, and WSL Ubuntu.
+Cortex is a Windows-first, local-first terminal workspace manager for projects that need organized PowerShell, CMD, WSL, notes, snippets, and repeatable local session setup.
 
-## Privacy And Local-First Model
+It is a desktop app, not a cloud service. Cortex does not include AI features, telemetry, analytics, cloud sync, or background external API calls.
 
-Cortex v0.1 is fully local-first:
+## Demo
 
-- No telemetry.
-- No analytics.
-- No tracking.
-- No cloud sync.
-- No background external API calls. Manual update checks contact GitHub Releases only when the user chooses `Check`.
-- No API keys or credentials required.
+Add real manually recorded assets here when they are ready:
 
-Workspace, session, tab, layout, profile, terminal history, note, and window metadata are saved only on the user's machine under the operating system app data directory. Cortex does not store user state in the Git repository.
+![Cortex screenshot](docs/assets/cortex-screenshot.png)
 
-Live terminal processes are not restored after restart. Cortex restores session tabs, metadata, and visual terminal history only, and restored sessions are marked inactive until started again.
+```text
+docs/assets/cortex-demo.gif
+docs/assets/cortex-screenshot.png
+```
 
-Terminal history persistence stores the visible terminal output locally. Terminal output can contain commands, paths, environment values, tokens, or other sensitive text if those values were printed in the shell. Keep this in mind when using shared Windows accounts or backing up the app data directory.
+Suggested Windows recording tools:
 
-## Requirements
+- ScreenToGif for short UI GIF demos.
+- ShareX for screenshots and quick captures.
+
+Keep demo assets reasonably small. Do not commit large binary recordings unless they are intentional release-quality assets.
+
+## Features
+
+- Windows ConPTY terminal sessions for PowerShell, CMD, and WSL Ubuntu.
+- Per-workspace default terminal paths with OneDrive and spaces supported.
+- Per-session cwd snapshots so existing terminals keep their original path.
+- Real persisted split panes with horizontal and vertical splits.
+- Draggable split dividers with per-workspace layout restore.
+- Local workspace notes beside terminal tabs.
+- Workspace-specific command snippets with paste/run actions.
+- Optional Marketplace structure for future workspace templates.
+- Per-workspace colors and auto-start settings from the sidebar context menu.
+- Local terminal scrollback persistence with bounded storage.
+- Manual GitHub issue flow only; no background uploads.
+
+## Installation
+
+Download the latest Windows installer from GitHub Releases:
+
+```text
+https://github.com/devjuliusotto/cortex/releases
+```
+
+Unsigned Windows builds may trigger Microsoft SmartScreen warnings. Code signing is not configured yet, so Windows may ask you to confirm that you trust the installer.
+
+## Development Setup
+
+Requirements:
 
 - Windows 10 or newer with ConPTY support.
 - Node.js 20 LTS recommended.
 - Rust stable through `rustup`.
-- WSL Ubuntu installed if you want to use the WSL Ubuntu profile.
+- WSL Ubuntu installed if you want the WSL Ubuntu profile.
 
-Install Rust on Windows:
-
-```powershell
-winget install Rustlang.Rustup
-```
-
-## Development Setup
+Install dependencies and run the Tauri app:
 
 ```powershell
 npm install
 npm run tauri:dev
 ```
 
-Frontend-only Vite development is available, but the production target is the Tauri desktop app:
+Frontend-only development is available for UI work:
 
 ```powershell
 npm run dev
@@ -49,134 +72,135 @@ npm run dev
 
 ## Build
 
-Run the frontend production build:
+Run the frontend build:
 
 ```powershell
 npm run build
 ```
 
-Build the Windows desktop app and installer bundles:
+Check Rust:
+
+```powershell
+cd src-tauri
+cargo check
+```
+
+Build desktop bundles:
 
 ```powershell
 npm run tauri:build
 ```
 
-Tauri writes release artifacts under:
+Release artifacts are written under:
 
 ```text
 src-tauri/target/release/bundle/
 ```
 
-Windows installer outputs are typically generated below `msi/` and `nsis/` inside that bundle directory, depending on the configured Tauri targets and installed tooling.
-
-Unsigned Windows builds may trigger Microsoft SmartScreen warnings. Code signing is intentionally not configured for v0.1.
-
-## GitHub Releases
+## Release Process
 
 Release builds are prepared through the Windows GitHub Actions workflow in `.github/workflows/release.yml`.
 
 To publish a release:
 
-1. Update the version in `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json`.
-2. Commit the release changes.
-3. Create and push a version tag:
+1. Update the version in `package.json`.
+2. Update the version in `src-tauri/tauri.conf.json`.
+3. Keep `package-lock.json` and `src-tauri/Cargo.toml` synchronized.
+4. Commit the release changes.
+5. Create the matching version tag:
 
 ```powershell
-git tag v0.1.0
-git push origin v0.1.0
+git tag vX.Y.Z
+git push origin vX.Y.Z
 ```
 
-The workflow builds Cortex on Windows and uploads installer artifacts to the matching GitHub Release.
+The Tauri installer filenames are driven by `src-tauri/tauri.conf.json`.
 
-## In-App Updates
+## Privacy And Local-First Model
 
-Cortex uses Tauri's official updater plugin for manual in-app update checks. Open `Settings`, choose `Check`, then confirm before downloading or installing an available release. Cortex does not perform background update checks.
+Cortex stores workspace, session, layout, snippet, note, profile, scrollback, and window metadata locally in the operating system app data directory. User state is not stored in the Git repository.
 
-The updater is configured to read release metadata from:
+Cortex does not provide:
 
-```text
-https://github.com/devjuliusotto/cortex/releases/latest/download/latest.json
+- Telemetry.
+- Analytics.
+- Tracking.
+- Cloud sync.
+- AI features.
+- Background external API calls.
+- In-app payment or donation popups.
+
+Manual update checks contact GitHub Releases only when the user chooses to check for updates. Feedback opens a GitHub issue page in the browser; Cortex does not submit anything automatically.
+
+Terminal history can contain sensitive text if it was printed in the shell. Be careful when using shared Windows accounts or backing up the app data directory.
+
+## Workspaces
+
+In Cortex, workspace and project mean the same thing. Each workspace owns:
+
+- `defaultWorkingDirectory`
+- `color`
+- `autoStartTerminalsOnOpen`
+- command snippets
+- notes and terminal session metadata
+- persisted split layout
+
+Right-click a workspace in the left sidebar to open its context menu. From there you can select, rename, color, duplicate, delete, set or clear the default terminal path, and toggle terminal auto-start.
+
+New terminals snapshot the current workspace path into the terminal session `cwd`. Changing the workspace default later affects only new terminals. Existing sessions keep their saved cwd.
+
+If the saved path is invalid, Cortex shows a warning and starts the shell in the user home directory. WSL converts Windows paths such as `C:\Projects\App` to `/mnt/c/Projects/App` where possible.
+
+## Split Panes
+
+Use the split buttons in the tab bar to split the active pane right or down. Each pane points to a terminal tab or note tab. Drag the divider to resize. Split trees and ratios are persisted per workspace and restored on restart.
+
+## Command Snippets
+
+Use the snippet toolbar inside a workspace to create, edit, delete, paste, or run snippets. Snippets are stored on the workspace object and never run without an explicit click.
+
+## Marketplace
+
+Advanced workspace templates are intentionally not part of the default Cortex workspace UI. The Marketplace keeps a placeholder for `Workspace Templates (Coming Soon)` so project-specific templates can become optional add-ons later.
+
+Archived template definitions remain behind a disabled Marketplace flag for future reuse. Cortex does not download remote templates, execute remote code, or run template commands automatically.
+
+## Roadmap
+
+- Safer persistent terminal runtime through a local daemon or tray process.
+- More ergonomic pane management.
+- Import/export workspace profiles.
+- Additional local templates.
+- Signed Windows installer.
+
+See `docs/persistent-terminal-runtime.md` for the persistent PTY runtime design.
+
+## Contributing
+
+Contributions are welcome. Keep changes aligned with the local-first product model:
+
+- No telemetry or analytics.
+- No cloud sync.
+- No background network calls.
+- No AI features unless explicitly scoped in a future roadmap issue.
+- No secrets in the repository.
+
+Before opening a PR, run:
+
+```powershell
+npm run build
+cd src-tauri
+cargo check
 ```
 
-Production updater support requires signed updater artifacts:
+Call out user-visible terminal, persistence, installer, and privacy changes in PR descriptions.
 
-1. Generate a Tauri updater signing key with the Tauri CLI.
-2. Put only the public key in `src-tauri/tauri.conf.json` under `plugins.updater.pubkey`.
-3. Keep the private key outside the repository, for example in GitHub Actions secrets.
-4. Set `bundle.createUpdaterArtifacts` to `true` for release builds that have `TAURI_SIGNING_PRIVATE_KEY` available.
-5. Ensure releases upload the generated updater artifacts and `latest.json`.
+## Support
 
-The current `pubkey` value is a placeholder and `createUpdaterArtifacts` is disabled so local builds do not require private keys. Replace the public key and enable updater artifact generation before publishing update-enabled production builds. Never commit private signing keys.
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-Support-yellow?style=for-the-badge)](https://www.buymeacoffee.com/YOUR_USERNAME)
 
-## Local Persistence
-
-The frontend persists app state automatically through `src/lib/storage`.
-
-In the Tauri desktop runtime, the adapter calls Rust commands that read and write `cortex-state.json` in the app data directory. Writes are debounced and automatic. In frontend-only browser development, the adapter falls back to `localStorage` so UI work can continue without the Tauri shell.
-
-Persisted state includes:
-
-- workspaces and folders
-- per-workspace default working directory
-- terminal session metadata
-- session names
-- terminal scrollback/history, capped at the last 10,000 lines or about 1 MB per session
-- local note titles and content
-- shell profile per session
-- active workspace
-- active tabs
-- layout state
-- window size, position, and maximized state when available
-
-Terminal process handles and live PTY state are never persisted.
-
-## Terminal History
-
-Cortex captures PTY output as it arrives and appends it to the terminal session's local persisted history. The frontend writes restored history back into xterm when a stopped terminal tab is opened after app restart.
-
-History is bounded by `MAX_TERMINAL_HISTORY_LINES` and `MAX_TERMINAL_HISTORY_BYTES` in `src/stores/cortexStore.ts` to avoid unbounded app data growth. Restarting a stopped terminal keeps the previous visual history and appends:
-
-```text
---- New terminal session started ---
-```
-
-Then Cortex starts a fresh PTY process for the same terminal tab. The old process is not resumed after a full app shutdown.
-
-## Notes
-
-Use the `New Note` button in the workspace tab controls to create a note beside terminal tabs. Notes have a title, editable Markdown/plain-text content, `createdAt`, and `updatedAt`. They auto-save through the same local persistence adapter as terminal and workspace metadata, and they are restored after app restart.
-
-Notes can be renamed or deleted from the tab row. They are local app state only and are not written into the Git repository.
-
-## Default Working Directory
-
-Open `Settings` with a workspace selected and set `Default working directory`. New PowerShell, CMD, and WSL Ubuntu terminals in that workspace start there when the path exists.
-
-If the configured path is missing or invalid, Cortex shows a friendly warning in the terminal area and starts the terminal in the user's home directory. WSL Ubuntu converts Windows paths such as `C:\Projects\App` to `/mnt/c/Projects/App` before spawning. WSL-only paths outside `/mnt/<drive>/...` currently fall back to the WSL home directory because the Windows backend cannot validate them safely.
-
-Manual verification:
-
-- Set a valid workspace default path, create a new PowerShell terminal, and run `pwd`.
-- Set a valid workspace default path, create a new CMD terminal, and run `cd`.
-- Set a valid workspace default path, create a new WSL Ubuntu terminal, and run `pwd`.
-- Set an invalid path, create a terminal, and confirm the warning plus home-directory fallback.
-- Restart Cortex and confirm the workspace path and notes are restored.
-
-## App Icon
-
-The app icon is generated from `src/assets/cortex-logo.svg`, the same logo asset used in the Cortex sidebar and top bar. Tauri bundle icons live under `src-tauri/icons/` and are referenced from `src-tauri/tauri.conf.json`, including `icon.ico` for Windows executable and installer branding.
-
-## Architecture
-
-- `src/layouts` contains the desktop shell, top bar, and sidebar.
-- `src/features/workspace` contains workspace navigation UI.
-- `src/features/terminal` contains terminal tabs, xterm rendering, and the Tauri terminal bridge.
-- `src/features/settings` contains update controls and workspace settings.
-- `src/stores/cortexStore.ts` owns workspace/session/layout state with Zustand.
-- `src/lib/storage` isolates persistence behind an adapter interface.
-- `src-tauri/src/pty` contains the PTY abstraction and Windows ConPTY implementation.
-- `src-tauri/src/db` prepares the app data directory for local persistence.
+Maintainer note: replace `YOUR_USERNAME` in this README and `.github/FUNDING.yml` before publishing donation links. Do not add payment code or donation popups inside the app.
 
 ## License
 
-Cortex is licensed under the Apache License, Version 2.0. See `LICENSE`.
+Cortex is licensed under GPL-3.0. See `LICENSE`.

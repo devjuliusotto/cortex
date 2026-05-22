@@ -125,10 +125,6 @@ export async function ensureTerminalSession(
 }
 
 async function validateWorkingDirectory(profileId: TerminalProfileId, cwd?: string) {
-  if (!cwd?.trim()) {
-    return { cwd: null, warning: null };
-  }
-
   return invoke<ValidatedWorkingDirectory>("validate_working_directory", {
     profileId,
     cwd,

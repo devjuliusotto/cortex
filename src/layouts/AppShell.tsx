@@ -7,9 +7,10 @@ import { TerminalPanel } from "@/features/terminal/components/TerminalPanel";
 import { terminateTerminals } from "@/features/terminal/terminalBridge";
 import { Sidebar } from "@/layouts/Sidebar";
 import { useCortexStore } from "@/stores/cortexStore";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export function AppShell() {
+  const autoStartedWorkspaceIds = useRef(new Set<string>());
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [marketplaceOpen, setMarketplaceOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -20,6 +21,7 @@ export function AppShell() {
     hydrate,
     saveNow,
     sessions,
+    setSessionStatus,
     templateInstances,
     workspaces,
   } = useCortexStore();
@@ -32,6 +34,24 @@ export function AppShell() {
   useEffect(() => {
     void hydrate();
   }, [hydrate]);
+
+  useEffect(() => {
+    if (!activeWorkspace?.autoStartTerminalsOnOpen) {
+      return;
+    }
+    if (autoStartedWorkspaceIds.current.has(activeWorkspace.id)) {
+      return;
+    }
+
+    autoStartedWorkspaceIds.current.add(activeWorkspace.id);
+    sessions
+      .filter(
+        (session) =>
+          session.workspaceId === activeWorkspace.id &&
+          ["inactive", "completed", "error"].includes(session.status),
+      )
+      .forEach((session) => setSessionStatus(session.id, "running"));
+  }, [activeWorkspace, sessions, setSessionStatus]);
 
   useEffect(() => {
     const handleBeforeUnload = () => {
@@ -63,7 +83,9 @@ export function AppShell() {
             </div>
             <p className="mt-0.5 truncate text-xs text-muted-foreground">
               {activeWorkspace
-                ? `${itemCount} workspace item${itemCount === 1 ? "" : "s"}`
+                ? `${itemCount} workspace item${itemCount === 1 ? "" : "s"} · Workspace path: ${
+                    activeWorkspace.defaultWorkingDirectory ?? "not set"
+                  }`
                 : "Local-first Windows terminal manager"}
             </p>
           </div>
@@ -97,11 +119,7 @@ export function AppShell() {
         <TerminalPanel workspaceId={activeWorkspaceId} />
       </main>
       <MarketplaceModal open={marketplaceOpen} onClose={() => setMarketplaceOpen(false)} />
-      <SettingsModal
-        open={settingsOpen}
-        workspace={activeWorkspace}
-        onClose={() => setSettingsOpen(false)}
-      />
+      <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>
   );
 }

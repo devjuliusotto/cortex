@@ -1,9 +1,9 @@
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { AlertCircle, CheckCircle2, Download, Loader2, RefreshCw, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { useCortexStore, type Workspace } from "@/stores/cortexStore";
+import { useCortexStore } from "@/stores/cortexStore";
 
 type UpdateState =
   | "idle"
@@ -16,21 +16,15 @@ type UpdateState =
 
 type SettingsModalProps = {
   open: boolean;
-  workspace: Workspace | undefined;
   onClose: () => void;
 };
 
-export function SettingsModal({ open, workspace, onClose }: SettingsModalProps) {
-  const { settings, setWorkspaceDefaultWorkingDirectory } = useCortexStore();
-  const [workingDirectory, setWorkingDirectory] = useState("");
+export function SettingsModal({ open, onClose }: SettingsModalProps) {
+  const { settings } = useCortexStore();
   const [updateState, setUpdateState] = useState<UpdateState>("idle");
   const [update, setUpdate] = useState<Update | null>(null);
   const [message, setMessage] = useState("Manual update checks only");
   const [downloadProgress, setDownloadProgress] = useState("");
-
-  useEffect(() => {
-    setWorkingDirectory(workspace?.defaultWorkingDirectory ?? "");
-  }, [workspace?.defaultWorkingDirectory, workspace?.id]);
 
   if (!open) {
     return null;
@@ -112,41 +106,13 @@ export function SettingsModal({ open, workspace, onClose }: SettingsModalProps) 
     <div className="fixed inset-0 z-50 grid place-items-center bg-background/70 p-4 backdrop-blur-sm">
       <section className="flex max-h-[88vh] w-full max-w-2xl flex-col overflow-hidden rounded-md border border-border bg-card shadow-glow">
         <header className="flex h-12 items-center justify-between border-b border-border px-4">
-          <h2 className="text-sm font-semibold">Settings</h2>
+          <h2 className="text-sm font-semibold">App settings</h2>
           <Button size="icon" variant="ghost" onClick={onClose} title="Close settings">
             <X className="h-4 w-4" />
           </Button>
         </header>
 
         <div className="space-y-6 overflow-auto p-5">
-          <section>
-            <h3 className="text-sm font-medium">Workspace</h3>
-            <label className="mt-4 block text-xs text-muted-foreground" htmlFor="default-cwd">
-              Default working directory
-            </label>
-            <div className="mt-2 flex gap-2">
-              <input
-                id="default-cwd"
-                className="h-9 min-w-0 flex-1 rounded-md border border-border bg-background px-3 text-sm outline-none focus:ring-1 focus:ring-ring"
-                disabled={!workspace}
-                onChange={(event) => setWorkingDirectory(event.target.value)}
-                placeholder="Example: C:\Projects\Cortex"
-                value={workingDirectory}
-              />
-              <Button
-                disabled={!workspace}
-                onClick={() => workspace && setWorkspaceDefaultWorkingDirectory(workspace.id, workingDirectory)}
-                size="sm"
-              >
-                Save
-              </Button>
-            </div>
-            <p className="mt-2 text-xs leading-5 text-muted-foreground">
-              New PowerShell, CMD, and WSL Ubuntu terminals use this path when it exists.
-              Windows paths are converted for WSL; WSL-only paths outside /mnt cannot be validated yet.
-            </p>
-          </section>
-
           <section>
             <h3 className="text-sm font-medium">Updates</h3>
             <div className="mt-4 rounded-md border border-border bg-background/50 p-4">
