@@ -118,7 +118,16 @@ Security implications:
 ## Recommended Path
 
 1. Keep the current UI-owned PTY model for v0.1.
-2. Improve stopped-shell UX with visible saved scrollback, `Shell is stopped`, `Restart shell`, `Clear history`, and `Duplicate session`.
+2. Improve stopped-shell UX with visible saved scrollback, `Shell paused`, `Continue / Start shell`, `Clear history`, and `Duplicate session`.
 3. Persist per-session cwd and profile so restarted shells resume from the intended directory.
-4. Prototype a per-user local daemon behind an internal feature flag.
-5. Add explicit detach, reconnect, and full-quit semantics before enabling daemon persistence by default.
+4. Support a per-workspace `autoStartTerminalsOnOpen` setting that starts fresh shells over restored scrollback and inserts a separator such as `--- New shell started ---`.
+5. Prototype a per-user local daemon behind an internal feature flag.
+6. Add UI attach/detach, tray mode, reconnect for running PTYs, and safe shutdown-all semantics before enabling daemon persistence by default.
+
+## Future Detached Runtime Checklist
+
+- Local daemon process owns PTYs and bounded scrollback.
+- UI attaches and detaches from daemon sessions by stable runtime id.
+- Optional tray mode keeps the daemon visible when all windows are closed.
+- Reopen reconnects running PTYs when the daemon is alive.
+- Full quit asks the daemon to safely shut down all sessions and child process trees.

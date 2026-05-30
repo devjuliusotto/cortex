@@ -6,9 +6,12 @@ import { Terminal } from "@xterm/xterm";
 import { motion } from "framer-motion";
 import {
   AlertCircle,
+  Clipboard,
+  Clock3,
   Copy,
   FilePlus2,
   FileText,
+  History,
   Loader2,
   PanelBottom,
   PanelRight,
@@ -19,8 +22,11 @@ import {
   Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { createCommandRecorder } from "@/features/terminal/commandHistory";
 import {
   ensureTerminalSession,
+  focusTerminal,
+  registerTerminalFocus,
   resizeTerminal,
   subscribeTerminalSession,
   terminateTerminal,
@@ -61,7 +67,25 @@ async function readClipboardText(event?: ClipboardEvent) {
   return invoke<string>("read_clipboard_text");
 }
 
-async function pasteFromClipboard(sessionId: string, terminal: Terminal, event?: ClipboardEvent) {
+async function writeClipboardText(text: string) {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return;
+    } catch {
+      // Fall through to the Tauri command for desktop contexts that block the Web Clipboard API.
+    }
+  }
+
+  await invoke("write_clipboard_text", { text });
+}
+
+async function pasteFromClipboard(
+  sessionId: string,
+  terminal: Terminal,
+  event?: ClipboardEvent,
+  onSingleLinePaste?: (text: string) => void,
+) {
   terminal.focus();
   const text = await readClipboardText(event);
   if (!text) {
@@ -69,17 +93,24 @@ async function pasteFromClipboard(sessionId: string, terminal: Terminal, event?:
   }
 
   const normalizedText = normalizePastedText(text);
-  if ("paste" in terminal && typeof terminal.paste === "function") {
-    terminal.paste(normalizedText);
-    return;
+  if (!normalizedText.includes("\n")) {
+    onSingleLinePaste?.(normalizedText);
   }
-
   await writeTerminal(sessionId, normalizedText.replace(/\n/g, "\r"));
 }
 
 function commandForShell(command: string, runImmediately: boolean) {
   const normalized = command.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-  return runImmediately ? `${normalized}\r` : normalized;
+  return runImmediately ? `${normalized}\r` : normalized.replace(/\n/g, "\r");
+}
+
+function profileLabel(profileId: TerminalProfileId) {
+  const labels: Record<TerminalProfileId, string> = {
+    cmd: "CMD",
+    powershell: "PowerShell",
+    "wsl-ubuntu": "WSL Ubuntu",
+  };
+  return labels[profileId] ?? profileId;
 }
 
 export function TerminalPanel({ workspaceId }: TerminalPanelProps) {
@@ -216,7 +247,7 @@ function PaneLeaf({ node, workspaceId }: { node: Extract<PaneNode, { type: "leaf
       .map((item) => ({ id: item.id, label: item.name, kind: "terminal" as const, item })),
     ...templateInstances
       .filter((item) => item.workspaceId === workspaceId)
-      .map((item) => ({ id: item.id, label: item.title, kind: "note" as const, item })),
+      .map((item) => ({ id: item.id, label: item.title, kind: item.kind, item })),
   ];
   const paneTabs = node.tabIds
     .map((tabId) => workspaceItems.find((item) => item.id === tabId))
@@ -233,6 +264,23 @@ function PaneLeaf({ node, workspaceId }: { node: Extract<PaneNode, { type: "leaf
       templateId: "workspace-note",
       kind: "note",
       title: "Untitled note",
+      content: "",
+    });
+  };
+
+  const createCommandHistoryInPane = () => {
+    setActivePane(workspaceId, node.id);
+    const existing = templateInstances.find(
+      (item) => item.workspaceId === workspaceId && item.kind === "command-history",
+    );
+    if (existing) {
+      setActivePaneTab(workspaceId, node.id, existing.id);
+      return;
+    }
+    createTemplateInstance(workspaceId, {
+      templateId: "command-history",
+      kind: "command-history",
+      title: "Command History",
       content: "",
     });
   };
@@ -303,6 +351,8 @@ function PaneLeaf({ node, workspaceId }: { node: Extract<PaneNode, { type: "leaf
               >
                 {entry.kind === "terminal" ? (
                   <TerminalSquare className="h-3.5 w-3.5 text-primary" />
+                ) : entry.kind === "command-history" ? (
+                  <History className="h-3.5 w-3.5 text-primary" />
                 ) : (
                   <FileText className="h-3.5 w-3.5 text-primary" />
                 )}
@@ -338,6 +388,9 @@ function PaneLeaf({ node, workspaceId }: { node: Extract<PaneNode, { type: "leaf
           <Button size="icon" variant="ghost" onClick={createNoteInPane} title="New note in pane">
             <FilePlus2 className="h-4 w-4" />
           </Button>
+          <Button size="icon" variant="ghost" onClick={createCommandHistoryInPane} title="Command history in pane">
+            <History className="h-4 w-4" />
+          </Button>
           <Button size="icon" variant="ghost" onClick={createTerminalInPane} title="New terminal in pane">
             <TerminalSquare className="h-4 w-4" />
           </Button>
@@ -367,7 +420,10 @@ function PaneLeaf({ node, workspaceId }: { node: Extract<PaneNode, { type: "leaf
           </div>
         )}
         {session && <TerminalPane paneId={node.id} session={session} workspaceId={workspaceId} />}
-        {template && <NotesPane paneId={node.id} template={template} workspaceId={workspaceId} />}
+        {template?.kind === "note" && <NotesPane paneId={node.id} template={template} workspaceId={workspaceId} />}
+        {template?.kind === "command-history" && (
+          <CommandHistoryPane paneId={node.id} template={template} workspaceId={workspaceId} />
+        )}
       </div>
     </div>
   );
@@ -390,6 +446,7 @@ function TerminalPane({
     error: string | null;
   }>({ status: "idle", error: null });
   const {
+    addCommandHistoryEntry,
     appendTerminalHistory,
     clearTerminalHistory,
     duplicateSession,
@@ -397,13 +454,16 @@ function TerminalPane({
     setActivePaneTab,
     setSessionProfile,
     setSessionStatus,
+    workspaces,
   } = useCortexStore();
   const activeProfile = profiles.find((profile) => profile.id === session.profileId);
+  const workspace = workspaces.find((item) => item.id === workspaceId);
+  const effectiveCwd = session.cwd ?? workspace?.defaultWorkingDirectory;
   const terminalStopped =
     session.status === "inactive" || session.status === "completed" || session.status === "error";
 
   const startNewShell = () => {
-    appendTerminalHistory(session.id, "\r\n--- New terminal session started ---\r\n");
+    appendTerminalHistory(session.id, "\r\n--- New shell started ---\r\n");
     setSessionStatus(session.id, "running");
     setTerminalStartToken((value) => value + 1);
   };
@@ -459,19 +519,78 @@ function TerminalPane({
       void resizeTerminal(session.id, terminal.rows, terminal.cols);
     };
 
+    const recorder = createCommandRecorder({
+      onCommand: (command) => {
+        addCommandHistoryEntry({
+          command,
+          cwd: effectiveCwd,
+          profileId: session.profileId,
+          sessionId: session.id,
+          workspaceId,
+        });
+      },
+    });
+
     const dataDisposable = terminal.onData((data) => {
+      recorder.accept(data);
       void writeTerminal(session.id, data);
     });
+
+    const unregisterFocus = registerTerminalFocus(session.id, () => terminal.focus());
+
+    const copySelection = async () => {
+      if (!terminal.hasSelection()) {
+        terminal.focus();
+        return;
+      }
+      await writeClipboardText(terminal.getSelection());
+      terminal.clearSelection();
+      terminal.focus();
+    };
 
     const pasteClipboard = (event?: ClipboardEvent) => {
       event?.preventDefault();
       event?.stopPropagation();
-      void pasteFromClipboard(session.id, terminal, event).catch((error) => {
+      void pasteFromClipboard(
+        session.id,
+        terminal,
+        event,
+        (text) => recorder.accept(text),
+      ).catch((error) => {
         if (!disposed) {
           setConnectionState({ status: "error", error: `Paste failed: ${String(error)}` });
         }
       });
     };
+
+    terminal.attachCustomKeyEventHandler((event) => {
+      if (event.type !== "keydown" || event.altKey || event.metaKey) {
+        return true;
+      }
+
+      const key = event.key.toLowerCase();
+      if (event.ctrlKey && key === "c") {
+        event.preventDefault();
+        event.stopPropagation();
+        if (terminal.hasSelection()) {
+          void copySelection();
+        } else if (!event.shiftKey) {
+          recorder.reset();
+          void writeTerminal(session.id, "\x03");
+        }
+        terminal.focus();
+        return false;
+      }
+
+      if (event.ctrlKey && key === "v") {
+        event.preventDefault();
+        event.stopPropagation();
+        pasteClipboard();
+        return false;
+      }
+
+      return true;
+    });
 
     const pasteListener = (event: ClipboardEvent) => pasteClipboard(event);
     const contextMenuListener = (event: MouseEvent) => {
@@ -493,7 +612,7 @@ function TerminalPane({
         session.profileId,
         terminal.rows,
         terminal.cols,
-        session.cwd,
+        effectiveCwd,
       ).catch((error) => {
         if (!disposed) {
           setConnectionState({ status: "error", error: String(error) });
@@ -511,6 +630,7 @@ function TerminalPane({
       disposed = true;
       unsubscribe();
       dataDisposable.dispose();
+      unregisterFocus();
       terminalElement.removeEventListener("paste", pasteListener, true);
       terminalElement.removeEventListener("contextmenu", contextMenuListener, true);
       resizeObserver.disconnect();
@@ -518,7 +638,8 @@ function TerminalPane({
     };
   }, [
     activeProfile,
-    session.cwd,
+    addCommandHistoryEntry,
+    effectiveCwd,
     session.id,
     session.profileId,
     setSessionStatus,
@@ -554,7 +675,7 @@ function TerminalPane({
           {terminalStopped && (
             <Button size="sm" variant="outline" onClick={startNewShell}>
               <RotateCcw className="mr-2 h-4 w-4" />
-              Restart
+              Start shell
             </Button>
           )}
         </div>
@@ -574,15 +695,15 @@ function TerminalPane({
           <div className="absolute bottom-4 right-4 max-w-[min(28rem,calc(100%-2rem))] rounded-md border border-border bg-card/95 p-4 shadow-glow">
             <div className="flex items-center gap-2 text-sm font-medium">
               <TerminalSquare className="h-4 w-4 text-primary" />
-              Shell is stopped
+              Shell paused
             </div>
             <p className="mt-2 text-xs leading-5 text-muted-foreground">
-              Scrollback is preserved locally. Restarting opens a fresh shell for this tab.
+              Previous output is restored. Start a new shell to continue.
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
               <Button size="sm" onClick={startNewShell}>
                 <Play className="mr-2 h-4 w-4" />
-                Restart shell
+                Continue / Start shell
               </Button>
               <Button
                 size="sm"
@@ -660,6 +781,155 @@ function NotesPane({
         onChange={(event) => setDraft(event.target.value)}
         spellCheck
       />
+    </div>
+  );
+}
+
+function CommandHistoryPane({
+  paneId,
+  template,
+  workspaceId,
+}: {
+  paneId: string;
+  template: TemplateInstance;
+  workspaceId: string;
+}) {
+  const {
+    clearCommandHistory,
+    commandHistory,
+    deleteCommandHistoryEntry,
+    layouts,
+    sessions,
+    setActivePaneTab,
+  } = useCortexStore();
+  const [query, setQuery] = useState("");
+  const layout = layouts.find((item) => item.workspaceId === workspaceId);
+  const activeTerminal = sessions.find(
+    (session) =>
+      session.workspaceId === workspaceId &&
+      (session.id === layout?.activeSessionId || session.id === layout?.activeItemId),
+  );
+  const filteredCommands = commandHistory
+    .filter((entry) => entry.workspaceId === workspaceId)
+    .filter((entry) => {
+      const cleanQuery = query.trim().toLowerCase();
+      if (!cleanQuery) {
+        return true;
+      }
+      return (
+        entry.command.toLowerCase().includes(cleanQuery) ||
+        entry.cwd?.toLowerCase().includes(cleanQuery)
+      );
+    })
+    .slice()
+    .reverse();
+
+  const sendCommand = (command: string, runImmediately: boolean) => {
+    if (!activeTerminal) {
+      return;
+    }
+    void writeTerminal(activeTerminal.id, commandForShell(command, runImmediately)).then(() => {
+      focusTerminal(activeTerminal.id);
+    });
+  };
+
+  const copyCommand = (command: string) => {
+    void writeClipboardText(command);
+    if (activeTerminal) {
+      focusTerminal(activeTerminal.id);
+    }
+  };
+
+  return (
+    <div className="flex h-full min-h-0 flex-col bg-cortex-graphite">
+      <div className="flex h-10 shrink-0 items-center justify-between border-b border-border bg-background/50 px-4">
+        <button
+          className="flex min-w-0 items-center gap-2"
+          onClick={() => setActivePaneTab(workspaceId, paneId, template.id)}
+          type="button"
+        >
+          <History className="h-4 w-4 text-primary" />
+          <span className="truncate text-sm font-medium">{template.title}</span>
+        </button>
+        <Button
+          disabled={filteredCommands.length === 0}
+          onClick={() => clearCommandHistory(workspaceId)}
+          size="sm"
+          variant="ghost"
+        >
+          Clear
+        </Button>
+      </div>
+
+      <div className="border-b border-border p-3">
+        <label className="flex h-9 items-center gap-2 rounded-md border border-border bg-background/60 px-3 text-xs text-muted-foreground">
+          <Clock3 className="h-3.5 w-3.5" />
+          <input
+            className="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none"
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search commands"
+            value={query}
+          />
+        </label>
+        {!activeTerminal && (
+          <p className="mt-3 rounded-md border border-border bg-card/50 px-3 py-2 text-xs text-muted-foreground">
+            Open or select a terminal to reuse commands.
+          </p>
+        )}
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-auto p-3">
+        {filteredCommands.length === 0 ? (
+          <div className="grid h-full place-items-center text-center text-sm text-muted-foreground">
+            <div>No commands captured yet.</div>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {filteredCommands.map((entry) => (
+              <div className="rounded-md border border-border bg-card/55 p-3" key={entry.id}>
+                <pre className="max-h-28 overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-5 text-foreground">
+                  {entry.command}
+                </pre>
+                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+                  <span>{profileLabel(entry.profileId)}</span>
+                  <span>{new Date(entry.createdAt).toLocaleString()}</span>
+                  {entry.cwd && <span className="max-w-full truncate">{entry.cwd}</span>}
+                </div>
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  <Button
+                    disabled={!activeTerminal}
+                    onClick={() => sendCommand(entry.command, false)}
+                    size="sm"
+                    variant="outline"
+                  >
+                    Paste
+                  </Button>
+                  <Button
+                    disabled={!activeTerminal}
+                    onClick={() => sendCommand(entry.command, true)}
+                    size="sm"
+                  >
+                    <Play className="mr-2 h-3.5 w-3.5" />
+                    Run
+                  </Button>
+                  <Button onClick={() => copyCommand(entry.command)} size="sm" variant="ghost">
+                    <Clipboard className="mr-2 h-3.5 w-3.5" />
+                    Copy
+                  </Button>
+                  <Button
+                    onClick={() => deleteCommandHistoryEntry(entry.id)}
+                    size="sm"
+                    variant="ghost"
+                  >
+                    <Trash2 className="mr-2 h-3.5 w-3.5" />
+                    Delete
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

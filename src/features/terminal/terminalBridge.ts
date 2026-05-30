@@ -42,6 +42,7 @@ type SessionSubscriber = {
 const processesByAppSession = new Map<string, TerminalProcess>();
 const appSessionByPtySession = new Map<PtySessionId, string>();
 const subscribers = new Map<string, Set<SessionSubscriber>>();
+const terminalFocusHandlers = new Map<string, () => void>();
 let eventListeners: Promise<UnlistenFn[]> | null = null;
 
 export function subscribeTerminalSession(
@@ -141,6 +142,19 @@ export async function writeTerminal(appSessionId: string, data: string) {
     sessionId: process.ptySessionId,
     data,
   });
+}
+
+export function registerTerminalFocus(appSessionId: string, focus: () => void) {
+  terminalFocusHandlers.set(appSessionId, focus);
+  return () => {
+    if (terminalFocusHandlers.get(appSessionId) === focus) {
+      terminalFocusHandlers.delete(appSessionId);
+    }
+  };
+}
+
+export function focusTerminal(appSessionId: string) {
+  terminalFocusHandlers.get(appSessionId)?.();
 }
 
 export async function resizeTerminal(appSessionId: string, rows: number, cols: number) {

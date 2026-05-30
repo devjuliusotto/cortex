@@ -240,6 +240,43 @@ fn read_clipboard_text() -> Result<String, String> {
     }
 }
 
+#[tauri::command]
+fn write_clipboard_text(text: String) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        let mut child = std::process::Command::new("powershell.exe")
+            .args(["-NoProfile", "-Command", "Set-Clipboard -Value ([Console]::In.ReadToEnd())"])
+            .stdin(std::process::Stdio::piped())
+            .spawn()
+            .map_err(|error| error.to_string())?;
+
+        if let Some(mut stdin) = child.stdin.take() {
+            use std::io::Write;
+            stdin
+                .write_all(text.as_bytes())
+                .map_err(|error| error.to_string())?;
+        }
+
+        let output = child.wait_with_output().map_err(|error| error.to_string())?;
+        if output.status.success() {
+            return Ok(());
+        }
+
+        let error = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(if error.is_empty() {
+            "Clipboard text could not be written".into()
+        } else {
+            error
+        });
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = text;
+        Ok(())
+    }
+}
+
 fn home_dir() -> Option<String> {
     std::env::var("USERPROFILE")
         .ok()
@@ -465,6 +502,7 @@ pub fn run() {
             save_persisted_state,
             open_external_url,
             read_clipboard_text,
+            write_clipboard_text,
             validate_working_directory,
             spawn_terminal,
             write_terminal,

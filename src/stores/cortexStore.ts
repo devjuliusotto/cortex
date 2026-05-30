@@ -1,5 +1,12 @@
 import { create } from "zustand";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import {
+  MAX_COMMAND_HISTORY_PER_WORKSPACE,
+  normalizeCommandForHistory,
+  shouldStoreCommand,
+  type CommandHistoryDraft,
+  type CommandHistoryEntry,
+} from "@/features/terminal/commandHistory";
 import { cortexStorage } from "@/lib/storage/cortexStorage";
 
 export type TerminalProfileId = "powershell" | "cmd" | "wsl-ubuntu";
@@ -46,7 +53,7 @@ export type TerminalSession = {
   updatedAt: string;
 };
 
-export type TemplateKind = "note";
+export type TemplateKind = "note" | "command-history";
 export type TemplateInstance = {
   id: string;
   workspaceId: string;
@@ -102,6 +109,7 @@ export type CortexPersistedState = {
   version: 1;
   workspaces: Workspace[];
   sessions: TerminalSession[];
+  commandHistory: CommandHistoryEntry[];
   templateInstances: TemplateInstance[];
   layouts: WorkspaceLayout[];
   settings: CortexSettings;
@@ -134,6 +142,9 @@ type CortexState = CortexPersistedState & {
   createSession: (workspaceId: string, profileId?: TerminalProfileId) => void;
   duplicateSession: (sessionId: string) => void;
   renameSession: (sessionId: string, name: string) => void;
+  addCommandHistoryEntry: (entry: CommandHistoryDraft) => void;
+  deleteCommandHistoryEntry: (entryId: string) => void;
+  clearCommandHistory: (workspaceId: string) => void;
   appendTerminalHistory: (sessionId: string, output: string) => void;
   clearTerminalHistory: (sessionId: string) => void;
   deleteSession: (sessionId: string) => void;
@@ -191,6 +202,7 @@ const emptyState: CortexPersistedState = {
   version: 1,
   workspaces: [],
   sessions: [],
+  commandHistory: [],
   templateInstances: [],
   layouts: [],
   settings: {
@@ -397,6 +409,19 @@ function trimTerminalHistory(history: string) {
   return trimmed;
 }
 
+function trimCommandHistoryByWorkspace(commandHistory: CommandHistoryEntry[]) {
+  const entriesByWorkspace = new Map<string, CommandHistoryEntry[]>();
+  for (const entry of commandHistory) {
+    const entries = entriesByWorkspace.get(entry.workspaceId) ?? [];
+    entries.push(entry);
+    entriesByWorkspace.set(entry.workspaceId, entries);
+  }
+
+  return [...entriesByWorkspace.values()].flatMap((entries) =>
+    entries.slice(-MAX_COMMAND_HISTORY_PER_WORKSPACE),
+  );
+}
+
 function persisted(state: CortexState): CortexPersistedState {
   return {
     version: 1,
@@ -406,6 +431,7 @@ function persisted(state: CortexState): CortexPersistedState {
       status: "inactive",
       terminalHistory: trimTerminalHistory(session.terminalHistory),
     })),
+    commandHistory: trimCommandHistoryByWorkspace(state.commandHistory),
     templateInstances: state.templateInstances,
     layouts: state.layouts,
     settings: state.settings,
@@ -455,6 +481,15 @@ function normalizeLoadedState(state: CortexPersistedState): CortexPersistedState
       status: "inactive",
       terminalHistory: trimTerminalHistory(session.terminalHistory ?? ""),
     })),
+    commandHistory: trimCommandHistoryByWorkspace(
+      (state.commandHistory ?? [])
+        .map((entry) => ({
+          ...entry,
+          command: normalizeCommandForHistory(entry.command),
+          cwd: entry.cwd?.trim() || undefined,
+        }))
+        .filter((entry) => entry.command),
+    ),
     templateInstances: state.templateInstances ?? [],
     layouts: (state.layouts ?? []).map((layout) => {
       const paneTree = normalizePaneTree(layout);
@@ -763,6 +798,7 @@ export const useCortexStore = create<CortexState>((set) => ({
         ...state,
         workspaces,
         sessions: state.sessions.filter((session) => session.workspaceId !== workspaceId),
+        commandHistory: state.commandHistory.filter((entry) => entry.workspaceId !== workspaceId),
         templateInstances: state.templateInstances.filter(
           (template) => template.workspaceId !== workspaceId,
         ),
@@ -885,6 +921,58 @@ export const useCortexStore = create<CortexState>((set) => ({
             ? { ...session, name: cleanName, updatedAt: now() }
             : session,
         ),
+      };
+      saveState(next);
+      return next;
+    }),
+
+  addCommandHistoryEntry: (entry) =>
+    set((state) => {
+      const command = normalizeCommandForHistory(entry.command);
+      const previous = [...state.commandHistory]
+        .reverse()
+        .find((item) => item.workspaceId === entry.workspaceId)?.command;
+      if (!shouldStoreCommand(command, previous)) {
+        return state;
+      }
+
+      const timestamp = now();
+      const nextEntry: CommandHistoryEntry = {
+        ...entry,
+        id: createId("command"),
+        command,
+        cwd: entry.cwd?.trim() || undefined,
+        createdAt: timestamp,
+      };
+      const workspaceEntries = [...state.commandHistory, nextEntry]
+        .filter((item) => item.workspaceId === entry.workspaceId)
+        .slice(-MAX_COMMAND_HISTORY_PER_WORKSPACE);
+      const next = {
+        ...state,
+        commandHistory: [
+          ...state.commandHistory.filter((item) => item.workspaceId !== entry.workspaceId),
+          ...workspaceEntries,
+        ],
+      };
+      saveState(next);
+      return next;
+    }),
+
+  deleteCommandHistoryEntry: (entryId) =>
+    set((state) => {
+      const next = {
+        ...state,
+        commandHistory: state.commandHistory.filter((entry) => entry.id !== entryId),
+      };
+      saveState(next);
+      return next;
+    }),
+
+  clearCommandHistory: (workspaceId) =>
+    set((state) => {
+      const next = {
+        ...state,
+        commandHistory: state.commandHistory.filter((entry) => entry.workspaceId !== workspaceId),
       };
       saveState(next);
       return next;

@@ -21,6 +21,7 @@ export function AppShell() {
     hydrate,
     saveNow,
     sessions,
+    appendTerminalHistory,
     setSessionStatus,
     templateInstances,
     workspaces,
@@ -50,8 +51,11 @@ export function AppShell() {
           session.workspaceId === activeWorkspace.id &&
           ["inactive", "completed", "error"].includes(session.status),
       )
-      .forEach((session) => setSessionStatus(session.id, "running"));
-  }, [activeWorkspace, sessions, setSessionStatus]);
+      .forEach((session) => {
+        appendTerminalHistory(session.id, "\r\n--- New shell started ---\r\n");
+        setSessionStatus(session.id, "running");
+      });
+  }, [activeWorkspace, appendTerminalHistory, sessions, setSessionStatus]);
 
   useEffect(() => {
     const handleBeforeUnload = () => {
