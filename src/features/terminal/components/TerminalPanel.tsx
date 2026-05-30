@@ -234,13 +234,14 @@ function PaneLeaf({ node, workspaceId }: { node: Extract<PaneNode, { type: "leaf
     splitActivePane,
     templateInstances,
   } = useCortexStore();
+  const [newTabChooserOpen, setNewTabChooserOpen] = useState(false);
   const layout = layouts.find((item) => item.workspaceId === workspaceId);
   const active = layout?.activePaneId === node.id;
   const activeTabId = node.activeTabId && node.tabIds.includes(node.activeTabId)
     ? node.activeTabId
     : node.tabIds[0] ?? null;
-  const session = sessions.find((item) => item.id === activeTabId);
-  const template = templateInstances.find((item) => item.id === activeTabId);
+  const session = newTabChooserOpen ? undefined : sessions.find((item) => item.id === activeTabId);
+  const template = newTabChooserOpen ? undefined : templateInstances.find((item) => item.id === activeTabId);
   const workspaceItems = [
     ...sessions
       .filter((item) => item.workspaceId === workspaceId)
@@ -253,13 +254,15 @@ function PaneLeaf({ node, workspaceId }: { node: Extract<PaneNode, { type: "leaf
     .map((tabId) => workspaceItems.find((item) => item.id === tabId))
     .filter(Boolean);
 
-  const createTerminalInPane = () => {
+  const createTerminalInPane = (profileId?: TerminalProfileId) => {
     setActivePane(workspaceId, node.id);
-    createSession(workspaceId);
+    setNewTabChooserOpen(false);
+    createSession(workspaceId, profileId);
   };
 
   const createNoteInPane = () => {
     setActivePane(workspaceId, node.id);
+    setNewTabChooserOpen(false);
     createTemplateInstance(workspaceId, {
       templateId: "workspace-note",
       kind: "note",
@@ -270,6 +273,7 @@ function PaneLeaf({ node, workspaceId }: { node: Extract<PaneNode, { type: "leaf
 
   const createCommandHistoryInPane = () => {
     setActivePane(workspaceId, node.id);
+    setNewTabChooserOpen(false);
     const existing = templateInstances.find(
       (item) => item.workspaceId === workspaceId && item.kind === "command-history",
     );
@@ -283,6 +287,11 @@ function PaneLeaf({ node, workspaceId }: { node: Extract<PaneNode, { type: "leaf
       title: "Command History",
       content: "",
     });
+  };
+
+  const openNewTabChooser = () => {
+    setActivePane(workspaceId, node.id);
+    setNewTabChooserOpen(true);
   };
 
   const handleDrop = (event: DragEvent<HTMLDivElement>) => {
@@ -333,7 +342,10 @@ function PaneLeaf({ node, workspaceId }: { node: Extract<PaneNode, { type: "leaf
                 )}
                 draggable
                 key={entry.id}
-                onClick={() => setActivePaneTab(workspaceId, node.id, entry.id)}
+                onClick={() => {
+                  setNewTabChooserOpen(false);
+                  setActivePaneTab(workspaceId, node.id, entry.id);
+                }}
                 onDragOver={(event) => event.preventDefault()}
                 onDragStart={(event) => {
                   event.dataTransfer.setData("application/x-cortex-tab", entry.id);
@@ -371,6 +383,17 @@ function PaneLeaf({ node, workspaceId }: { node: Extract<PaneNode, { type: "leaf
               </button>
             );
           })}
+          <button
+            className={cn(
+              "grid h-7 w-8 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground",
+              newTabChooserOpen && "bg-secondary text-foreground shadow-glow",
+            )}
+            onClick={openNewTabChooser}
+            title="New tab"
+            type="button"
+          >
+            <Plus className="h-4 w-4" />
+          </button>
         </div>
         <div className="flex shrink-0 items-center gap-1">
           <Button size="icon" variant="ghost" onClick={() => split("horizontal")} title="Split right">
@@ -385,13 +408,16 @@ function PaneLeaf({ node, workspaceId }: { node: Extract<PaneNode, { type: "leaf
           <Button size="icon" variant="ghost" onClick={() => split("vertical", true)} title="Split and move tab down">
             <PanelBottom className="h-4 w-4 text-cortex-amber" />
           </Button>
+          <Button size="icon" variant="ghost" onClick={openNewTabChooser} title="New tab">
+            <Plus className="h-4 w-4" />
+          </Button>
           <Button size="icon" variant="ghost" onClick={createNoteInPane} title="New note in pane">
             <FilePlus2 className="h-4 w-4" />
           </Button>
           <Button size="icon" variant="ghost" onClick={createCommandHistoryInPane} title="Command history in pane">
             <History className="h-4 w-4" />
           </Button>
-          <Button size="icon" variant="ghost" onClick={createTerminalInPane} title="New terminal in pane">
+          <Button size="icon" variant="ghost" onClick={() => createTerminalInPane()} title="New terminal in pane">
             <TerminalSquare className="h-4 w-4" />
           </Button>
           {node.tabIds.length === 0 && (
@@ -402,22 +428,19 @@ function PaneLeaf({ node, workspaceId }: { node: Extract<PaneNode, { type: "leaf
         </div>
       </div>
       <div className="min-h-0 flex-1">
-        {!session && !template && (
-          <div className="grid h-full place-items-center p-5 text-center">
-            <div>
-              <div className="text-sm font-medium">Drag a tab here or create a new terminal/note.</div>
-              <div className="mt-4 flex items-center justify-center gap-2">
-                <Button size="sm" onClick={createTerminalInPane}>
-                  <TerminalSquare className="mr-2 h-4 w-4" />
-                  New terminal
-                </Button>
-                <Button size="sm" variant="outline" onClick={createNoteInPane}>
-                  <FilePlus2 className="mr-2 h-4 w-4" />
-                  New note
-                </Button>
-              </div>
-            </div>
-          </div>
+        {newTabChooserOpen && (
+          <NewTabChooser
+            onCommandHistory={createCommandHistoryInPane}
+            onNote={createNoteInPane}
+            onTerminal={createTerminalInPane}
+          />
+        )}
+        {!newTabChooserOpen && !session && !template && (
+          <NewTabChooser
+            onCommandHistory={createCommandHistoryInPane}
+            onNote={createNoteInPane}
+            onTerminal={createTerminalInPane}
+          />
         )}
         {session && <TerminalPane paneId={node.id} session={session} workspaceId={workspaceId} />}
         {template?.kind === "note" && <NotesPane paneId={node.id} template={template} workspaceId={workspaceId} />}
@@ -1023,6 +1046,77 @@ function WorkspaceTools({ workspaceId }: { workspaceId: string }) {
           </button>
         </div>
       ))}
+    </div>
+  );
+}
+
+function NewTabChooser({
+  onCommandHistory,
+  onNote,
+  onTerminal,
+}: {
+  onCommandHistory: () => void;
+  onNote: () => void;
+  onTerminal: (profileId?: TerminalProfileId) => void;
+}) {
+  return (
+    <div className="grid h-full place-items-center p-5">
+      <div className="w-full max-w-xl">
+        <div className="mb-4 text-center text-sm font-medium text-muted-foreground">New tab</div>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <Button
+            className="h-16 justify-start gap-3 px-4"
+            onClick={() => onTerminal("powershell")}
+            variant="outline"
+          >
+            <TerminalSquare className="h-5 w-5 text-primary" />
+            <span className="text-left">
+              <span className="block text-sm font-medium">PowerShell</span>
+              <span className="block text-xs text-muted-foreground">powershell.exe</span>
+            </span>
+          </Button>
+          <Button
+            className="h-16 justify-start gap-3 px-4"
+            onClick={() => onTerminal("cmd")}
+            variant="outline"
+          >
+            <TerminalSquare className="h-5 w-5 text-primary" />
+            <span className="text-left">
+              <span className="block text-sm font-medium">CMD</span>
+              <span className="block text-xs text-muted-foreground">cmd.exe</span>
+            </span>
+          </Button>
+          <Button
+            className="h-16 justify-start gap-3 px-4"
+            onClick={() => onTerminal("wsl-ubuntu")}
+            variant="outline"
+          >
+            <TerminalSquare className="h-5 w-5 text-primary" />
+            <span className="text-left">
+              <span className="block text-sm font-medium">WSL Ubuntu</span>
+              <span className="block text-xs text-muted-foreground">wsl.exe</span>
+            </span>
+          </Button>
+          <Button className="h-16 justify-start gap-3 px-4" onClick={onNote} variant="outline">
+            <FileText className="h-5 w-5 text-primary" />
+            <span className="text-left">
+              <span className="block text-sm font-medium">Bloco de notas</span>
+              <span className="block text-xs text-muted-foreground">Notas locais</span>
+            </span>
+          </Button>
+          <Button
+            className="h-16 justify-start gap-3 px-4 sm:col-span-2"
+            onClick={onCommandHistory}
+            variant="outline"
+          >
+            <History className="h-5 w-5 text-primary" />
+            <span className="text-left">
+              <span className="block text-sm font-medium">Command History</span>
+              <span className="block text-xs text-muted-foreground">Comandos capturados no workspace</span>
+            </span>
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }

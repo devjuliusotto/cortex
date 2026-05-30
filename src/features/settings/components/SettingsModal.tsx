@@ -23,7 +23,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
   const { settings } = useCortexStore();
   const [updateState, setUpdateState] = useState<UpdateState>("idle");
   const [update, setUpdate] = useState<Update | null>(null);
-  const [message, setMessage] = useState("Manual update checks only");
+  const [message, setMessage] = useState("Automatic update checks run when Cortex starts.");
   const [downloadProgress, setDownloadProgress] = useState("");
 
   if (!open) {
@@ -152,7 +152,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
               </div>
             </div>
             <p className="mt-2 text-xs text-muted-foreground">
-              Update checks are {settings.updateCheckMode}. Background checking is intentionally not enabled.
+              Update checks are {settings.updateCheckMode}. Automatic install still requires a signed GitHub Release.
             </p>
           </section>
         </div>
@@ -176,7 +176,7 @@ function UpdateStatusIcon({ state }: { state: UpdateState }) {
 
 function updateLabel(state: UpdateState) {
   const labels: Record<UpdateState, string> = {
-    idle: "Manual only",
+    idle: "Automatic checks",
     checking: "Checking",
     "up-to-date": "Up to date",
     available: "Update available",

@@ -99,7 +99,7 @@ export type WindowState = {
   maximized: boolean;
 };
 
-export type UpdateCheckMode = "manual";
+export type UpdateCheckMode = "automatic" | "manual";
 
 export type CortexSettings = {
   updateCheckMode: UpdateCheckMode;
@@ -206,7 +206,7 @@ const emptyState: CortexPersistedState = {
   templateInstances: [],
   layouts: [],
   settings: {
-    updateCheckMode: "manual",
+    updateCheckMode: "automatic",
   },
   activeWorkspaceId: null,
   windowState: null,
@@ -237,6 +237,70 @@ function createLeaf(tabIds: string[] = [], activeTabId: string | null = tabIds[0
     type: "leaf",
     tabIds,
     activeTabId,
+  };
+}
+
+function createStandardWorkspaceItems(workspaceId: string, timestamp: string) {
+  const terminalId = createId("session");
+  const commandHistoryId = createId("template");
+  const noteId = createId("template");
+  const leftPane = createLeaf([terminalId], terminalId);
+  const rightPane = createLeaf([commandHistoryId, noteId], commandHistoryId);
+
+  const session: TerminalSession = {
+    id: terminalId,
+    workspaceId,
+    name: "PowerShell",
+    profileId: "powershell",
+    status: "running",
+    terminalHistory: "",
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+
+  const commandHistory: TemplateInstance = {
+    id: commandHistoryId,
+    workspaceId,
+    templateId: "command-history",
+    kind: "command-history",
+    title: "Command History",
+    content: "",
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+
+  const note: TemplateInstance = {
+    id: noteId,
+    workspaceId,
+    templateId: "workspace-note",
+    kind: "note",
+    title: "Notes",
+    content: "",
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+
+  const paneTree: PaneNode = {
+    id: createId("pane-split"),
+    type: "split",
+    direction: "horizontal",
+    ratio: 0.58,
+    first: leftPane,
+    second: rightPane,
+  };
+
+  return {
+    session,
+    templates: [commandHistory, note],
+    layout: {
+      workspaceId,
+      activeSessionId: terminalId,
+      activeItemId: terminalId,
+      tabOrder: [terminalId, commandHistoryId, noteId],
+      splitPanePreview: true,
+      paneTree,
+      activePaneId: leftPane.id,
+    } satisfies WorkspaceLayout,
   };
 }
 
@@ -517,7 +581,7 @@ function normalizeLoadedState(state: CortexPersistedState): CortexPersistedState
       })),
     })),
     settings: {
-      updateCheckMode: state.settings?.updateCheckMode ?? "manual",
+      updateCheckMode: "automatic",
     },
     activeWorkspaceId: state.activeWorkspaceId ?? null,
     windowState: state.windowState ?? null,
@@ -564,28 +628,19 @@ export const useCortexStore = create<CortexState>((set) => ({
       const workspace: Workspace = {
         id: createId("workspace"),
         name: workspaceName(state.workspaces),
-        autoStartTerminalsOnOpen: false,
+        autoStartTerminalsOnOpen: true,
         snippets: [],
         createdAt: timestamp,
         updatedAt: timestamp,
       };
 
-      const paneTree = createLeaf();
+      const standardItems = createStandardWorkspaceItems(workspace.id, timestamp);
       const next: CortexState = {
         ...state,
         workspaces: [...state.workspaces, workspace],
-        layouts: [
-          ...state.layouts,
-          {
-            workspaceId: workspace.id,
-            activeSessionId: null,
-            activeItemId: null,
-            tabOrder: [],
-            splitPanePreview: true,
-            paneTree,
-            activePaneId: paneTree.id,
-          },
-        ],
+        sessions: [...state.sessions, standardItems.session],
+        templateInstances: [...state.templateInstances, ...standardItems.templates],
+        layouts: [...state.layouts, standardItems.layout],
         activeWorkspaceId: workspace.id,
       };
       saveState(next);

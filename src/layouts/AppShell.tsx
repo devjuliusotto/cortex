@@ -1,3 +1,5 @@
+import { check } from "@tauri-apps/plugin-updater";
+import { relaunch } from "@tauri-apps/plugin-process";
 import { FolderPlus, HardDrive, Plus, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CortexLogo } from "@/components/CortexLogo";
@@ -11,6 +13,7 @@ import { useEffect, useRef, useState } from "react";
 
 export function AppShell() {
   const autoStartedWorkspaceIds = useRef(new Set<string>());
+  const autoUpdateChecked = useRef(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [marketplaceOpen, setMarketplaceOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -18,9 +21,11 @@ export function AppShell() {
     activeWorkspaceId,
     createSession,
     createWorkspace,
+    hydrated,
     hydrate,
     saveNow,
     sessions,
+    settings,
     appendTerminalHistory,
     setSessionStatus,
     templateInstances,
@@ -35,6 +40,39 @@ export function AppShell() {
   useEffect(() => {
     void hydrate();
   }, [hydrate]);
+
+  useEffect(() => {
+    if (
+      !hydrated ||
+      settings.updateCheckMode !== "automatic" ||
+      autoUpdateChecked.current ||
+      !("__TAURI_INTERNALS__" in window)
+    ) {
+      return;
+    }
+
+    autoUpdateChecked.current = true;
+    void (async () => {
+      try {
+        const update = await check();
+        if (!update) {
+          return;
+        }
+
+        const shouldInstall = window.confirm(
+          `Cortex ${update.version} is available. Download, install, and restart now?`,
+        );
+        if (!shouldInstall) {
+          return;
+        }
+
+        await update.downloadAndInstall();
+        await relaunch();
+      } catch (error) {
+        console.warn("Automatic update check failed", error);
+      }
+    })();
+  }, [hydrated, settings.updateCheckMode]);
 
   useEffect(() => {
     if (!activeWorkspace?.autoStartTerminalsOnOpen) {
