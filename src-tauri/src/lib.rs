@@ -47,6 +47,23 @@ struct ValidatedWorkingDirectory {
     warning: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GitMetadata {
+    branch: Option<String>,
+    dirty: bool,
+    ahead: Option<u32>,
+    behind: Option<u32>,
+    latest_commit: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LocalPort {
+    port: u16,
+    protocol: String,
+}
+
 fn create_pty_state(app: AppHandle) -> PtyState {
     let backend = PlatformPtyBackend::new(move |session_id, output| match output {
         PtyOutput::Data(data) => {
@@ -70,9 +87,7 @@ fn pty_error(error: PtyError) -> String {
 }
 
 fn is_allowed_external_url(url: &str) -> bool {
-    url.starts_with(&format!(
-        "https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}/issues/new"
-    ))
+    url.starts_with("https://") || url.starts_with("http://")
 }
 
 fn app_state_path(app: &AppHandle) -> Result<PathBuf, String> {
@@ -275,6 +290,106 @@ fn write_clipboard_text(text: String) -> Result<(), String> {
         let _ = text;
         Ok(())
     }
+}
+
+fn run_command_output(program: &str, args: &[&str]) -> Result<String, String> {
+    let output = std::process::Command::new(program)
+        .args(args)
+        .output()
+        .map_err(|error| error.to_string())?;
+
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
+    }
+
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+#[tauri::command]
+fn get_git_metadata(path: String) -> Result<Option<GitMetadata>, String> {
+    let clean_path = path.trim();
+    if clean_path.is_empty() || !Path::new(clean_path).is_dir() {
+        return Ok(None);
+    }
+
+    let git_dir = run_command_output("git", &["-C", clean_path, "rev-parse", "--git-dir"]);
+    if git_dir.is_err() {
+        return Ok(None);
+    }
+
+    let branch = run_command_output("git", &["-C", clean_path, "branch", "--show-current"])
+        .ok()
+        .filter(|value| !value.is_empty())
+        .or_else(|| {
+            run_command_output("git", &["-C", clean_path, "rev-parse", "--short", "HEAD"])
+                .ok()
+                .filter(|value| !value.is_empty())
+        });
+    let status = run_command_output("git", &["-C", clean_path, "status", "--porcelain"]).unwrap_or_default();
+    let latest_commit = run_command_output(
+        "git",
+        &["-C", clean_path, "log", "-1", "--pretty=format:%h %s"],
+    )
+    .ok()
+    .filter(|value| !value.is_empty());
+
+    let ahead_behind = run_command_output(
+        "git",
+        &["-C", clean_path, "rev-list", "--left-right", "--count", "HEAD...@{upstream}"],
+    )
+    .ok();
+    let (ahead, behind) = ahead_behind
+        .as_deref()
+        .and_then(|value| {
+            let mut parts = value.split_whitespace();
+            let ahead = parts.next()?.parse::<u32>().ok()?;
+            let behind = parts.next()?.parse::<u32>().ok()?;
+            Some((Some(ahead), Some(behind)))
+        })
+        .unwrap_or((None, None));
+
+    Ok(Some(GitMetadata {
+        branch,
+        dirty: !status.is_empty(),
+        ahead,
+        behind,
+        latest_commit,
+    }))
+}
+
+#[tauri::command]
+fn get_local_ports() -> Result<Vec<LocalPort>, String> {
+    let raw = if cfg!(windows) {
+        run_command_output("netstat", &["-ano", "-p", "TCP"]).unwrap_or_default()
+    } else {
+        run_command_output("ss", &["-ltn"]).unwrap_or_default()
+    };
+
+    let common_ports = [1420_u16, 5173, 3000, 3001, 4173, 5174, 8080, 8000, 5000];
+    let mut ports = Vec::new();
+    for line in raw.lines() {
+        let lower = line.to_ascii_lowercase();
+        if !(lower.contains("listen") || lower.contains("listening")) {
+            continue;
+        }
+        for token in line.split_whitespace() {
+            let Some(port_text) = token.rsplit(':').next() else {
+                continue;
+            };
+            let Ok(port) = port_text.parse::<u16>() else {
+                continue;
+            };
+            if common_ports.contains(&port) && !ports.iter().any(|item: &LocalPort| item.port == port) {
+                ports.push(LocalPort {
+                    port,
+                    protocol: "tcp".into(),
+                });
+            }
+        }
+    }
+
+    ports.sort_by_key(|item| item.port);
+    Ok(ports)
 }
 
 fn home_dir() -> Option<String> {
@@ -501,6 +616,8 @@ pub fn run() {
             load_persisted_state,
             save_persisted_state,
             open_external_url,
+            get_git_metadata,
+            get_local_ports,
             read_clipboard_text,
             write_clipboard_text,
             validate_working_directory,

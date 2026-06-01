@@ -1,8 +1,9 @@
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
-import { FolderPlus, HardDrive, Plus, ShieldCheck } from "lucide-react";
+import { Command, FolderPlus, HardDrive, Plus, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CortexLogo } from "@/components/CortexLogo";
+import { CommandPalette } from "@/features/commandSystem/components/CommandPalette";
 import { MarketplaceModal } from "@/features/marketplace/components/MarketplaceModal";
 import { SettingsModal } from "@/features/settings/components/SettingsModal";
 import { TerminalPanel } from "@/features/terminal/components/TerminalPanel";
@@ -16,6 +17,7 @@ export function AppShell() {
   const autoUpdateChecked = useRef(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [marketplaceOpen, setMarketplaceOpen] = useState(false);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const {
     activeWorkspaceId,
@@ -106,6 +108,22 @@ export function AppShell() {
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [saveNow]);
 
+  useEffect(() => {
+    if (!settings.commandPaletteEnabled) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === "p") {
+        event.preventDefault();
+        setCommandPaletteOpen(true);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [settings.commandPaletteEnabled]);
+
   return (
     <div className="flex h-full overflow-hidden bg-background text-foreground">
       <Sidebar
@@ -149,6 +167,16 @@ export function AppShell() {
             </Button>
             <Button
               size="sm"
+              variant="outline"
+              onClick={() => setCommandPaletteOpen(true)}
+              disabled={!settings.commandPaletteEnabled}
+              title="Command palette (Ctrl+Shift+P)"
+            >
+              <Command className="mr-2 h-4 w-4" />
+              Command
+            </Button>
+            <Button
+              size="sm"
               onClick={() => activeWorkspace && createSession(activeWorkspace.id)}
               disabled={!activeWorkspace}
             >
@@ -160,6 +188,11 @@ export function AppShell() {
 
         <TerminalPanel workspaceId={activeWorkspaceId} />
       </main>
+      <CommandPalette
+        open={commandPaletteOpen}
+        onClose={() => setCommandPaletteOpen(false)}
+        onSettingsOpen={() => setSettingsOpen(true)}
+      />
       <MarketplaceModal open={marketplaceOpen} onClose={() => setMarketplaceOpen(false)} />
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>

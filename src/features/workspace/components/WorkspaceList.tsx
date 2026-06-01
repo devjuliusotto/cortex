@@ -1,9 +1,16 @@
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { Check, Copy, Folder, FolderOpen, Palette, Play, Plus, Trash2 } from "lucide-react";
-import type { ReactNode } from "react";
+import { Check, Copy, ExternalLink, Folder, FolderOpen, Palette, Play, Plus, RefreshCw, Trash2 } from "lucide-react";
+import type { MouseEvent, ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { useWorkspaceActivity } from "@/features/activity/activityStore";
 import { terminateTerminals } from "@/features/terminal/terminalBridge";
+import {
+  formatWorkspaceMetadataLine,
+  getCachedWorkspaceMetadata,
+  refreshWorkspaceMetadata,
+  subscribeWorkspaceMetadata,
+} from "@/features/workspaceMetadata/workspaceMetadataService";
 import { cn } from "@/lib/utils";
 import { useCortexStore, type Workspace } from "@/stores/cortexStore";
 
@@ -28,15 +35,20 @@ export function WorkspaceList() {
     workspaces,
     activeWorkspaceId,
     createWorkspace,
+    createBrowserTab,
     deleteWorkspace,
     duplicateWorkspace,
     renameWorkspace,
     sessions,
+    browserTabs,
     setActiveWorkspace,
     setWorkspaceAutoStartTerminalsOnOpen,
     setWorkspaceColor,
     setWorkspaceDefaultWorkingDirectory,
+    settings,
+    templateInstances,
   } = useCortexStore();
+  const [, setMetadataVersion] = useState(0);
   const contextWorkspace = contextMenu
     ? workspaces.find((workspace) => workspace.id === contextMenu.workspaceId)
     : undefined;
@@ -56,6 +68,34 @@ export function WorkspaceList() {
       window.removeEventListener("blur", close);
     };
   }, [contextMenu]);
+
+  useEffect(() => {
+    const unsubscribe = subscribeWorkspaceMetadata(() => setMetadataVersion((value) => value + 1));
+    return () => {
+      unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!settings.showWorkspaceMetadata) {
+      return;
+    }
+
+    for (const workspace of workspaces) {
+      if (workspace.defaultWorkingDirectory) {
+        void refreshWorkspaceMetadata(workspace.id, workspace.defaultWorkingDirectory);
+      }
+    }
+
+    const interval = window.setInterval(() => {
+      for (const workspace of useCortexStore.getState().workspaces) {
+        if (workspace.defaultWorkingDirectory) {
+          void refreshWorkspaceMetadata(workspace.id, workspace.defaultWorkingDirectory);
+        }
+      }
+    }, 45_000);
+    return () => window.clearInterval(interval);
+  }, [settings.showWorkspaceMetadata, workspaces]);
 
   function rename(workspace: Workspace) {
     const name = window.prompt("Rename workspace", workspace.name);
@@ -106,59 +146,27 @@ export function WorkspaceList() {
             Create a workspace to start organizing terminal sessions.
           </div>
         ) : (
-          workspaces.map((workspace) => {
-            const active = workspace.id === activeWorkspaceId;
-
-            return (
-              <div
-                className={cn(
-                  "group rounded-md border border-transparent px-2 py-2 transition-colors",
-                  active && "border-primary/20 bg-secondary shadow-glow",
-                  !active && "hover:bg-secondary/70",
-                )}
-                key={workspace.id}
-                onContextMenu={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  setContextMenu({
-                    workspaceId: workspace.id,
-                    x: event.clientX,
-                    y: event.clientY,
-                  });
-                }}
-              >
-                <button
-                  className="flex min-w-0 w-full items-start gap-2 text-left"
-                  onClick={() => setActiveWorkspace(workspace.id)}
-                  type="button"
-                  title={
-                    workspace.defaultWorkingDirectory
-                      ? `${workspace.name}\n${workspace.defaultWorkingDirectory}`
-                      : workspace.name
-                  }
-                >
-                  <span
-                    className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded-sm border border-border"
-                    style={{ backgroundColor: workspace.color ?? "transparent" }}
-                  />
-                  <Folder
-                    className={cn(
-                      "mt-0.5 h-4 w-4 shrink-0 text-muted-foreground",
-                      active && "text-primary",
-                    )}
-                  />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm text-foreground">{workspace.name}</span>
-                    {workspace.defaultWorkingDirectory && (
-                      <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">
-                        {workspace.defaultWorkingDirectory}
-                      </span>
-                    )}
-                  </span>
-                </button>
-              </div>
-            );
-          })
+          workspaces.map((workspace) => (
+            <WorkspaceRow
+              active={workspace.id === activeWorkspaceId}
+              browserTabs={browserTabs.filter((tab) => tab.workspaceId === workspace.id).map((tab) => tab.id)}
+              key={workspace.id}
+              metadataEnabled={settings.showWorkspaceMetadata}
+              noteCount={templateInstances.filter((template) => template.workspaceId === workspace.id && template.kind === "note").length}
+              onContextMenu={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                setContextMenu({
+                  workspaceId: workspace.id,
+                  x: event.clientX,
+                  y: event.clientY,
+                });
+              }}
+              onSelect={() => setActiveWorkspace(workspace.id)}
+              terminalIds={sessions.filter((session) => session.workspaceId === workspace.id).map((session) => session.id)}
+              workspace={workspace}
+            />
+          ))
         )}
       </div>
 
@@ -244,6 +252,32 @@ export function WorkspaceList() {
           />
           <div className="my-1 h-px bg-border" />
           <ContextMenuButton
+            disabled={!contextWorkspace.defaultWorkingDirectory}
+            icon={<RefreshCw className="h-4 w-4" />}
+            label="Refresh local metadata"
+            onClick={() => {
+              void refreshWorkspaceMetadata(
+                contextWorkspace.id,
+                contextWorkspace.defaultWorkingDirectory,
+                true,
+              );
+              setContextMenu(null);
+            }}
+          />
+          <ContextMenuButton
+            disabled={!getCachedWorkspaceMetadata(contextWorkspace.id)?.ports.length}
+            icon={<ExternalLink className="h-4 w-4" />}
+            label="Open first detected port in browser pane"
+            onClick={() => {
+              const port = getCachedWorkspaceMetadata(contextWorkspace.id)?.ports[0]?.port;
+              if (port) {
+                createBrowserTab(contextWorkspace.id, `http://localhost:${port}`);
+              }
+              setContextMenu(null);
+            }}
+          />
+          <div className="my-1 h-px bg-border" />
+          <ContextMenuButton
             icon={<Copy className="h-4 w-4" />}
             label="Duplicate workspace"
             onClick={() => {
@@ -274,6 +308,86 @@ type ContextMenuButtonProps = {
   label: string;
   onClick: () => void;
 };
+
+function WorkspaceRow({
+  active,
+  browserTabs,
+  metadataEnabled,
+  noteCount,
+  onContextMenu,
+  onSelect,
+  terminalIds,
+  workspace,
+}: {
+  active: boolean;
+  browserTabs: string[];
+  metadataEnabled: boolean;
+  noteCount: number;
+  onContextMenu: (event: MouseEvent<HTMLDivElement>) => void;
+  onSelect: () => void;
+  terminalIds: string[];
+  workspace: Workspace;
+}) {
+  const activeWork = useWorkspaceActivity([...terminalIds, ...browserTabs]);
+  const metadata = metadataEnabled ? getCachedWorkspaceMetadata(workspace.id) : null;
+
+  return (
+    <div
+      className={cn(
+        "group rounded-md border border-transparent px-2 py-2 transition-colors",
+        active && "border-primary/20 bg-secondary shadow-glow",
+        !active && "hover:bg-secondary/70",
+      )}
+      onContextMenu={onContextMenu}
+    >
+      <button
+        className="flex min-w-0 w-full items-start gap-2 text-left"
+        onClick={onSelect}
+        type="button"
+        title={
+          workspace.defaultWorkingDirectory
+            ? `${workspace.name}\n${workspace.defaultWorkingDirectory}`
+            : workspace.name
+        }
+      >
+        <span
+          className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded-sm border border-border"
+          style={{ backgroundColor: workspace.color ?? "transparent" }}
+        />
+        <Folder
+          className={cn(
+            "mt-0.5 h-4 w-4 shrink-0 text-muted-foreground",
+            active && "text-primary",
+          )}
+        />
+        <span className="min-w-0 flex-1">
+          <span className="flex min-w-0 items-center gap-2">
+            {activeWork && <WorkspaceActivityDot />}
+            <span className="truncate text-sm text-foreground">{workspace.name}</span>
+          </span>
+          {metadataEnabled ? (
+            <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">
+              {formatWorkspaceMetadataLine(metadata, { terminals: terminalIds.length, notes: noteCount + browserTabs.length })}
+            </span>
+          ) : workspace.defaultWorkingDirectory && (
+            <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">
+              {workspace.defaultWorkingDirectory}
+            </span>
+          )}
+        </span>
+      </button>
+    </div>
+  );
+}
+
+function WorkspaceActivityDot() {
+  return (
+    <span className="relative flex h-2 w-2 shrink-0">
+      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary/50 opacity-50" />
+      <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
+    </span>
+  );
+}
 
 function ContextMenuButton({
   checked,

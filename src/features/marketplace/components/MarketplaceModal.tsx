@@ -24,6 +24,7 @@ import {
   WORKSPACE_TEMPLATES_MARKETPLACE_ENABLED,
 } from "@/features/marketplace/templates";
 import { cn } from "@/lib/utils";
+import { useCortexStore } from "@/stores/cortexStore";
 
 type MarketplaceModalProps = {
   open: boolean;
@@ -262,42 +263,131 @@ function TemplatesTab() {
 }
 
 function AddOnsTab() {
+  const { settings, setFeatureFlag } = useCortexStore();
+
   return (
     <div className="max-w-3xl">
-      <h3 className="text-base font-semibold">Add-ons</h3>
+      <h3 className="text-base font-semibold">Local Feature Hub</h3>
       <p className="mt-1 text-sm leading-6 text-muted-foreground">
-        Add-ons are reserved for a future local extension model. Cortex v0.1 does not download
-        remote code, run third-party plugins, or include paid marketplace logic.
+        This is not a remote marketplace. Cortex does not download plugins, execute remote code,
+        or run background services from here.
       </p>
       <div className="mt-5 grid gap-3 md:grid-cols-2">
         <InfoCard
+          badge="Core"
           icon={<Puzzle className="h-4 w-4 text-primary" />}
-          title="No plugin runtime"
-          text="There is no execution path for marketplace code in this version."
+          title="Terminal workspaces"
+          text="Terminals, panes, notes, command history, snippets, cwd, and local persistence."
         />
         <InfoCard
+          action={
+            <FeatureToggle
+              checked={settings.showWorkspaceMetadata}
+              onChange={(checked) => setFeatureFlag("showWorkspaceMetadata", checked)}
+            />
+          }
+          badge="Experimental"
           icon={<Lightbulb className="h-4 w-4 text-primary" />}
-          title="Request add-ons"
-          text="Use the Feedback tab to suggest add-ons and templates for future versions."
+          title="Workspace Metadata"
+          text="Local Git branch, dirty state, latest commit, and common dev ports in the sidebar."
         />
         <InfoCard
+          action={
+            <FeatureToggle
+              checked={settings.browserPaneEnabled}
+              onChange={(checked) => setFeatureFlag("browserPaneEnabled", checked)}
+            />
+          }
+          badge="Experimental"
           icon={<Bug className="h-4 w-4 text-primary" />}
-          title="No background upload"
-          text="Feedback opens a browser page. Cortex does not submit issues automatically."
+          title="Browser Pane"
+          text="Persist URL tabs in split panes. Embedded WebView automation remains disabled."
+        />
+        <InfoCard
+          action={
+            <FeatureToggle
+              checked={settings.customCommandsEnabled}
+              onChange={(checked) => setFeatureFlag("customCommandsEnabled", checked)}
+            />
+          }
+          badge="Experimental"
+          icon={<Lightbulb className="h-4 w-4 text-primary" />}
+          title="Custom Commands"
+          text="Structured global and workspace commands, only run after explicit action."
+        />
+        <InfoCard
+          action={
+            <FeatureToggle
+              checked={settings.commandPaletteEnabled}
+              onChange={(checked) => setFeatureFlag("commandPaletteEnabled", checked)}
+            />
+          }
+          badge="Core"
+          icon={<Puzzle className="h-4 w-4 text-primary" />}
+          title="Command Palette"
+          text="Ctrl+Shift+P command launcher backed by the internal dispatcher."
+        />
+        <InfoCard
+          badge="Coming Soon"
+          icon={<Lightbulb className="h-4 w-4 text-primary" />}
+          title="CLI / Local API"
+          text="Documented local-only architecture for future named-pipe control."
+        />
+        <InfoCard
+          badge="Coming Soon"
+          icon={<Lightbulb className="h-4 w-4 text-primary" />}
+          title="Workspace Templates"
+          text="Future local templates without remote plugin downloads."
         />
       </div>
     </div>
   );
 }
 
-function InfoCard({ icon, title, text }: { icon: ReactNode; title: string; text: string }) {
+function InfoCard({
+  action,
+  badge,
+  icon,
+  title,
+  text,
+}: {
+  action?: ReactNode;
+  badge?: string;
+  icon: ReactNode;
+  title: string;
+  text: string;
+}) {
   return (
     <div className="rounded-md border border-border bg-card/55 p-4">
-      <div className="mb-2 flex items-center gap-2 text-sm font-medium">
-        {icon}
-        {title}
+      <div className="mb-2 flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2 text-sm font-medium">
+          {icon}
+          <span className="truncate">{title}</span>
+        </div>
+        {badge && <span className="shrink-0 rounded bg-secondary px-2 py-0.5 text-[10px] text-muted-foreground">{badge}</span>}
       </div>
       <p className="text-xs leading-5 text-muted-foreground">{text}</p>
+      {action && <div className="mt-3">{action}</div>}
     </div>
+  );
+}
+
+function FeatureToggle({
+  checked,
+  onChange,
+}: {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <label className="flex items-center gap-2 text-xs text-muted-foreground">
+      <input
+        checked={checked}
+        className="h-4 w-4 accent-primary"
+        onChange={(event) => onChange(event.target.checked)}
+        type="checkbox"
+      />
+      Enabled
+    </label>
   );
 }

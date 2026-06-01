@@ -43,7 +43,12 @@ const processesByAppSession = new Map<string, TerminalProcess>();
 const appSessionByPtySession = new Map<PtySessionId, string>();
 const subscribers = new Map<string, Set<SessionSubscriber>>();
 const terminalFocusHandlers = new Map<string, () => void>();
+const pendingHistoryByAppSession = new Map<string, string>();
 let eventListeners: Promise<UnlistenFn[]> | null = null;
+let historyFlushTimer: ReturnType<typeof setTimeout> | null = null;
+
+const MAX_REPLAY_BUFFER_BYTES = 1_000_000;
+const HISTORY_FLUSH_INTERVAL_MS = 500;
 
 export function subscribeTerminalSession(
   appSessionId: string,
@@ -144,6 +149,11 @@ export async function writeTerminal(appSessionId: string, data: string) {
   });
 }
 
+export function commandForShell(command: string, runImmediately: boolean) {
+  const normalized = command.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  return runImmediately ? `${normalized}\r` : normalized.replace(/\n/g, "\r");
+}
+
 export function registerTerminalFocus(appSessionId: string, focus: () => void) {
   terminalFocusHandlers.set(appSessionId, focus);
   return () => {
@@ -172,6 +182,7 @@ export async function resizeTerminal(appSessionId: string, rows: number, cols: n
 
 export async function terminateTerminal(appSessionId: string) {
   const process = processesByAppSession.get(appSessionId);
+  flushTerminalHistory(appSessionId);
   if (!process?.ptySessionId) {
     processesByAppSession.delete(appSessionId);
     notifyStatus(appSessionId, "idle", null);
@@ -204,9 +215,9 @@ function ensureEventListeners() {
 
       const process = processesByAppSession.get(appSessionId);
       if (process) {
-        process.buffer += event.payload.data;
+        process.buffer = trimReplayBuffer(process.buffer + event.payload.data);
       }
-      useCortexStore.getState().appendTerminalHistory(appSessionId, event.payload.data);
+      queueTerminalHistory(appSessionId, event.payload.data);
 
       for (const subscriber of subscribers.get(appSessionId) ?? []) {
         subscriber.onData(event.payload.data);
@@ -245,5 +256,50 @@ function ensureEventListeners() {
 function notifyStatus(appSessionId: string, status: TerminalStatus, error: string | null) {
   for (const subscriber of subscribers.get(appSessionId) ?? []) {
     subscriber.onStatus?.(status, error);
+  }
+}
+
+function trimReplayBuffer(buffer: string) {
+  if (buffer.length <= MAX_REPLAY_BUFFER_BYTES) {
+    return buffer;
+  }
+
+  return buffer.slice(buffer.length - MAX_REPLAY_BUFFER_BYTES);
+}
+
+function queueTerminalHistory(appSessionId: string, data: string) {
+  pendingHistoryByAppSession.set(
+    appSessionId,
+    `${pendingHistoryByAppSession.get(appSessionId) ?? ""}${data}`,
+  );
+
+  if (historyFlushTimer) {
+    return;
+  }
+
+  historyFlushTimer = setTimeout(() => {
+    flushTerminalHistory();
+  }, HISTORY_FLUSH_INTERVAL_MS);
+}
+
+function flushTerminalHistory(appSessionId?: string) {
+  if (!appSessionId && historyFlushTimer) {
+    clearTimeout(historyFlushTimer);
+    historyFlushTimer = null;
+  }
+
+  const state = useCortexStore.getState();
+  const sessionIds = appSessionId
+    ? [appSessionId]
+    : Array.from(pendingHistoryByAppSession.keys());
+
+  for (const sessionId of sessionIds) {
+    const output = pendingHistoryByAppSession.get(sessionId);
+    if (!output) {
+      continue;
+    }
+
+    pendingHistoryByAppSession.delete(sessionId);
+    state.appendTerminalHistory(sessionId, output);
   }
 }
