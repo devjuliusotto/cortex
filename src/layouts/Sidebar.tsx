@@ -1,6 +1,7 @@
 import {
   ChevronLeft,
   ChevronRight,
+  ClipboardList,
   FolderTree,
   Package,
   Settings,
@@ -13,12 +14,19 @@ import { cn } from "@/lib/utils";
 
 type SidebarProps = {
   collapsed: boolean;
+  onSavedCommandsOpen: () => void;
   onMarketplaceOpen: () => void;
   onSettingsOpen: () => void;
   onToggle: () => void;
 };
 
-export function Sidebar({ collapsed, onMarketplaceOpen, onSettingsOpen, onToggle }: SidebarProps) {
+export function Sidebar({
+  collapsed,
+  onMarketplaceOpen,
+  onSavedCommandsOpen,
+  onSettingsOpen,
+  onToggle,
+}: SidebarProps) {
   return (
     <motion.aside
       animate={{ width: collapsed ? 76 : 288 }}
@@ -55,6 +63,18 @@ export function Sidebar({ collapsed, onMarketplaceOpen, onSettingsOpen, onToggle
       )}
 
       <div className="border-t border-border p-3">
+        <button
+          className={cn(
+            "mb-1 flex h-10 w-full items-center gap-3 rounded-md px-3 text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground",
+            collapsed && "justify-center px-0",
+          )}
+          onClick={onSavedCommandsOpen}
+          type="button"
+          title="Comandos salvos"
+        >
+          <ClipboardList className="h-4 w-4 shrink-0" />
+          {!collapsed && <span>Comandos salvos</span>}
+        </button>
         <button
           className={cn(
             "mb-1 flex h-10 w-full items-center gap-3 rounded-md px-3 text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground",

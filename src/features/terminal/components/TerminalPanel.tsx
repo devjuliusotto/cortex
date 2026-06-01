@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { DragEvent, ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { FitAddon } from "@xterm/addon-fit";
-import { Terminal } from "@xterm/xterm";
+import { Terminal, type ILink, type ILinkProvider } from "@xterm/xterm";
 import { motion } from "framer-motion";
 import {
   AlertCircle,
@@ -113,6 +113,60 @@ function profileLabel(profileId: TerminalProfileId) {
   return labels[profileId] ?? profileId;
 }
 
+const terminalUrlPattern =
+  /\b(?:https?:\/\/|localhost(?::\d+)?|127\.0\.0\.1(?::\d+)?|\[::1\](?::\d+)?)(?:[^\s<>"'`]*)/gi;
+
+function normalizeTerminalUrl(text: string) {
+  const clean = text.replace(/[),.;:]+$/g, "");
+  return clean.startsWith("http://") || clean.startsWith("https://")
+    ? clean
+    : `http://${clean}`;
+}
+
+function openTerminalUrl(url: string) {
+  void invoke("open_external_url", { url }).catch(() => {
+    window.open(url, "_blank", "noopener,noreferrer");
+  });
+}
+
+function createTerminalLinkProvider(terminal: Terminal): ILinkProvider {
+  return {
+    provideLinks(bufferLineNumber, callback) {
+      const line = terminal.buffer.active.getLine(bufferLineNumber - 1);
+      if (!line) {
+        callback(undefined);
+        return;
+      }
+
+      const text = line.translateToString(true);
+      const links: ILink[] = [];
+
+      for (const match of text.matchAll(terminalUrlPattern)) {
+        const rawText = match[0];
+        const linkText = normalizeTerminalUrl(rawText);
+        const displayText = rawText.replace(/[),.;:]+$/g, "");
+        const startColumn = match.index ?? 0;
+        const endColumn = startColumn + displayText.length;
+
+        links.push({
+          range: {
+            start: { x: startColumn + 1, y: bufferLineNumber },
+            end: { x: endColumn + 1, y: bufferLineNumber },
+          },
+          text: linkText,
+          decorations: {
+            pointerCursor: true,
+            underline: true,
+          },
+          activate: (_event, url) => openTerminalUrl(url),
+        });
+      }
+
+      callback(links.length > 0 ? links : undefined);
+    },
+  };
+}
+
 export function TerminalPanel({ workspaceId }: TerminalPanelProps) {
   const {
     createSession,
@@ -201,7 +255,10 @@ function PaneTree({ node, workspaceId }: { node: PaneNode; workspaceId: string }
 
   return (
     <div
-      className={cn("grid h-full min-h-0", node.direction === "horizontal" ? "grid-rows-1" : "grid-cols-1")}
+      className={cn(
+        "grid h-full min-h-0 min-w-0 overflow-hidden",
+        node.direction === "horizontal" ? "grid-rows-1" : "grid-cols-1",
+      )}
       ref={containerRef}
       style={gridStyle}
     >
@@ -322,7 +379,7 @@ function PaneLeaf({ node, workspaceId }: { node: Extract<PaneNode, { type: "leaf
 
   return (
     <div
-      className={cn("flex h-full min-h-0 flex-col border border-transparent", active && "border-primary/35")}
+      className={cn("flex h-full min-h-0 min-w-0 flex-col overflow-hidden border border-transparent", active && "border-primary/35")}
       onDragOver={(event) => event.preventDefault()}
       onDrop={handleDrop}
       onMouseDown={() => setActivePane(workspaceId, node.id)}
@@ -427,7 +484,7 @@ function PaneLeaf({ node, workspaceId }: { node: Extract<PaneNode, { type: "leaf
           )}
         </div>
       </div>
-      <div className="min-h-0 flex-1">
+      <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
         {newTabChooserOpen && (
           <NewTabChooser
             onCommandHistory={createCommandHistoryInPane}
@@ -513,6 +570,7 @@ function TerminalPane({
     const fitAddon = new FitAddon();
     terminal.loadAddon(fitAddon);
     terminal.open(terminalRef.current);
+    const linkProvider = terminal.registerLinkProvider(createTerminalLinkProvider(terminal));
     if (session.terminalHistory) {
       terminal.write(session.terminalHistory);
     }
@@ -537,9 +595,17 @@ function TerminalPane({
       },
     });
 
+    let resizeFrame = 0;
     const syncSize = () => {
-      fitAddon.fit();
-      void resizeTerminal(session.id, terminal.rows, terminal.cols);
+      window.cancelAnimationFrame(resizeFrame);
+      resizeFrame = window.requestAnimationFrame(() => {
+        if (disposed) {
+          return;
+        }
+        fitAddon.fit();
+        terminal.refresh(0, terminal.rows - 1);
+        void resizeTerminal(session.id, terminal.rows, terminal.cols);
+      });
     };
 
     const recorder = createCommandRecorder({
@@ -654,6 +720,8 @@ function TerminalPane({
       unsubscribe();
       dataDisposable.dispose();
       unregisterFocus();
+      linkProvider.dispose();
+      window.cancelAnimationFrame(resizeFrame);
       terminalElement.removeEventListener("paste", pasteListener, true);
       terminalElement.removeEventListener("contextmenu", contextMenuListener, true);
       resizeObserver.disconnect();
@@ -671,7 +739,7 @@ function TerminalPane({
   ]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
       <div className="flex h-10 shrink-0 items-center justify-between border-b border-border bg-background/50 px-3">
         <button
           className="min-w-0 truncate text-left text-sm font-medium"
@@ -703,8 +771,8 @@ function TerminalPane({
           )}
         </div>
       </div>
-      <div className="relative min-h-0 flex-1 overflow-hidden">
-        <div ref={terminalRef} className="h-full min-h-0" />
+      <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden bg-[#0b0d10]">
+        <div ref={terminalRef} className="h-full min-h-0 min-w-0 overflow-hidden" />
         {connectionState.status === "loading" && (
           <TerminalOverlay icon={<Loader2 className="h-4 w-4 animate-spin text-primary" />} message="Starting terminal" />
         )}

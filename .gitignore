@@ -28,6 +28,9 @@ cortex-state.json
 *state.json
 app-data/
 user-data/
+cortex-private-commands*.json
+private-commands*.json
+personal-commands*.json
 
 # Build outputs and logs
 *.log

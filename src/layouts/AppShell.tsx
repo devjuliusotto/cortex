@@ -3,6 +3,7 @@ import { relaunch } from "@tauri-apps/plugin-process";
 import { FolderPlus, HardDrive, Plus, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CortexLogo } from "@/components/CortexLogo";
+import { SavedCommandsModal } from "@/features/commands/components/SavedCommandsModal";
 import { MarketplaceModal } from "@/features/marketplace/components/MarketplaceModal";
 import { SettingsModal } from "@/features/settings/components/SettingsModal";
 import { TerminalPanel } from "@/features/terminal/components/TerminalPanel";
@@ -15,6 +16,7 @@ export function AppShell() {
   const autoStartedWorkspaceIds = useRef(new Set<string>());
   const autoUpdateChecked = useRef(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [savedCommandsOpen, setSavedCommandsOpen] = useState(false);
   const [marketplaceOpen, setMarketplaceOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const {
@@ -111,6 +113,7 @@ export function AppShell() {
       <Sidebar
         collapsed={sidebarCollapsed}
         onMarketplaceOpen={() => setMarketplaceOpen(true)}
+        onSavedCommandsOpen={() => setSavedCommandsOpen(true)}
         onSettingsOpen={() => setSettingsOpen(true)}
         onToggle={() => setSidebarCollapsed((value) => !value)}
       />
@@ -160,6 +163,7 @@ export function AppShell() {
 
         <TerminalPanel workspaceId={activeWorkspaceId} />
       </main>
+      <SavedCommandsModal open={savedCommandsOpen} onClose={() => setSavedCommandsOpen(false)} />
       <MarketplaceModal open={marketplaceOpen} onClose={() => setMarketplaceOpen(false)} />
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>

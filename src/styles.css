@@ -42,11 +42,22 @@
   }
 
   .xterm {
+    box-sizing: border-box;
     height: 100%;
     padding: 12px;
   }
 
+  .xterm-screen,
+  .xterm-rows,
+  .xterm-helper-textarea {
+    max-width: 100%;
+  }
+
   .xterm-viewport {
     background-color: transparent !important;
+  }
+
+  .xterm-screen canvas {
+    max-width: 100%;
   }
 }

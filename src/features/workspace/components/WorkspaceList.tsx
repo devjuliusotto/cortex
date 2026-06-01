@@ -3,9 +3,10 @@ import { Check, Copy, Folder, FolderOpen, Palette, Play, Plus, Trash2 } from "lu
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { StatusIndicator } from "@/features/terminal/components/StatusIndicator";
 import { terminateTerminals } from "@/features/terminal/terminalBridge";
 import { cn } from "@/lib/utils";
-import { useCortexStore, type Workspace } from "@/stores/cortexStore";
+import { useCortexStore, type SessionStatus, type Workspace } from "@/stores/cortexStore";
 
 const workspaceColors = [
   { label: "Cyan", value: "#56f0ff" },
@@ -108,6 +109,18 @@ export function WorkspaceList() {
         ) : (
           workspaces.map((workspace) => {
             const active = workspace.id === activeWorkspaceId;
+            const activeTerminalSessions = sessions.filter(
+              (session) =>
+                session.workspaceId === workspace.id &&
+                (session.status === "running" || session.status === "waiting"),
+            );
+            const workspaceStatus: SessionStatus | null = activeTerminalSessions.some(
+              (session) => session.status === "waiting",
+            )
+              ? "waiting"
+              : activeTerminalSessions.length > 0
+                ? "running"
+                : null;
 
             return (
               <div
@@ -148,7 +161,18 @@ export function WorkspaceList() {
                     )}
                   />
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm text-foreground">{workspace.name}</span>
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span className="min-w-0 flex-1 truncate text-sm text-foreground">{workspace.name}</span>
+                      {workspaceStatus && (
+                        <span
+                          className="flex shrink-0 items-center gap-1.5 rounded border border-border bg-background/50 px-1.5 py-0.5 text-[10px] uppercase text-muted-foreground"
+                          title={`${activeTerminalSessions.length} terminal${activeTerminalSessions.length === 1 ? "" : "s"} running or loading`}
+                        >
+                          <StatusIndicator status={workspaceStatus} />
+                          {activeTerminalSessions.length}
+                        </span>
+                      )}
+                    </span>
                     {workspace.defaultWorkingDirectory && (
                       <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">
                         {workspace.defaultWorkingDirectory}

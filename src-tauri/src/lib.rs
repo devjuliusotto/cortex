@@ -70,9 +70,26 @@ fn pty_error(error: PtyError) -> String {
 }
 
 fn is_allowed_external_url(url: &str) -> bool {
-    url.starts_with(&format!(
+    if url.starts_with(&format!(
         "https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}/issues/new"
-    ))
+    )) {
+        return true;
+    }
+
+    let Some(without_scheme) = url
+        .strip_prefix("http://")
+        .or_else(|| url.strip_prefix("https://"))
+    else {
+        return false;
+    };
+    let authority = without_scheme.split(['/', '?', '#']).next().unwrap_or_default();
+    let host = if let Some(rest) = authority.strip_prefix('[') {
+        rest.split(']').next().unwrap_or_default()
+    } else {
+        authority.split(':').next().unwrap_or_default()
+    };
+
+    matches!(host, "localhost" | "127.0.0.1" | "::1")
 }
 
 fn app_state_path(app: &AppHandle) -> Result<PathBuf, String> {
