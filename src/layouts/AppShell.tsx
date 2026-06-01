@@ -1,16 +1,20 @@
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
-import { FolderPlus, HardDrive, Plus, ShieldCheck } from "lucide-react";
+import { ClipboardList, FolderPlus, HardDrive, Plus, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CortexLogo } from "@/components/CortexLogo";
 import { SavedCommandsModal } from "@/features/commands/components/SavedCommandsModal";
 import { MarketplaceModal } from "@/features/marketplace/components/MarketplaceModal";
 import { SettingsModal } from "@/features/settings/components/SettingsModal";
 import { TerminalPanel } from "@/features/terminal/components/TerminalPanel";
-import { terminateTerminals } from "@/features/terminal/terminalBridge";
+import { focusTerminal, terminateTerminals, writeTerminal } from "@/features/terminal/terminalBridge";
 import { Sidebar } from "@/layouts/Sidebar";
 import { useCortexStore } from "@/stores/cortexStore";
 import { useEffect, useRef, useState } from "react";
+
+function commandForShell(command: string) {
+  return `${command.replace(/\r\n/g, "\n").replace(/\r/g, "\n")}\r`;
+}
 
 export function AppShell() {
   const autoStartedWorkspaceIds = useRef(new Set<string>());
@@ -25,7 +29,9 @@ export function AppShell() {
     createWorkspace,
     hydrated,
     hydrate,
+    layouts,
     saveNow,
+    savedCommands,
     sessions,
     settings,
     appendTerminalHistory,
@@ -34,10 +40,31 @@ export function AppShell() {
     workspaces,
   } = useCortexStore();
   const activeWorkspace = workspaces.find((workspace) => workspace.id === activeWorkspaceId);
+  const activeLayout = layouts.find((layout) => layout.workspaceId === activeWorkspaceId);
+  const activeItemTerminal = sessions.find(
+    (session) => session.workspaceId === activeWorkspaceId && session.id === activeLayout?.activeItemId,
+  );
+  const activeTerminal = activeItemTerminal ?? sessions.find(
+    (session) => session.workspaceId === activeWorkspaceId && session.id === activeLayout?.activeSessionId,
+  );
+  const sortedSavedCommands = savedCommands
+    .slice()
+    .sort((first, second) => second.updatedAt.localeCompare(first.updatedAt));
   const itemCount = activeWorkspace
     ? sessions.filter((session) => session.workspaceId === activeWorkspace.id).length
       + templateInstances.filter((template) => template.workspaceId === activeWorkspace.id).length
     : 0;
+
+  const runSavedCommand = (commandId: string) => {
+    const command = savedCommands.find((item) => item.id === commandId);
+    if (!command || !activeTerminal) {
+      return;
+    }
+
+    void writeTerminal(activeTerminal.id, commandForShell(command.command)).then(() => {
+      focusTerminal(activeTerminal.id);
+    });
+  };
 
   useEffect(() => {
     void hydrate();
@@ -150,6 +177,32 @@ export function AppShell() {
               <FolderPlus className="mr-2 h-4 w-4" />
               Workspace
             </Button>
+            <label
+              className="flex h-9 items-center gap-2 rounded-md border border-border bg-secondary px-3 text-xs text-muted-foreground"
+              title={
+                activeTerminal
+                  ? "Run a saved command in the active terminal"
+                  : "Select an active terminal before running a saved command"
+              }
+            >
+              <ClipboardList className="h-4 w-4 text-primary" />
+              <select
+                className="max-w-48 bg-transparent text-xs text-foreground outline-none disabled:cursor-not-allowed disabled:text-muted-foreground"
+                disabled={!activeTerminal || sortedSavedCommands.length === 0}
+                onChange={(event) => {
+                  runSavedCommand(event.target.value);
+                  event.currentTarget.value = "";
+                }}
+                value=""
+              >
+                <option value="">Chamar comando</option>
+                {sortedSavedCommands.map((command) => (
+                  <option key={command.id} value={command.id}>
+                    {command.category ? `${command.category} / ${command.title}` : command.title}
+                  </option>
+                ))}
+              </select>
+            </label>
             <Button
               size="sm"
               onClick={() => activeWorkspace && createSession(activeWorkspace.id)}

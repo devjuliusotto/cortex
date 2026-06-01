@@ -13,8 +13,6 @@ import {
   FileText,
   History,
   Loader2,
-  PanelBottom,
-  PanelRight,
   Play,
   Plus,
   RotateCcw,
@@ -288,7 +286,6 @@ function PaneLeaf({ node, workspaceId }: { node: Extract<PaneNode, { type: "leaf
     sessions,
     setActivePane,
     setActivePaneTab,
-    splitActivePane,
     templateInstances,
   } = useCortexStore();
   const [newTabChooserOpen, setNewTabChooserOpen] = useState(false);
@@ -358,11 +355,6 @@ function PaneLeaf({ node, workspaceId }: { node: Extract<PaneNode, { type: "leaf
       return;
     }
     moveTabToPane(workspaceId, tabId, node.id);
-  };
-
-  const split = (direction: "horizontal" | "vertical", move = false) => {
-    setActivePane(workspaceId, node.id);
-    splitActivePane(workspaceId, direction, move);
   };
 
   const closeTab = (tabId: string) => {
@@ -453,18 +445,6 @@ function PaneLeaf({ node, workspaceId }: { node: Extract<PaneNode, { type: "leaf
           </button>
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          <Button size="icon" variant="ghost" onClick={() => split("horizontal")} title="Split right">
-            <PanelRight className="h-4 w-4" />
-          </Button>
-          <Button size="icon" variant="ghost" onClick={() => split("vertical")} title="Split down">
-            <PanelBottom className="h-4 w-4" />
-          </Button>
-          <Button size="icon" variant="ghost" onClick={() => split("horizontal", true)} title="Split and move tab right">
-            <PanelRight className="h-4 w-4 text-cortex-amber" />
-          </Button>
-          <Button size="icon" variant="ghost" onClick={() => split("vertical", true)} title="Split and move tab down">
-            <PanelBottom className="h-4 w-4 text-cortex-amber" />
-          </Button>
           <Button size="icon" variant="ghost" onClick={openNewTabChooser} title="New tab">
             <Plus className="h-4 w-4" />
           </Button>
