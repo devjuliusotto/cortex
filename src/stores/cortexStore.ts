@@ -64,7 +64,7 @@ export type TerminalSession = {
   updatedAt: string;
 };
 
-export type TemplateKind = "note" | "command-history";
+export type TemplateKind = "note" | "command-history" | "git-map";
 export type TemplateInstance = {
   id: string;
   workspaceId: string;
@@ -264,9 +264,10 @@ function createLeaf(tabIds: string[] = [], activeTabId: string | null = tabIds[0
 function createStandardWorkspaceItems(workspaceId: string, timestamp: string) {
   const terminalId = createId("session");
   const commandHistoryId = createId("template");
+  const gitMapId = createId("template");
   const noteId = createId("template");
   const leftPane = createLeaf([terminalId], terminalId);
-  const rightPane = createLeaf([commandHistoryId, noteId], commandHistoryId);
+  const rightPane = createLeaf([gitMapId, commandHistoryId, noteId], gitMapId);
 
   const session: TerminalSession = {
     id: terminalId,
@@ -285,6 +286,17 @@ function createStandardWorkspaceItems(workspaceId: string, timestamp: string) {
     templateId: "command-history",
     kind: "command-history",
     title: "Command History",
+    content: "",
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+
+  const gitMap: TemplateInstance = {
+    id: gitMapId,
+    workspaceId,
+    templateId: "git-map",
+    kind: "git-map",
+    title: "Git Map",
     content: "",
     createdAt: timestamp,
     updatedAt: timestamp,
@@ -312,12 +324,12 @@ function createStandardWorkspaceItems(workspaceId: string, timestamp: string) {
 
   return {
     session,
-    templates: [commandHistory, note],
+    templates: [gitMap, commandHistory, note],
     layout: {
       workspaceId,
       activeSessionId: terminalId,
       activeItemId: terminalId,
-      tabOrder: [terminalId, commandHistoryId, noteId],
+      tabOrder: [terminalId, gitMapId, commandHistoryId, noteId],
       splitPanePreview: true,
       paneTree,
       activePaneId: leftPane.id,

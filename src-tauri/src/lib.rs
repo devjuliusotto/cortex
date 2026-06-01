@@ -9,6 +9,7 @@ use serde::Serialize;
 use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, State};
 
@@ -45,6 +46,21 @@ struct PtyErrorEvent {
 struct ValidatedWorkingDirectory {
     cwd: Option<String>,
     warning: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GitMap {
+    root: String,
+    branch: String,
+    upstream: Option<String>,
+    ahead: u32,
+    behind: u32,
+    dirty: bool,
+    status: String,
+    graph: String,
+    branches: String,
+    remotes: String,
 }
 
 fn create_pty_state(app: AppHandle) -> PtyState {
@@ -426,6 +442,115 @@ fn validate_working_directory(
     Ok(resolve_working_directory(&profile_id, cwd))
 }
 
+fn run_git_command(cwd: Option<&str>, args: &[&str]) -> Result<String, String> {
+    let mut command = Command::new("git");
+    command.args(args);
+    if let Some(cwd) = cwd.filter(|value| !value.trim().is_empty()) {
+        command.current_dir(cwd);
+    }
+
+    let output = command.output().map_err(|error| {
+        if error.kind() == std::io::ErrorKind::NotFound {
+            "Git executable was not found in PATH".to_string()
+        } else {
+            error.to_string()
+        }
+    })?;
+
+    if output.status.success() {
+        return String::from_utf8(output.stdout).map_err(|error| error.to_string());
+    }
+
+    let error = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    Err(if error.is_empty() {
+        format!("git {} failed", args.join(" "))
+    } else {
+        error
+    })
+}
+
+fn parse_branch_line(status: &str) -> (String, Option<String>, u32, u32) {
+    let mut branch = "detached".to_string();
+    let mut upstream = None;
+    let mut ahead = 0;
+    let mut behind = 0;
+
+    for line in status.lines() {
+        if let Some(rest) = line.strip_prefix("## ") {
+            let branch_part = rest.split_whitespace().next().unwrap_or(rest);
+            if let Some((name, tracking)) = branch_part.split_once("...") {
+                branch = name.to_string();
+                upstream = Some(tracking.to_string());
+            } else {
+                branch = branch_part.to_string();
+            }
+
+            if let Some(summary) = rest.split_once('[').and_then(|(_, value)| value.split_once(']')) {
+                for part in summary.0.split(',') {
+                    let clean = part.trim();
+                    if let Some(value) = clean.strip_prefix("ahead ") {
+                        ahead = value.parse().unwrap_or(0);
+                    } else if let Some(value) = clean.strip_prefix("behind ") {
+                        behind = value.parse().unwrap_or(0);
+                    }
+                }
+            } else if let Some(value) = rest.split_once("ahead ").map(|(_, value)| value) {
+                if let Some(value) = value.split_whitespace().next() {
+                    ahead = value.parse().unwrap_or(0);
+                }
+            } else if let Some(value) = rest.split_once("behind ").map(|(_, value)| value) {
+                if let Some(value) = value.split_whitespace().next() {
+                    behind = value.parse().unwrap_or(0);
+                }
+            }
+            break;
+        }
+    }
+
+    (branch, upstream, ahead, behind)
+}
+
+#[tauri::command]
+fn read_git_map(cwd: Option<String>) -> Result<GitMap, String> {
+    let cwd_ref = cwd.as_deref();
+    let root = run_git_command(cwd_ref, &["rev-parse", "--show-toplevel"])?
+        .trim()
+        .to_string();
+    let status = run_git_command(Some(&root), &["status", "--short", "--branch"])?;
+    let (branch, upstream, ahead, behind) = parse_branch_line(&status);
+    let dirty = status.lines().any(|line| !line.starts_with("## "));
+    let graph = run_git_command(
+        Some(&root),
+        &[
+            "log",
+            "--graph",
+            "--decorate",
+            "--oneline",
+            "--all",
+            "-n",
+            "24",
+        ],
+    )?;
+    let branches = run_git_command(
+        Some(&root),
+        &["branch", "--all", "--verbose", "--no-abbrev"],
+    )?;
+    let remotes = run_git_command(Some(&root), &["remote", "-v"])?;
+
+    Ok(GitMap {
+        root,
+        branch,
+        upstream,
+        ahead,
+        behind,
+        dirty,
+        status,
+        graph,
+        branches,
+        remotes,
+    })
+}
+
 #[tauri::command]
 fn spawn_terminal(
     state: State<'_, PtyState>,
@@ -521,6 +646,7 @@ pub fn run() {
             read_clipboard_text,
             write_clipboard_text,
             validate_working_directory,
+            read_git_map,
             spawn_terminal,
             write_terminal,
             resize_terminal,

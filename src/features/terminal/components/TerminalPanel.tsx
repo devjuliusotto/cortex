@@ -11,10 +11,12 @@ import {
   Copy,
   FilePlus2,
   FileText,
+  GitBranch,
   History,
   Loader2,
   Play,
   Plus,
+  RefreshCw,
   RotateCcw,
   TerminalSquare,
   Trash2,
@@ -42,6 +44,19 @@ import {
 
 type TerminalPanelProps = {
   workspaceId: string | null;
+};
+
+type GitMap = {
+  root: string;
+  branch: string;
+  upstream: string | null;
+  ahead: number;
+  behind: number;
+  dirty: boolean;
+  status: string;
+  graph: string;
+  branches: string;
+  remotes: string;
 };
 
 function normalizePastedText(text: string) {
@@ -125,6 +140,19 @@ function openTerminalUrl(url: string) {
   void invoke("open_external_url", { url }).catch(() => {
     window.open(url, "_blank", "noopener,noreferrer");
   });
+}
+
+function itemIcon(kind: "terminal" | TemplateInstance["kind"]) {
+  if (kind === "terminal") {
+    return <TerminalSquare className="h-3.5 w-3.5 text-primary" />;
+  }
+  if (kind === "command-history") {
+    return <History className="h-3.5 w-3.5 text-primary" />;
+  }
+  if (kind === "git-map") {
+    return <GitBranch className="h-3.5 w-3.5 text-primary" />;
+  }
+  return <FileText className="h-3.5 w-3.5 text-primary" />;
 }
 
 function createTerminalLinkProvider(terminal: Terminal): ILinkProvider {
@@ -343,6 +371,24 @@ function PaneLeaf({ node, workspaceId }: { node: Extract<PaneNode, { type: "leaf
     });
   };
 
+  const createGitMapInPane = () => {
+    setActivePane(workspaceId, node.id);
+    setNewTabChooserOpen(false);
+    const existing = templateInstances.find(
+      (item) => item.workspaceId === workspaceId && item.kind === "git-map",
+    );
+    if (existing) {
+      setActivePaneTab(workspaceId, node.id, existing.id);
+      return;
+    }
+    createTemplateInstance(workspaceId, {
+      templateId: "git-map",
+      kind: "git-map",
+      title: "Git Map",
+      content: "",
+    });
+  };
+
   const openNewTabChooser = () => {
     setActivePane(workspaceId, node.id);
     setNewTabChooserOpen(true);
@@ -410,13 +456,7 @@ function PaneLeaf({ node, workspaceId }: { node: Extract<PaneNode, { type: "leaf
                 }}
                 type="button"
               >
-                {entry.kind === "terminal" ? (
-                  <TerminalSquare className="h-3.5 w-3.5 text-primary" />
-                ) : entry.kind === "command-history" ? (
-                  <History className="h-3.5 w-3.5 text-primary" />
-                ) : (
-                  <FileText className="h-3.5 w-3.5 text-primary" />
-                )}
+                {itemIcon(entry.kind)}
                 <span className="truncate">{entry.label}</span>
                 <span
                   className="ml-1 rounded px-1 text-muted-foreground hover:bg-background hover:text-foreground"
@@ -454,6 +494,9 @@ function PaneLeaf({ node, workspaceId }: { node: Extract<PaneNode, { type: "leaf
           <Button size="icon" variant="ghost" onClick={createCommandHistoryInPane} title="Command history in pane">
             <History className="h-4 w-4" />
           </Button>
+          <Button size="icon" variant="ghost" onClick={createGitMapInPane} title="Git map in pane">
+            <GitBranch className="h-4 w-4" />
+          </Button>
           <Button size="icon" variant="ghost" onClick={() => createTerminalInPane()} title="New terminal in pane">
             <TerminalSquare className="h-4 w-4" />
           </Button>
@@ -468,6 +511,7 @@ function PaneLeaf({ node, workspaceId }: { node: Extract<PaneNode, { type: "leaf
         {newTabChooserOpen && (
           <NewTabChooser
             onCommandHistory={createCommandHistoryInPane}
+            onGitMap={createGitMapInPane}
             onNote={createNoteInPane}
             onTerminal={createTerminalInPane}
           />
@@ -475,6 +519,7 @@ function PaneLeaf({ node, workspaceId }: { node: Extract<PaneNode, { type: "leaf
         {!newTabChooserOpen && !session && !template && (
           <NewTabChooser
             onCommandHistory={createCommandHistoryInPane}
+            onGitMap={createGitMapInPane}
             onNote={createNoteInPane}
             onTerminal={createTerminalInPane}
           />
@@ -483,6 +528,9 @@ function PaneLeaf({ node, workspaceId }: { node: Extract<PaneNode, { type: "leaf
         {template?.kind === "note" && <NotesPane paneId={node.id} template={template} workspaceId={workspaceId} />}
         {template?.kind === "command-history" && (
           <CommandHistoryPane paneId={node.id} template={template} workspaceId={workspaceId} />
+        )}
+        {template?.kind === "git-map" && (
+          <GitMapPane paneId={node.id} template={template} workspaceId={workspaceId} />
         )}
       </div>
     </div>
@@ -1005,6 +1053,160 @@ function CommandHistoryPane({
   );
 }
 
+function GitMapPane({
+  paneId,
+  template,
+  workspaceId,
+}: {
+  paneId: string;
+  template: TemplateInstance;
+  workspaceId: string;
+}) {
+  const { layouts, sessions, setActivePaneTab, workspaces } = useCortexStore();
+  const [gitMap, setGitMap] = useState<GitMap | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const layout = layouts.find((item) => item.workspaceId === workspaceId);
+  const workspace = workspaces.find((item) => item.id === workspaceId);
+  const activeTerminal = sessions.find(
+    (session) =>
+      session.workspaceId === workspaceId &&
+      (session.id === layout?.activeSessionId || session.id === layout?.activeItemId),
+  );
+  const cwd = activeTerminal?.cwd ?? workspace?.defaultWorkingDirectory;
+
+  const refresh = () => {
+    setLoading(true);
+    setError(null);
+    void invoke<GitMap>("read_git_map", { cwd: cwd ?? null })
+      .then((result) => setGitMap(result))
+      .catch((reason) => {
+        setGitMap(null);
+        setError(String(reason));
+      })
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    refresh();
+  }, [cwd]);
+
+  const sendCommand = (command: string, runImmediately: boolean) => {
+    if (!activeTerminal) {
+      return;
+    }
+    void writeTerminal(activeTerminal.id, commandForShell(command, runImmediately)).then(() => {
+      focusTerminal(activeTerminal.id);
+    });
+  };
+
+  const commandButtons = [
+    { label: "Status", command: "git status --short --branch" },
+    { label: "Mapa", command: "git log --graph --decorate --oneline --all -n 24" },
+    { label: "Branches", command: "git branch --all --verbose" },
+    { label: "Remotos", command: "git remote -v" },
+    { label: "Atualizar", command: "git fetch --all --prune" },
+  ];
+
+  return (
+    <div className="flex h-full min-h-0 flex-col bg-cortex-graphite">
+      <div className="flex h-10 shrink-0 items-center justify-between border-b border-border bg-background/50 px-4">
+        <button
+          className="flex min-w-0 items-center gap-2"
+          onClick={() => setActivePaneTab(workspaceId, paneId, template.id)}
+          type="button"
+        >
+          <GitBranch className="h-4 w-4 text-primary" />
+          <span className="truncate text-sm font-medium">{template.title}</span>
+        </button>
+        <Button disabled={loading} onClick={refresh} size="sm" variant="ghost">
+          <RefreshCw className={cn("mr-2 h-4 w-4", loading && "animate-spin")} />
+          Refresh
+        </Button>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-auto p-4">
+        <div className="grid gap-3 lg:grid-cols-3">
+          <div className="rounded-md border border-border bg-card/55 p-3">
+            <div className="text-xs uppercase tracking-wide text-muted-foreground">Branch atual</div>
+            <div className="mt-2 truncate text-lg font-semibold">{gitMap?.branch ?? "-"}</div>
+            <div className="mt-1 truncate text-xs text-muted-foreground">
+              {gitMap?.upstream ? `tracking ${gitMap.upstream}` : "sem upstream configurado"}
+            </div>
+          </div>
+          <div className="rounded-md border border-border bg-card/55 p-3">
+            <div className="text-xs uppercase tracking-wide text-muted-foreground">Sincronizacao</div>
+            <div className="mt-2 flex gap-2 text-sm">
+              <span className="rounded bg-secondary px-2 py-1">ahead {gitMap?.ahead ?? 0}</span>
+              <span className="rounded bg-secondary px-2 py-1">behind {gitMap?.behind ?? 0}</span>
+            </div>
+            <div className="mt-2 text-xs text-muted-foreground">
+              ahead = commits locais, behind = commits no remoto.
+            </div>
+          </div>
+          <div className="rounded-md border border-border bg-card/55 p-3">
+            <div className="text-xs uppercase tracking-wide text-muted-foreground">Arquivos</div>
+            <div className={cn("mt-2 text-lg font-semibold", gitMap?.dirty ? "text-cortex-amber" : "text-cortex-green")}>
+              {gitMap ? (gitMap.dirty ? "mudancas pendentes" : "limpo") : "-"}
+            </div>
+            <div className="mt-1 truncate text-xs text-muted-foreground">{gitMap?.root ?? cwd ?? "workspace sem pasta"}</div>
+          </div>
+        </div>
+
+        {error && (
+          <div className="mt-4 rounded-md border border-cortex-red/40 bg-cortex-red/10 p-3 text-sm text-cortex-red">
+            {error}
+          </div>
+        )}
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          {commandButtons.map((item) => (
+            <Button
+              disabled={!activeTerminal}
+              key={item.label}
+              onClick={() => sendCommand(item.command, true)}
+              size="sm"
+              variant="outline"
+            >
+              {item.label}
+            </Button>
+          ))}
+          <Button
+            disabled={!activeTerminal}
+            onClick={() => sendCommand("git switch -c minha-branch", false)}
+            size="sm"
+            variant="ghost"
+          >
+            Criar branch
+          </Button>
+        </div>
+
+        <div className="mt-4 grid gap-4 xl:grid-cols-[1.4fr_1fr]">
+          <GitOutputBlock title="Mapa de commits" value={gitMap?.graph} empty="Sem commits para mostrar." />
+          <div className="grid gap-4">
+            <GitOutputBlock title="Status" value={gitMap?.status} empty="Repositorio limpo ou nao carregado." />
+            <GitOutputBlock title="Branches" value={gitMap?.branches} empty="Nenhuma branch encontrada." />
+            <GitOutputBlock title="Remotes" value={gitMap?.remotes} empty="Nenhum remoto configurado." />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function GitOutputBlock({ title, value, empty }: { title: string; value?: string; empty: string }) {
+  return (
+    <section className="min-w-0 rounded-md border border-border bg-card/45">
+      <div className="border-b border-border px-3 py-2 text-xs font-medium text-muted-foreground">
+        {title}
+      </div>
+      <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words p-3 font-mono text-xs leading-5 text-foreground">
+        {value?.trim() || empty}
+      </pre>
+    </section>
+  );
+}
+
 function WorkspaceTools({ workspaceId }: { workspaceId: string }) {
   const {
     createSnippet,
@@ -1100,10 +1302,12 @@ function WorkspaceTools({ workspaceId }: { workspaceId: string }) {
 
 function NewTabChooser({
   onCommandHistory,
+  onGitMap,
   onNote,
   onTerminal,
 }: {
   onCommandHistory: () => void;
+  onGitMap: () => void;
   onNote: () => void;
   onTerminal: (profileId?: TerminalProfileId) => void;
 }) {
@@ -1150,6 +1354,17 @@ function NewTabChooser({
             <span className="text-left">
               <span className="block text-sm font-medium">Bloco de notas</span>
               <span className="block text-xs text-muted-foreground">Notas locais</span>
+            </span>
+          </Button>
+          <Button
+            className="h-16 justify-start gap-3 px-4 sm:col-span-2"
+            onClick={onGitMap}
+            variant="outline"
+          >
+            <GitBranch className="h-5 w-5 text-primary" />
+            <span className="text-left">
+              <span className="block text-sm font-medium">Git Map</span>
+              <span className="block text-xs text-muted-foreground">Branch, status e mapa de commits</span>
             </span>
           </Button>
           <Button

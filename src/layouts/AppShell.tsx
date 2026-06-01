@@ -13,7 +13,7 @@ import { useCortexStore } from "@/stores/cortexStore";
 import { useEffect, useRef, useState } from "react";
 
 function commandForShell(command: string) {
-  return `${command.replace(/\r\n/g, "\n").replace(/\r/g, "\n")}\r`;
+  return `${command.replace(/\r\n/g, "\n").replace(/\r/g, "\n").replace(/\n/g, "\r")}\r`;
 }
 
 export function AppShell() {
