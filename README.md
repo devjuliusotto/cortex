@@ -24,6 +24,50 @@ Suggested Windows recording tools:
 
 Keep demo assets reasonably small. Do not commit large binary recordings unless they are intentional release-quality assets.
 
+## Website
+
+The product landing page lives in `website/` so it can be deployed independently from the Tauri desktop app.
+
+Run it locally:
+
+```powershell
+npm run website:dev
+```
+
+Build it:
+
+```powershell
+npm run website:build
+```
+
+Add website screenshots and videos under:
+
+```text
+website/public/media/
+```
+
+The page already looks for:
+
+```text
+website/public/media/video-geral.mp4
+website/public/media/video-geral.webm
+website/public/media/1.png
+website/public/media/2.png
+website/public/media/3.png
+website/public/media/4.png
+website/public/media/5.png
+```
+
+The numbered images may also use `.jpg`, `.jpeg`, or `.webp`.
+
+For Vercel, import this repository and set the project root directory to `website`. Keep Windows installers and executable bundles in GitHub Releases instead of committing them into the repository. The website reads public releases from:
+
+```text
+https://api.github.com/repos/devjuliusotto/cortex/releases
+```
+
+Release assets ending in `.exe`, `.msi`, `.msix`, `.zip`, or `.7z` are listed automatically on the website, including current and older versions.
+
 ## Features
 
 - Windows ConPTY terminal sessions for PowerShell, CMD, and WSL Ubuntu.

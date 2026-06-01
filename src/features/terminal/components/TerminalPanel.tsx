@@ -1,27 +1,33 @@
 import { useEffect, useRef, useState } from "react";
-import type { DragEvent, ReactNode } from "react";
+import type { DragEvent, MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import { motion } from "framer-motion";
 import {
   AlertCircle,
+  ArrowLeft,
+  ArrowRight,
   Clipboard,
   Clock3,
   Copy,
+  ExternalLink,
   FilePlus2,
   FileText,
+  Globe,
   History,
   Loader2,
   PanelBottom,
   PanelRight,
   Play,
   Plus,
+  RefreshCw,
   RotateCcw,
   TerminalSquare,
   Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { markItemActivity, setItemLoading, useItemActivity } from "@/features/activity/activityStore";
 import { createCommandRecorder } from "@/features/terminal/commandHistory";
 import {
   ensureTerminalSession,
@@ -36,6 +42,7 @@ import { cn } from "@/lib/utils";
 import {
   useCortexStore,
   type CommandSnippet,
+  type BrowserTab,
   type PaneNode,
   type TerminalProfileId,
   type TerminalSession,
@@ -165,6 +172,7 @@ export function TerminalPanel({ workspaceId }: TerminalPanelProps) {
 function PaneTree({ node, workspaceId }: { node: PaneNode; workspaceId: string }) {
   const { resizePane } = useCortexStore();
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const frameRef = useRef<number | null>(null);
 
   if (node.type === "leaf") {
     return <PaneLeaf node={node} workspaceId={workspaceId} />;
@@ -176,6 +184,8 @@ function PaneTree({ node, workspaceId }: { node: PaneNode; workspaceId: string }
       : { gridTemplateRows: `${node.ratio}fr 6px ${1 - node.ratio}fr` };
 
   const startResize = (event: React.PointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
     event.currentTarget.setPointerCapture(event.pointerId);
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) {
@@ -183,14 +193,29 @@ function PaneTree({ node, workspaceId }: { node: PaneNode; workspaceId: string }
     }
 
     const move = (moveEvent: PointerEvent) => {
+      moveEvent.preventDefault();
       const ratio =
         node.direction === "horizontal"
           ? (moveEvent.clientX - rect.left) / rect.width
           : (moveEvent.clientY - rect.top) / rect.height;
-      resizePane(workspaceId, node.id, ratio);
+      if (frameRef.current) {
+        cancelAnimationFrame(frameRef.current);
+      }
+      frameRef.current = requestAnimationFrame(() => {
+        resizePane(workspaceId, node.id, ratio);
+      });
     };
 
-    const stop = () => {
+    const stop = (upEvent: PointerEvent) => {
+      if (frameRef.current) {
+        cancelAnimationFrame(frameRef.current);
+        frameRef.current = null;
+      }
+      const ratio =
+        node.direction === "horizontal"
+          ? (upEvent.clientX - rect.left) / rect.width
+          : (upEvent.clientY - rect.top) / rect.height;
+      resizePane(workspaceId, node.id, ratio);
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", stop);
     };
@@ -224,15 +249,21 @@ function PaneLeaf({ node, workspaceId }: { node: Extract<PaneNode, { type: "leaf
     closePane,
     createSession,
     createTemplateInstance,
+    createBrowserTab,
+    deleteBrowserTab,
     deleteSession,
     deleteTemplateInstance,
     layouts,
     moveTabToPane,
+    renameSession,
+    renameTemplateInstance,
     sessions,
     setActivePane,
     setActivePaneTab,
     splitActivePane,
     templateInstances,
+    browserTabs,
+    settings,
   } = useCortexStore();
   const [newTabChooserOpen, setNewTabChooserOpen] = useState(false);
   const layout = layouts.find((item) => item.workspaceId === workspaceId);
@@ -242,6 +273,7 @@ function PaneLeaf({ node, workspaceId }: { node: Extract<PaneNode, { type: "leaf
     : node.tabIds[0] ?? null;
   const session = newTabChooserOpen ? undefined : sessions.find((item) => item.id === activeTabId);
   const template = newTabChooserOpen ? undefined : templateInstances.find((item) => item.id === activeTabId);
+  const browserTab = newTabChooserOpen ? undefined : browserTabs.find((item) => item.id === activeTabId);
   const workspaceItems = [
     ...sessions
       .filter((item) => item.workspaceId === workspaceId)
@@ -249,6 +281,9 @@ function PaneLeaf({ node, workspaceId }: { node: Extract<PaneNode, { type: "leaf
     ...templateInstances
       .filter((item) => item.workspaceId === workspaceId)
       .map((item) => ({ id: item.id, label: item.title, kind: item.kind, item })),
+    ...browserTabs
+      .filter((item) => item.workspaceId === workspaceId)
+      .map((item) => ({ id: item.id, label: item.title, kind: "browser" as const, item })),
   ];
   const paneTabs = node.tabIds
     .map((tabId) => workspaceItems.find((item) => item.id === tabId))
@@ -289,6 +324,13 @@ function PaneLeaf({ node, workspaceId }: { node: Extract<PaneNode, { type: "leaf
     });
   };
 
+  const createBrowserInPane = () => {
+    setActivePane(workspaceId, node.id);
+    setNewTabChooserOpen(false);
+    const url = window.prompt("Browser URL", "http://localhost:1420") ?? "http://localhost:1420";
+    createBrowserTab(workspaceId, url);
+  };
+
   const openNewTabChooser = () => {
     setActivePane(workspaceId, node.id);
     setNewTabChooserOpen(true);
@@ -318,6 +360,28 @@ function PaneLeaf({ node, workspaceId }: { node: Extract<PaneNode, { type: "leaf
     if (note) {
       deleteTemplateInstance(note.id);
     }
+    const browser = browserTabs.find((item) => item.id === tabId);
+    if (browser) {
+      deleteBrowserTab(browser.id);
+    }
+  };
+
+  const renameTab = (tabId: string) => {
+    const terminal = sessions.find((item) => item.id === tabId);
+    const note = templateInstances.find((item) => item.id === tabId);
+    if (terminal) {
+      const name = window.prompt("Rename terminal tab", terminal.name);
+      if (name !== null) {
+        renameSession(terminal.id, name);
+      }
+      return;
+    }
+    if (note) {
+      const title = window.prompt("Rename note tab", note.title);
+      if (title !== null) {
+        renameTemplateInstance(note.id, title);
+      }
+    }
   };
 
   return (
@@ -335,21 +399,13 @@ function PaneLeaf({ node, workspaceId }: { node: Extract<PaneNode, { type: "leaf
             }
             const isActive = entry.id === activeTabId;
             return (
-              <button
-                className={cn(
-                  "flex h-7 min-w-28 items-center gap-2 rounded-md px-2 text-left text-xs text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground",
-                  isActive && "bg-secondary text-foreground shadow-glow",
-                )}
-                draggable
+              <TabButton
+                entry={entry}
+                isActive={isActive}
                 key={entry.id}
                 onClick={() => {
                   setNewTabChooserOpen(false);
                   setActivePaneTab(workspaceId, node.id, entry.id);
-                }}
-                onDragOver={(event) => event.preventDefault()}
-                onDragStart={(event) => {
-                  event.dataTransfer.setData("application/x-cortex-tab", entry.id);
-                  event.dataTransfer.effectAllowed = "move";
                 }}
                 onDrop={(event) => {
                   event.preventDefault();
@@ -359,28 +415,12 @@ function PaneLeaf({ node, workspaceId }: { node: Extract<PaneNode, { type: "leaf
                     moveTabToPane(workspaceId, tabId, node.id, index);
                   }
                 }}
-                type="button"
-              >
-                {entry.kind === "terminal" ? (
-                  <TerminalSquare className="h-3.5 w-3.5 text-primary" />
-                ) : entry.kind === "command-history" ? (
-                  <History className="h-3.5 w-3.5 text-primary" />
-                ) : (
-                  <FileText className="h-3.5 w-3.5 text-primary" />
-                )}
-                <span className="truncate">{entry.label}</span>
-                <span
-                  className="ml-1 rounded px-1 text-muted-foreground hover:bg-background hover:text-foreground"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    closeTab(entry.id);
-                  }}
-                  role="button"
-                  title="Close tab"
-                >
-                  x
-                </span>
-              </button>
+                onRename={() => renameTab(entry.id)}
+                onClose={(event) => {
+                  event.stopPropagation();
+                  closeTab(entry.id);
+                }}
+              />
             );
           })}
           <button
@@ -428,15 +468,19 @@ function PaneLeaf({ node, workspaceId }: { node: Extract<PaneNode, { type: "leaf
         </div>
       </div>
       <div className="min-h-0 flex-1">
-        {newTabChooserOpen && (
+        {!newTabChooserOpen && !session && !template && !browserTab && (
           <NewTabChooser
+            browserEnabled={settings.browserPaneEnabled}
+            onBrowser={createBrowserInPane}
             onCommandHistory={createCommandHistoryInPane}
             onNote={createNoteInPane}
             onTerminal={createTerminalInPane}
           />
         )}
-        {!newTabChooserOpen && !session && !template && (
+        {newTabChooserOpen && (
           <NewTabChooser
+            browserEnabled={settings.browserPaneEnabled}
+            onBrowser={createBrowserInPane}
             onCommandHistory={createCommandHistoryInPane}
             onNote={createNoteInPane}
             onTerminal={createTerminalInPane}
@@ -447,8 +491,86 @@ function PaneLeaf({ node, workspaceId }: { node: Extract<PaneNode, { type: "leaf
         {template?.kind === "command-history" && (
           <CommandHistoryPane paneId={node.id} template={template} workspaceId={workspaceId} />
         )}
+        {browserTab && <BrowserPane browserTab={browserTab} paneId={node.id} workspaceId={workspaceId} />}
       </div>
     </div>
+  );
+}
+
+type PaneTabEntry = {
+  id: string;
+  label: string;
+  kind: "terminal" | "note" | "command-history" | "browser";
+};
+
+function TabButton({
+  entry,
+  isActive,
+  onClick,
+  onClose,
+  onDrop,
+  onRename,
+}: {
+  entry: PaneTabEntry;
+  isActive: boolean;
+  onClick: () => void;
+  onClose: (event: ReactMouseEvent<HTMLSpanElement>) => void;
+  onDrop: (event: DragEvent<HTMLButtonElement>) => void;
+  onRename: () => void;
+}) {
+  const active = useItemActivity(entry.id);
+
+  return (
+    <button
+      className={cn(
+        "flex h-7 min-w-28 items-center gap-2 rounded-md px-2 text-left text-xs text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground",
+        isActive && "bg-secondary text-foreground shadow-glow",
+      )}
+      draggable
+      onClick={onClick}
+      onDoubleClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onRename();
+      }}
+      onDragOver={(event) => event.preventDefault()}
+      onDragStart={(event) => {
+        event.dataTransfer.setData("application/x-cortex-tab", entry.id);
+        event.dataTransfer.effectAllowed = "move";
+      }}
+      onDrop={onDrop}
+      title="Double-click to rename"
+      type="button"
+    >
+      {entry.kind === "terminal" ? (
+        <TerminalSquare className="h-3.5 w-3.5 text-primary" />
+      ) : entry.kind === "command-history" ? (
+        <History className="h-3.5 w-3.5 text-primary" />
+      ) : entry.kind === "browser" ? (
+        <Globe className="h-3.5 w-3.5 text-primary" />
+      ) : (
+        <FileText className="h-3.5 w-3.5 text-primary" />
+      )}
+      {active && <ActivityDot />}
+      <span className="truncate">{entry.label}</span>
+      <span
+        className="ml-1 rounded px-1 text-muted-foreground hover:bg-background hover:text-foreground"
+        onClick={onClose}
+        role="button"
+        title="Close tab"
+      >
+        x
+      </span>
+    </button>
+  );
+}
+
+function ActivityDot() {
+  return (
+    <span className="relative flex h-2 w-2 shrink-0">
+      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary/60 opacity-60" />
+      <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
+    </span>
   );
 }
 
@@ -486,6 +608,7 @@ function TerminalPane({
     session.status === "inactive" || session.status === "completed" || session.status === "error";
 
   const startNewShell = () => {
+    markItemActivity(session.id, { loading: true });
     appendTerminalHistory(session.id, "\r\n--- New shell started ---\r\n");
     setSessionStatus(session.id, "running");
     setTerminalStartToken((value) => value + 1);
@@ -519,12 +642,16 @@ function TerminalPane({
     fitAddon.fit();
 
     const unsubscribe = subscribeTerminalSession(session.id, {
-      onData: (data) => terminal.write(data),
+      onData: (data) => {
+        markItemActivity(session.id);
+        terminal.write(data);
+      },
       onStatus: (status, error) => {
         if (disposed) {
           return;
         }
         setConnectionState({ status, error });
+        setItemLoading(session.id, status === "loading");
         if (status === "connected") {
           setSessionStatus(session.id, "running");
         } else if (status === "loading") {
@@ -616,7 +743,7 @@ function TerminalPane({
     });
 
     const pasteListener = (event: ClipboardEvent) => pasteClipboard(event);
-    const contextMenuListener = (event: MouseEvent) => {
+    const contextMenuListener = (event: globalThis.MouseEvent) => {
       if (event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) {
         return;
       }
@@ -624,9 +751,22 @@ function TerminalPane({
       event.preventDefault();
       event.stopPropagation();
     };
+    const clickListener = (event: globalThis.MouseEvent) => {
+      if (!event.ctrlKey || event.button !== 0) {
+        return;
+      }
+      const url = getTerminalUrlAtPoint(event, terminal);
+      if (!url) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      void openExternalUrl(url);
+    };
     const terminalElement = terminalRef.current;
     terminalElement.addEventListener("paste", pasteListener, true);
     terminalElement.addEventListener("contextmenu", contextMenuListener, true);
+    terminalElement.addEventListener("click", clickListener, true);
 
     if (session.status === "running" || session.status === "waiting") {
       setConnectionState({ status: "loading", error: null });
@@ -656,7 +796,9 @@ function TerminalPane({
       unregisterFocus();
       terminalElement.removeEventListener("paste", pasteListener, true);
       terminalElement.removeEventListener("contextmenu", contextMenuListener, true);
+      terminalElement.removeEventListener("click", clickListener, true);
       resizeObserver.disconnect();
+      setItemLoading(session.id, false);
       terminal.dispose();
     };
   }, [
@@ -806,6 +948,144 @@ function NotesPane({
       />
     </div>
   );
+}
+
+function BrowserPane({
+  browserTab,
+  paneId,
+  workspaceId,
+}: {
+  browserTab: BrowserTab;
+  paneId: string;
+  workspaceId: string;
+}) {
+  const { setActivePaneTab, updateBrowserTab } = useCortexStore();
+  const [address, setAddress] = useState(browserTab.url);
+
+  useEffect(() => {
+    setAddress(browserTab.url);
+  }, [browserTab.url]);
+
+  const navigate = () => {
+    const url = normalizeBrowserUrl(address);
+    updateBrowserTab(browserTab.id, { url, title: url.replace(/^https?:\/\//, "") });
+  };
+
+  const openExternally = async () => {
+    await invoke("open_external_url", { url: browserTab.url }).catch(() => {
+      window.open(browserTab.url, "_blank", "noopener,noreferrer");
+    });
+  };
+
+  return (
+    <div className="flex h-full min-h-0 flex-col bg-cortex-graphite">
+      <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border bg-background/50 px-3">
+        <button
+          className="rounded-md p-1 text-muted-foreground hover:bg-secondary hover:text-foreground"
+          disabled
+          title="Back will be available with embedded WebView"
+          type="button"
+        >
+          <ArrowLeft className="h-4 w-4" />
+        </button>
+        <button
+          className="rounded-md p-1 text-muted-foreground hover:bg-secondary hover:text-foreground"
+          disabled
+          title="Forward will be available with embedded WebView"
+          type="button"
+        >
+          <ArrowRight className="h-4 w-4" />
+        </button>
+        <button
+          className="rounded-md p-1 text-muted-foreground hover:bg-secondary hover:text-foreground"
+          onClick={navigate}
+          title="Reload placeholder"
+          type="button"
+        >
+          <RefreshCw className="h-4 w-4" />
+        </button>
+        <form
+          className="min-w-0 flex-1"
+          onSubmit={(event) => {
+            event.preventDefault();
+            navigate();
+          }}
+        >
+          <input
+            className="h-7 w-full rounded-md border border-border bg-secondary px-2 text-xs outline-none focus:ring-1 focus:ring-ring"
+            onFocus={() => setActivePaneTab(workspaceId, paneId, browserTab.id)}
+            onChange={(event) => setAddress(event.target.value)}
+            value={address}
+          />
+        </form>
+        <Button size="icon" variant="ghost" onClick={openExternally} title="Open externally">
+          <ExternalLink className="h-4 w-4" />
+        </Button>
+      </div>
+      <div className="grid min-h-0 flex-1 place-items-center p-6">
+        <div className="max-w-lg rounded-md border border-border bg-card/55 p-5 text-center">
+          <div className="mx-auto mb-4 grid h-12 w-12 place-items-center rounded-md border border-primary/20 bg-primary/10">
+            <Globe className="h-5 w-5 text-primary" />
+          </div>
+          <h3 className="text-sm font-semibold">Browser pane placeholder</h3>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">
+            This tab persists URL and pane placement now. True embedded WebView navigation is staged
+            behind the architecture notes so Cortex avoids unsafe automation or profile handling.
+          </p>
+          <div className="mt-4 flex justify-center gap-2">
+            <Button onClick={openExternally} size="sm">
+              <ExternalLink className="mr-2 h-4 w-4" />
+              Open external browser
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function normalizeBrowserUrl(url: string) {
+  const trimmed = url.trim();
+  if (!trimmed) {
+    return "http://localhost:1420";
+  }
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)) {
+    return trimmed;
+  }
+  if (trimmed.startsWith("localhost") || trimmed.startsWith("127.0.0.1")) {
+    return `http://${trimmed}`;
+  }
+  return `https://${trimmed}`;
+}
+
+function getTerminalUrlAtPoint(event: globalThis.MouseEvent, terminal: Terminal) {
+  const target = event.target instanceof HTMLElement ? event.target : null;
+  const row = target?.closest(".xterm-rows > div");
+  const text = row?.textContent ?? "";
+  if (!row || !text) {
+    return null;
+  }
+
+  const rect = row.getBoundingClientRect();
+  const charWidth = rect.width / Math.max(terminal.cols, text.length, 1);
+  const charIndex = Math.max(0, Math.floor((event.clientX - rect.left) / charWidth));
+  const urlPattern = /\bhttps?:\/\/[^\s<>"'`]+/gi;
+  for (const match of text.matchAll(urlPattern)) {
+    const start = match.index ?? 0;
+    const rawUrl = match[0].replace(/[),.;\]]+$/, "");
+    const end = start + rawUrl.length;
+    if (charIndex >= start && charIndex <= end) {
+      return rawUrl;
+    }
+  }
+
+  return null;
+}
+
+async function openExternalUrl(url: string) {
+  await invoke("open_external_url", { url }).catch(() => {
+    window.open(url, "_blank", "noopener,noreferrer");
+  });
 }
 
 function CommandHistoryPane({
@@ -1051,10 +1331,14 @@ function WorkspaceTools({ workspaceId }: { workspaceId: string }) {
 }
 
 function NewTabChooser({
+  browserEnabled,
+  onBrowser,
   onCommandHistory,
   onNote,
   onTerminal,
 }: {
+  browserEnabled: boolean;
+  onBrowser: () => void;
   onCommandHistory: () => void;
   onNote: () => void;
   onTerminal: (profileId?: TerminalProfileId) => void;
@@ -1102,6 +1386,13 @@ function NewTabChooser({
             <span className="text-left">
               <span className="block text-sm font-medium">Bloco de notas</span>
               <span className="block text-xs text-muted-foreground">Notas locais</span>
+            </span>
+          </Button>
+          <Button className="h-16 justify-start gap-3 px-4" disabled={!browserEnabled} onClick={onBrowser} variant="outline">
+            <Globe className="h-5 w-5 text-primary" />
+            <span className="text-left">
+              <span className="block text-sm font-medium">Browser</span>
+              <span className="block text-xs text-muted-foreground">URL pane placeholder</span>
             </span>
           </Button>
           <Button

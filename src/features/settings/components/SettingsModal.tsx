@@ -3,7 +3,7 @@ import { relaunch } from "@tauri-apps/plugin-process";
 import { AlertCircle, CheckCircle2, Download, Loader2, RefreshCw, X } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { useCortexStore } from "@/stores/cortexStore";
+import { useCortexStore, type CustomCommandDraft } from "@/stores/cortexStore";
 
 type UpdateState =
   | "idle"
@@ -20,7 +20,16 @@ type SettingsModalProps = {
 };
 
 export function SettingsModal({ open, onClose }: SettingsModalProps) {
-  const { settings } = useCortexStore();
+  const {
+    activeWorkspaceId,
+    createGlobalCommand,
+    createWorkspaceCommand,
+    deleteGlobalCommand,
+    deleteWorkspaceCommand,
+    setFeatureFlag,
+    settings,
+    workspaces,
+  } = useCortexStore();
   const [updateState, setUpdateState] = useState<UpdateState>("idle");
   const [update, setUpdate] = useState<Update | null>(null);
   const [message, setMessage] = useState("Automatic update checks run when Cortex starts.");
@@ -114,6 +123,48 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
 
         <div className="space-y-6 overflow-auto p-5">
           <section>
+            <h3 className="text-sm font-medium">Optional features</h3>
+            <div className="mt-4 grid gap-2">
+              <ToggleRow
+                checked={settings.showWorkspaceMetadata}
+                label="Show workspace metadata"
+                text="Local Git branch, dirty state, ports, and compact counts in the sidebar."
+                onChange={(checked) => setFeatureFlag("showWorkspaceMetadata", checked)}
+              />
+              <ToggleRow
+                checked={settings.browserPaneEnabled}
+                label="Browser Pane"
+                text="Persist browser tabs inside split panes. Embedded WebView is still experimental."
+                onChange={(checked) => setFeatureFlag("browserPaneEnabled", checked)}
+              />
+              <ToggleRow
+                checked={settings.commandPaletteEnabled}
+                label="Command palette"
+                text="Enable Ctrl+Shift+P and the command button."
+                onChange={(checked) => setFeatureFlag("commandPaletteEnabled", checked)}
+              />
+              <ToggleRow
+                checked={settings.customCommandsEnabled}
+                label="Custom commands"
+                text="Structured global and workspace commands, never auto-run."
+                onChange={(checked) => setFeatureFlag("customCommandsEnabled", checked)}
+              />
+            </div>
+          </section>
+
+          {settings.customCommandsEnabled && (
+            <CommandManager
+              activeWorkspaceId={activeWorkspaceId}
+              createGlobalCommand={createGlobalCommand}
+              createWorkspaceCommand={createWorkspaceCommand}
+              deleteGlobalCommand={deleteGlobalCommand}
+              deleteWorkspaceCommand={deleteWorkspaceCommand}
+              globalCommands={settings.globalCommands}
+              workspaces={workspaces}
+            />
+          )}
+
+          <section>
             <h3 className="text-sm font-medium">Updates</h3>
             <div className="mt-4 rounded-md border border-border bg-background/50 p-4">
               <div className="flex items-start justify-between gap-3">
@@ -157,6 +208,146 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
           </section>
         </div>
       </section>
+    </div>
+  );
+}
+
+function ToggleRow({
+  checked,
+  label,
+  onChange,
+  text,
+}: {
+  checked: boolean;
+  label: string;
+  onChange: (checked: boolean) => void;
+  text: string;
+}) {
+  return (
+    <label className="flex items-start justify-between gap-4 rounded-md border border-border bg-background/50 p-3">
+      <span>
+        <span className="block text-sm font-medium">{label}</span>
+        <span className="mt-1 block text-xs leading-5 text-muted-foreground">{text}</span>
+      </span>
+      <input
+        checked={checked}
+        className="mt-1 h-4 w-4 accent-primary"
+        onChange={(event) => onChange(event.target.checked)}
+        type="checkbox"
+      />
+    </label>
+  );
+}
+
+function CommandManager({
+  activeWorkspaceId,
+  createGlobalCommand,
+  createWorkspaceCommand,
+  deleteGlobalCommand,
+  deleteWorkspaceCommand,
+  globalCommands,
+  workspaces,
+}: {
+  activeWorkspaceId: string | null;
+  createGlobalCommand: (command: CustomCommandDraft) => void;
+  createWorkspaceCommand: (workspaceId: string, command: CustomCommandDraft) => void;
+  deleteGlobalCommand: (commandId: string) => void;
+  deleteWorkspaceCommand: (workspaceId: string, commandId: string) => void;
+  globalCommands: Array<CustomCommandDraft & { id: string }>;
+  workspaces: ReturnType<typeof useCortexStore.getState>["workspaces"];
+}) {
+  const activeWorkspace = workspaces.find((workspace) => workspace.id === activeWorkspaceId);
+
+  const addCommand = (scope: "global" | "workspace") => {
+    const name = window.prompt("Command name");
+    if (!name) {
+      return;
+    }
+    const command = window.prompt("Command text");
+    if (!command) {
+      return;
+    }
+    const draft: CustomCommandDraft = {
+      name,
+      command,
+      description: window.prompt("Description", "") ?? "",
+      profileId: undefined,
+      cwdBehavior: "workspace",
+      runBehavior: "run",
+    };
+    if (scope === "global") {
+      createGlobalCommand(draft);
+    } else if (activeWorkspace) {
+      createWorkspaceCommand(activeWorkspace.id, draft);
+    }
+  };
+
+  return (
+    <section>
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-medium">Command manager</h3>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Built-ins live in the command palette. Custom commands run only after explicit user action.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button size="sm" variant="outline" onClick={() => addCommand("global")}>
+            Global command
+          </Button>
+          <Button size="sm" onClick={() => addCommand("workspace")} disabled={!activeWorkspace}>
+            Workspace command
+          </Button>
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        <CommandList
+          commands={globalCommands}
+          empty="No global commands."
+          onDelete={deleteGlobalCommand}
+          title="Global commands"
+        />
+        <CommandList
+          commands={activeWorkspace?.commands ?? []}
+          empty="No workspace commands."
+          onDelete={(commandId) => activeWorkspace && deleteWorkspaceCommand(activeWorkspace.id, commandId)}
+          title={`Workspace commands${activeWorkspace ? `: ${activeWorkspace.name}` : ""}`}
+        />
+      </div>
+    </section>
+  );
+}
+
+function CommandList({
+  commands,
+  empty,
+  onDelete,
+  title,
+}: {
+  commands: Array<CustomCommandDraft & { id: string }>;
+  empty: string;
+  onDelete: (commandId: string) => void;
+  title: string;
+}) {
+  return (
+    <div className="rounded-md border border-border bg-background/50 p-3">
+      <div className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">{title}</div>
+      {commands.length === 0 ? (
+        <div className="text-xs text-muted-foreground">{empty}</div>
+      ) : (
+        <div className="space-y-2">
+          {commands.map((command) => (
+            <div className="rounded-md border border-border bg-card/55 p-2" key={command.id}>
+              <div className="truncate text-sm">{command.name}</div>
+              <div className="mt-1 truncate font-mono text-xs text-muted-foreground">{command.command}</div>
+              <Button className="mt-2" size="sm" variant="ghost" onClick={() => onDelete(command.id)}>
+                Delete
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
