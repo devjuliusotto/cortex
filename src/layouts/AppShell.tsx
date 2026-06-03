@@ -1,8 +1,9 @@
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
-import { ClipboardList, FolderPlus, HardDrive, Plus, ShieldCheck } from "lucide-react";
+import { ClipboardList, FolderPlus, HardDrive, Plus, Search, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CortexLogo } from "@/components/CortexLogo";
+import { CommandPalette } from "@/features/command-palette/components/CommandPalette";
 import { SavedCommandsModal } from "@/features/commands/components/SavedCommandsModal";
 import { MarketplaceModal } from "@/features/marketplace/components/MarketplaceModal";
 import { SettingsModal } from "@/features/settings/components/SettingsModal";
@@ -20,6 +21,7 @@ export function AppShell() {
   const autoStartedWorkspaceIds = useRef(new Set<string>());
   const autoUpdateChecked = useRef(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [savedCommandsOpen, setSavedCommandsOpen] = useState(false);
   const [marketplaceOpen, setMarketplaceOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -135,6 +137,31 @@ export function AppShell() {
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [saveNow]);
 
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const isTyping =
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA" ||
+        target?.tagName === "SELECT" ||
+        target?.isContentEditable;
+      const paletteShortcut = (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k";
+
+      if (!paletteShortcut) {
+        return;
+      }
+
+      event.preventDefault();
+      if (isTyping && !commandPaletteOpen) {
+        target?.blur();
+      }
+      setCommandPaletteOpen((value) => !value);
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [commandPaletteOpen]);
+
   return (
     <div className="flex h-full overflow-hidden bg-background text-foreground">
       <Sidebar
@@ -163,6 +190,19 @@ export function AppShell() {
           </div>
 
           <div className="flex items-center gap-2">
+            <Button
+              className="hidden gap-2 border-border bg-secondary/70 text-muted-foreground hover:text-foreground md:inline-flex"
+              size="sm"
+              variant="outline"
+              onClick={() => setCommandPaletteOpen(true)}
+              title="Open command palette"
+            >
+              <Search className="h-4 w-4" />
+              <span>Palette</span>
+              <kbd className="rounded border border-border bg-background px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                Ctrl K
+              </kbd>
+            </Button>
             <div className="hidden items-center gap-3 rounded-md border border-border bg-secondary/60 px-3 py-2 text-xs text-muted-foreground lg:flex">
               <span className="flex items-center gap-1.5">
                 <HardDrive className="h-3.5 w-3.5 text-cortex-amber" />
@@ -216,6 +256,14 @@ export function AppShell() {
 
         <TerminalPanel workspaceId={activeWorkspaceId} />
       </main>
+      <CommandPalette
+        open={commandPaletteOpen}
+        onClose={() => setCommandPaletteOpen(false)}
+        onSavedCommandsOpen={() => {
+          setCommandPaletteOpen(false);
+          setSavedCommandsOpen(true);
+        }}
+      />
       <SavedCommandsModal open={savedCommandsOpen} onClose={() => setSavedCommandsOpen(false)} />
       <MarketplaceModal open={marketplaceOpen} onClose={() => setMarketplaceOpen(false)} />
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
