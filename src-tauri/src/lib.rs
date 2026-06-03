@@ -5,13 +5,18 @@ use pty::{
     PlatformPtyBackend, PtyBackend, PtyBackendStatus, PtyError, PtyOutput, PtySessionId, PtySize,
     ShellProfile, ShellProfileKind,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::sync::Arc;
+use std::thread;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, State};
+
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
 
 struct PtyState {
     backend: Arc<dyn PtyBackend>,
@@ -50,17 +55,95 @@ struct ValidatedWorkingDirectory {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct GitMap {
-    root: String,
-    branch: String,
+struct GitBranchInfo {
+    name: String,
+    is_current: bool,
+    is_remote: bool,
     upstream: Option<String>,
+    last_commit: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GitCommitInfo {
+    hash: String,
+    short_hash: String,
+    message: String,
+    author: String,
+    date: String,
+    files: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GitOverview {
+    is_repo: bool,
+    root: Option<String>,
+    current_branch: Option<String>,
+    remote_name: Option<String>,
+    remote_url: Option<String>,
+    clean: bool,
+    modified_count: usize,
+    staged_count: usize,
+    untracked_count: usize,
     ahead: u32,
     behind: u32,
-    dirty: bool,
+    latest_commit: Option<GitCommitInfo>,
+    refreshed_at: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GitFileChange {
+    path: String,
+    original_path: Option<String>,
     status: String,
-    graph: String,
-    branches: String,
-    remotes: String,
+    staged: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GitStatusSnapshot {
+    is_repo: bool,
+    root: Option<String>,
+    files: Vec<GitFileChange>,
+    staged_count: usize,
+    modified_count: usize,
+    untracked_count: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GitBranchesSnapshot {
+    is_repo: bool,
+    current_branch: Option<String>,
+    dirty: bool,
+    local: Vec<GitBranchInfo>,
+    remote: Vec<GitBranchInfo>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GitReleaseInfo {
+    is_repo: bool,
+    current_branch: Option<String>,
+    clean: bool,
+    package_version: Option<String>,
+    tauri_version: Option<String>,
+    cargo_version: Option<String>,
+    latest_tag: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GitReleaseOptions {
+    update_package_json: bool,
+    update_tauri_conf: bool,
+    update_cargo_toml: bool,
+    commit_changes: bool,
+    create_git_tag: bool,
+    push_branch: bool,
+    push_tag: bool,
 }
 
 fn create_pty_state(app: AppHandle) -> PtyState {
@@ -442,31 +525,552 @@ fn validate_working_directory(
     Ok(resolve_working_directory(&profile_id, cwd))
 }
 
-fn run_git_command(cwd: Option<&str>, args: &[&str]) -> Result<String, String> {
+fn now_unix_string() -> String {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|value| value.as_secs().to_string())
+        .unwrap_or_else(|_| "0".to_string())
+}
+
+fn workspace_path(path: String) -> Result<PathBuf, String> {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return Err("Workspace path is empty.".to_string());
+    }
+    let path = PathBuf::from(trimmed);
+    path.canonicalize()
+        .map_err(|_| format!("Workspace path was not found: {trimmed}"))
+}
+
+fn run_git_internal(cwd: &Path, args: &[String], timeout: Duration) -> Result<String, String> {
     let mut command = Command::new("git");
-    command.args(args);
-    if let Some(cwd) = cwd.filter(|value| !value.trim().is_empty()) {
-        command.current_dir(cwd);
+    command
+        .args(args)
+        .current_dir(cwd)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    #[cfg(windows)]
+    {
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        command.creation_flags(CREATE_NO_WINDOW);
     }
 
-    let output = command.output().map_err(|error| {
+    let mut child = command.spawn().map_err(|error| {
         if error.kind() == std::io::ErrorKind::NotFound {
-            "Git executable was not found in PATH".to_string()
+            "Git executable was not found in PATH.".to_string()
         } else {
             error.to_string()
         }
     })?;
 
+    let started = SystemTime::now();
+    loop {
+        match child.try_wait().map_err(|error| error.to_string())? {
+            Some(_) => break,
+            None => {
+                if started.elapsed().unwrap_or_default() > timeout {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(format!("Git operation timed out: git {}", args.join(" ")));
+                }
+                thread::sleep(Duration::from_millis(25));
+            }
+        }
+    }
+
+    let output = child.wait_with_output().map_err(|error| error.to_string())?;
     if output.status.success() {
         return String::from_utf8(output.stdout).map_err(|error| error.to_string());
     }
 
-    let error = String::from_utf8_lossy(&output.stderr).trim().to_string();
-    Err(if error.is_empty() {
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    Err(if stderr.is_empty() {
         format!("git {} failed", args.join(" "))
     } else {
-        error
+        stderr
     })
+}
+
+fn git_panel_command(cwd: &Path, args: &[&str]) -> Result<String, String> {
+    let owned_args = args.iter().map(|value| value.to_string()).collect::<Vec<_>>();
+    run_git_internal(cwd, &owned_args, Duration::from_secs(20))
+}
+
+fn git_panel_command_owned(cwd: &Path, args: Vec<String>) -> Result<String, String> {
+    run_git_internal(cwd, &args, Duration::from_secs(20))
+}
+
+fn git_panel_root(workspace: &Path) -> Result<PathBuf, String> {
+    let root = git_panel_command(workspace, &["rev-parse", "--show-toplevel"])?;
+    Ok(PathBuf::from(root.trim()).canonicalize().unwrap_or_else(|_| PathBuf::from(root.trim())))
+}
+
+fn optional_git_panel_command(cwd: &Path, args: &[&str]) -> Option<String> {
+    git_panel_command(cwd, args)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn parse_git_status(status: &str) -> Vec<GitFileChange> {
+    status
+        .lines()
+        .filter_map(|line| {
+            if line.len() < 3 {
+                return None;
+            }
+
+            let mut chars = line.chars();
+            let x = chars.next().unwrap_or(' ');
+            let y = chars.next().unwrap_or(' ');
+            let raw_path = line.get(3..).unwrap_or_default().trim();
+            if raw_path.is_empty() {
+                return None;
+            }
+
+            let (path, original_path) = if let Some((old_path, new_path)) = raw_path.split_once(" -> ") {
+                (new_path.to_string(), Some(old_path.to_string()))
+            } else {
+                (raw_path.to_string(), None)
+            };
+
+            let status = if x == '?' && y == '?' {
+                "Untracked"
+            } else if x == 'R' || y == 'R' {
+                "Renamed"
+            } else if x == 'D' || y == 'D' {
+                "Deleted"
+            } else if x == 'A' || y == 'A' {
+                "Added"
+            } else {
+                "Modified"
+            };
+            let staged = x != ' ' && x != '?';
+
+            Some(GitFileChange {
+                path,
+                original_path,
+                status: status.to_string(),
+                staged,
+            })
+        })
+        .collect()
+}
+
+fn git_status_files(root: &Path) -> Result<Vec<GitFileChange>, String> {
+    let status = git_panel_command(root, &["status", "--porcelain=v1", "-uall"])?;
+    Ok(parse_git_status(&status))
+}
+
+fn git_status_counts(files: &[GitFileChange]) -> (usize, usize, usize) {
+    let staged_count = files.iter().filter(|file| file.staged).count();
+    let untracked_count = files.iter().filter(|file| file.status == "Untracked").count();
+    let modified_count = files
+        .iter()
+        .filter(|file| file.status != "Untracked" && !file.staged)
+        .count();
+    (staged_count, modified_count, untracked_count)
+}
+
+fn validate_repo_file_path(file: &str) -> Result<String, String> {
+    let trimmed = file.trim().replace('\\', "/");
+    if trimmed.is_empty() || trimmed.starts_with('/') || trimmed.contains("../") || trimmed == ".." {
+        return Err("Invalid repository file path.".to_string());
+    }
+    Ok(trimmed)
+}
+
+fn parse_commit_line(line: &str) -> Option<GitCommitInfo> {
+    let parts = line.split('\x1f').collect::<Vec<_>>();
+    if parts.len() < 5 {
+        return None;
+    }
+    Some(GitCommitInfo {
+        hash: parts[0].to_string(),
+        short_hash: parts[1].to_string(),
+        author: parts[2].to_string(),
+        date: parts[3].to_string(),
+        message: parts[4].to_string(),
+        files: Vec::new(),
+    })
+}
+
+fn git_latest_commit(root: &Path) -> Option<GitCommitInfo> {
+    let output = optional_git_panel_command(
+        root,
+        &["log", "-1", "--date=iso-strict", "--pretty=format:%H%x1f%h%x1f%an%x1f%ad%x1f%s"],
+    )?;
+    parse_commit_line(&output)
+}
+
+fn git_current_branch(root: &Path) -> Option<String> {
+    optional_git_panel_command(root, &["branch", "--show-current"])
+        .or_else(|| optional_git_panel_command(root, &["rev-parse", "--short", "HEAD"]))
+}
+
+fn git_remote_url(root: &Path) -> Option<String> {
+    optional_git_panel_command(root, &["config", "--get", "remote.origin.url"])
+}
+
+fn git_release_version_from_json(path: &Path) -> Option<String> {
+    let content = fs::read_to_string(path).ok()?;
+    let value = serde_json::from_str::<Value>(&content).ok()?;
+    value.get("version").and_then(Value::as_str).map(ToString::to_string)
+}
+
+fn git_release_version_from_cargo(path: &Path) -> Option<String> {
+    fs::read_to_string(path).ok()?.lines().find_map(|line| {
+        let trimmed = line.trim();
+        trimmed
+            .strip_prefix("version")
+            .and_then(|rest| rest.split_once('"'))
+            .and_then(|(_, rest)| rest.split_once('"'))
+            .map(|(version, _)| version.to_string())
+    })
+}
+
+fn update_json_version(path: &Path, version: &str) -> Result<(), String> {
+    let content = fs::read_to_string(path).map_err(|error| error.to_string())?;
+    let mut value = serde_json::from_str::<Value>(&content).map_err(|error| error.to_string())?;
+    if let Some(object) = value.as_object_mut() {
+        object.insert("version".to_string(), Value::String(version.to_string()));
+    }
+    let next = serde_json::to_string_pretty(&value).map_err(|error| error.to_string())?;
+    fs::write(path, format!("{next}\n")).map_err(|error| error.to_string())
+}
+
+fn update_cargo_version(path: &Path, version: &str) -> Result<(), String> {
+    let content = fs::read_to_string(path).map_err(|error| error.to_string())?;
+    let mut replaced = false;
+    let next = content
+        .lines()
+        .map(|line| {
+            if !replaced && line.trim_start().starts_with("version") {
+                replaced = true;
+                format!("version = \"{version}\"")
+            } else {
+                line.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    fs::write(path, format!("{next}\n")).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn git_detect_repo(path: String) -> Result<bool, String> {
+    let workspace = workspace_path(path)?;
+    Ok(git_panel_root(&workspace).is_ok())
+}
+
+#[tauri::command]
+fn git_get_overview(path: String) -> Result<GitOverview, String> {
+    let workspace = workspace_path(path)?;
+    let Ok(root) = git_panel_root(&workspace) else {
+        return Ok(GitOverview {
+            is_repo: false,
+            root: None,
+            current_branch: None,
+            remote_name: None,
+            remote_url: None,
+            clean: true,
+            modified_count: 0,
+            staged_count: 0,
+            untracked_count: 0,
+            ahead: 0,
+            behind: 0,
+            latest_commit: None,
+            refreshed_at: now_unix_string(),
+        });
+    };
+
+    let status = git_panel_command(&root, &["status", "--short", "--branch"])?;
+    let (branch, _, ahead, behind) = parse_branch_line(&status);
+    let files = git_status_files(&root)?;
+    let (staged_count, modified_count, untracked_count) = git_status_counts(&files);
+
+    Ok(GitOverview {
+        is_repo: true,
+        root: Some(root.to_string_lossy().to_string()),
+        current_branch: Some(branch),
+        remote_name: git_remote_url(&root).map(|_| "origin".to_string()),
+        remote_url: git_remote_url(&root),
+        clean: files.is_empty(),
+        modified_count,
+        staged_count,
+        untracked_count,
+        ahead,
+        behind,
+        latest_commit: git_latest_commit(&root),
+        refreshed_at: now_unix_string(),
+    })
+}
+
+#[tauri::command]
+fn git_get_status(path: String) -> Result<GitStatusSnapshot, String> {
+    let workspace = workspace_path(path)?;
+    let Ok(root) = git_panel_root(&workspace) else {
+        return Ok(GitStatusSnapshot {
+            is_repo: false,
+            root: None,
+            files: Vec::new(),
+            staged_count: 0,
+            modified_count: 0,
+            untracked_count: 0,
+        });
+    };
+    let files = git_status_files(&root)?;
+    let (staged_count, modified_count, untracked_count) = git_status_counts(&files);
+    Ok(GitStatusSnapshot {
+        is_repo: true,
+        root: Some(root.to_string_lossy().to_string()),
+        files,
+        staged_count,
+        modified_count,
+        untracked_count,
+    })
+}
+
+#[tauri::command]
+fn git_stage_file(path: String, file: String) -> Result<(), String> {
+    let root = git_panel_root(&workspace_path(path)?)?;
+    let file = validate_repo_file_path(&file)?;
+    git_panel_command_owned(&root, vec!["add".into(), "--".into(), file]).map(|_| ())
+}
+
+#[tauri::command]
+fn git_unstage_file(path: String, file: String) -> Result<(), String> {
+    let root = git_panel_root(&workspace_path(path)?)?;
+    let file = validate_repo_file_path(&file)?;
+    git_panel_command_owned(&root, vec!["restore".into(), "--staged".into(), "--".into(), file])
+        .map(|_| ())
+}
+
+#[tauri::command]
+fn git_stage_all(path: String) -> Result<(), String> {
+    let root = git_panel_root(&workspace_path(path)?)?;
+    git_panel_command(&root, &["add", "-A"]).map(|_| ())
+}
+
+#[tauri::command]
+fn git_unstage_all(path: String) -> Result<(), String> {
+    let root = git_panel_root(&workspace_path(path)?)?;
+    git_panel_command(&root, &["restore", "--staged", "."]).map(|_| ())
+}
+
+#[tauri::command]
+fn git_discard_file(path: String, file: String) -> Result<(), String> {
+    let root = git_panel_root(&workspace_path(path)?)?;
+    let file = validate_repo_file_path(&file)?;
+    git_panel_command_owned(
+        &root,
+        vec![
+            "restore".into(),
+            "--source=HEAD".into(),
+            "--staged".into(),
+            "--worktree".into(),
+            "--".into(),
+            file.clone(),
+        ],
+    )
+    .or_else(|_| git_panel_command_owned(&root, vec!["clean".into(), "-f".into(), "--".into(), file]))
+    .map(|_| ())
+}
+
+#[tauri::command]
+fn git_commit(path: String, message: String) -> Result<(), String> {
+    let root = git_panel_root(&workspace_path(path)?)?;
+    let message = message.trim();
+    if message.is_empty() {
+        return Err("Commit message cannot be empty.".to_string());
+    }
+    git_panel_command_owned(&root, vec!["commit".into(), "-m".into(), message.to_string()]).map(|_| ())
+}
+
+#[tauri::command]
+fn git_push(path: String) -> Result<(), String> {
+    let root = git_panel_root(&workspace_path(path)?)?;
+    git_panel_command(&root, &["push"]).map(|_| ())
+}
+
+#[tauri::command]
+fn git_pull(path: String) -> Result<(), String> {
+    let root = git_panel_root(&workspace_path(path)?)?;
+    git_panel_command(&root, &["pull", "--ff-only"]).map(|_| ())
+}
+
+#[tauri::command]
+fn git_fetch(path: String) -> Result<(), String> {
+    let root = git_panel_root(&workspace_path(path)?)?;
+    git_panel_command(&root, &["fetch", "--all", "--prune"]).map(|_| ())
+}
+
+#[tauri::command]
+fn git_get_history(path: String, limit: Option<u32>) -> Result<Vec<GitCommitInfo>, String> {
+    let root = git_panel_root(&workspace_path(path)?)?;
+    let limit = limit.unwrap_or(50).clamp(1, 100).to_string();
+    let output = git_panel_command_owned(
+        &root,
+        vec![
+            "log".into(),
+            "-n".into(),
+            limit,
+            "--date=iso-strict".into(),
+            "--pretty=format:%H%x1f%h%x1f%an%x1f%ad%x1f%s".into(),
+        ],
+    )?;
+    Ok(output.lines().filter_map(parse_commit_line).collect())
+}
+
+#[tauri::command]
+fn git_get_commit_details(path: String, hash: String) -> Result<GitCommitInfo, String> {
+    let root = git_panel_root(&workspace_path(path)?)?;
+    let hash = hash.trim();
+    let line = git_panel_command_owned(
+        &root,
+        vec![
+            "show".into(),
+            "-s".into(),
+            "--date=iso-strict".into(),
+            "--pretty=format:%H%x1f%h%x1f%an%x1f%ad%x1f%s".into(),
+            hash.to_string(),
+        ],
+    )?;
+    let mut commit = parse_commit_line(&line).ok_or_else(|| "Commit was not found.".to_string())?;
+    let files = git_panel_command_owned(
+        &root,
+        vec!["show".into(), "--name-only".into(), "--pretty=format:".into(), hash.to_string()],
+    )?;
+    commit.files = files
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .map(ToString::to_string)
+        .collect();
+    Ok(commit)
+}
+
+#[tauri::command]
+fn git_get_branches(path: String) -> Result<GitBranchesSnapshot, String> {
+    let root = git_panel_root(&workspace_path(path)?)?;
+    let status = git_panel_command(&root, &["status", "--short", "--branch"])?;
+    let (branch, _, _, _) = parse_branch_line(&status);
+    let branches = read_git_branches(&root.to_string_lossy(), &branch)?;
+    Ok(GitBranchesSnapshot {
+        is_repo: true,
+        current_branch: Some(branch),
+        dirty: status.lines().any(|line| !line.starts_with("## ")),
+        local: branches.iter().filter(|item| !item.is_remote).cloned().collect(),
+        remote: branches.into_iter().filter(|item| item.is_remote).collect(),
+    })
+}
+
+#[tauri::command]
+fn git_create_branch(path: String, name: String) -> Result<(), String> {
+    let root = git_panel_root(&workspace_path(path)?)?;
+    let name = name.trim();
+    if name.is_empty() {
+        return Err("Branch name cannot be empty.".to_string());
+    }
+    git_panel_command_owned(&root, vec!["switch".into(), "-c".into(), name.to_string()]).map(|_| ())
+}
+
+#[tauri::command]
+fn git_switch_branch(path: String, name: String) -> Result<(), String> {
+    let root = git_panel_root(&workspace_path(path)?)?;
+    let name = name.trim();
+    if name.is_empty() {
+        return Err("Branch name cannot be empty.".to_string());
+    }
+    git_panel_command_owned(&root, vec!["switch".into(), name.to_string()]).map(|_| ())
+}
+
+#[tauri::command]
+fn git_delete_branch(path: String, name: String) -> Result<(), String> {
+    let root = git_panel_root(&workspace_path(path)?)?;
+    let name = name.trim();
+    let current = git_current_branch(&root).unwrap_or_default();
+    if name.is_empty() || name == current {
+        return Err("Cannot delete the current branch.".to_string());
+    }
+    git_panel_command_owned(&root, vec!["branch".into(), "-d".into(), name.to_string()]).map(|_| ())
+}
+
+#[tauri::command]
+fn git_get_release_info(path: String) -> Result<GitReleaseInfo, String> {
+    let workspace = workspace_path(path)?;
+    let root = git_panel_root(&workspace)?;
+    let files = git_status_files(&root)?;
+    Ok(GitReleaseInfo {
+        is_repo: true,
+        current_branch: git_current_branch(&root),
+        clean: files.is_empty(),
+        package_version: git_release_version_from_json(&root.join("package.json")),
+        tauri_version: git_release_version_from_json(&root.join("src-tauri").join("tauri.conf.json")),
+        cargo_version: git_release_version_from_cargo(&root.join("src-tauri").join("Cargo.toml")),
+        latest_tag: optional_git_panel_command(&root, &["describe", "--tags", "--abbrev=0"]),
+    })
+}
+
+#[tauri::command]
+fn git_create_release(
+    path: String,
+    version: String,
+    notes: String,
+    options: GitReleaseOptions,
+) -> Result<(), String> {
+    let root = git_panel_root(&workspace_path(path)?)?;
+    let version = version.trim();
+    if version.is_empty() {
+        return Err("Version cannot be empty.".to_string());
+    }
+    let tag = format!("v{version}");
+    if git_panel_command_owned(&root, vec!["rev-parse".into(), "-q".into(), "--verify".into(), format!("refs/tags/{tag}")]).is_ok() {
+        return Err(format!("Tag {tag} already exists."));
+    }
+
+    if options.update_package_json {
+        update_json_version(&root.join("package.json"), version)?;
+    }
+    if options.update_tauri_conf {
+        update_json_version(&root.join("src-tauri").join("tauri.conf.json"), version)?;
+    }
+    if options.update_cargo_toml {
+        update_cargo_version(&root.join("src-tauri").join("Cargo.toml"), version)?;
+    }
+    if options.commit_changes {
+        let mut add_args = vec!["add".to_string()];
+        if options.update_package_json && root.join("package.json").exists() {
+            add_args.push("package.json".to_string());
+        }
+        if options.update_tauri_conf && root.join("src-tauri").join("tauri.conf.json").exists() {
+            add_args.push("src-tauri/tauri.conf.json".to_string());
+        }
+        if options.update_cargo_toml && root.join("src-tauri").join("Cargo.toml").exists() {
+            add_args.push("src-tauri/Cargo.toml".to_string());
+        }
+        if add_args.len() > 1 {
+            git_panel_command_owned(&root, add_args)?;
+        }
+        git_panel_command_owned(&root, vec!["commit".into(), "-m".into(), format!("Release {tag}")])?;
+    }
+    if options.create_git_tag {
+        let notes = if notes.trim().is_empty() {
+            format!("Release {tag}")
+        } else {
+            notes.trim().to_string()
+        };
+        git_panel_command_owned(&root, vec!["tag".into(), "-a".into(), tag.clone(), "-m".into(), notes])?;
+    }
+    if options.push_branch {
+        git_panel_command(&root, &["push"])?;
+    }
+    if options.push_tag {
+        git_panel_command_owned(&root, vec!["push".into(), "origin".into(), tag])?;
+    }
+    Ok(())
 }
 
 fn parse_branch_line(status: &str) -> (String, Option<String>, u32, u32) {
@@ -510,45 +1114,51 @@ fn parse_branch_line(status: &str) -> (String, Option<String>, u32, u32) {
     (branch, upstream, ahead, behind)
 }
 
-#[tauri::command]
-fn read_git_map(cwd: Option<String>) -> Result<GitMap, String> {
-    let cwd_ref = cwd.as_deref();
-    let root = run_git_command(cwd_ref, &["rev-parse", "--show-toplevel"])?
-        .trim()
-        .to_string();
-    let status = run_git_command(Some(&root), &["status", "--short", "--branch"])?;
-    let (branch, upstream, ahead, behind) = parse_branch_line(&status);
-    let dirty = status.lines().any(|line| !line.starts_with("## "));
-    let graph = run_git_command(
-        Some(&root),
+fn read_git_branches(root: &str, current_branch: &str) -> Result<Vec<GitBranchInfo>, String> {
+    let branches = git_panel_command(
+        Path::new(root),
         &[
-            "log",
-            "--graph",
-            "--decorate",
-            "--oneline",
-            "--all",
-            "-n",
-            "24",
+            "for-each-ref",
+            "--format=%(refname)%09%(refname:short)%09%(upstream:short)%09%(objectname:short)%09%(subject)",
+            "refs/heads",
+            "refs/remotes",
         ],
     )?;
-    let branches = run_git_command(
-        Some(&root),
-        &["branch", "--all", "--verbose", "--no-abbrev"],
-    )?;
-    let remotes = run_git_command(Some(&root), &["remote", "-v"])?;
 
-    Ok(GitMap {
-        root,
-        branch,
-        upstream,
-        ahead,
-        behind,
-        dirty,
-        status,
-        graph,
-        branches,
-        remotes,
-    })
+    let mut items = Vec::new();
+    for line in branches.lines() {
+        let mut parts = line.splitn(5, '\t');
+        let refname = parts.next().map(str::trim).unwrap_or_default();
+        let Some(name) = parts.next().map(str::trim).filter(|value| !value.is_empty()) else {
+            continue;
+        };
+        if name.ends_with("/HEAD") {
+            continue;
+        }
+
+        let upstream = parts
+            .next()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToString::to_string);
+        let hash = parts.next().map(str::trim).unwrap_or_default();
+        let subject = parts.next().map(str::trim).unwrap_or_default();
+        let last_commit = if subject.is_empty() {
+            hash.to_string()
+        } else {
+            format!("{hash} {subject}")
+        };
+
+        items.push(GitBranchInfo {
+            name: name.to_string(),
+            is_current: name == current_branch,
+            is_remote: refname.starts_with("refs/remotes/"),
+            upstream,
+            last_commit,
+        });
+    }
+
+    Ok(items)
 }
 
 #[tauri::command]
@@ -646,7 +1256,26 @@ pub fn run() {
             read_clipboard_text,
             write_clipboard_text,
             validate_working_directory,
-            read_git_map,
+            git_detect_repo,
+            git_get_overview,
+            git_get_status,
+            git_stage_file,
+            git_unstage_file,
+            git_stage_all,
+            git_unstage_all,
+            git_discard_file,
+            git_commit,
+            git_push,
+            git_pull,
+            git_fetch,
+            git_get_history,
+            git_get_commit_details,
+            git_get_branches,
+            git_create_branch,
+            git_switch_branch,
+            git_delete_branch,
+            git_get_release_info,
+            git_create_release,
             spawn_terminal,
             write_terminal,
             resize_terminal,
