@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { DragEvent, ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWindow, UserAttentionType } from "@tauri-apps/api/window";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal, type ILink, type ILinkProvider } from "@xterm/xterm";
 import { motion } from "framer-motion";
@@ -17,6 +18,7 @@ import {
   Play,
   Plus,
   RefreshCw,
+  SquarePen,
   RotateCcw,
   TerminalSquare,
   Trash2,
@@ -46,6 +48,50 @@ import {
 type TerminalPanelProps = {
   workspaceId: string | null;
 };
+
+type TabContextMenuState = {
+  tabId: string;
+  x: number;
+  y: number;
+} | null;
+
+const approvalPromptPattern =
+  /\b(?:codex|claude|approval|approve|permission|authorize|authorization|allow|proceed|confirm|continue|grant|autorizacao|autorização|permissao|permissão|aprovar|autorizar|permitir|continuar)\b/i;
+
+const approvalPromptCooldownMs = 20_000;
+
+function plainTerminalText(text: string) {
+  return text
+    .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "")
+    .replace(/\x1b\][^\u0007]*(?:\u0007|\x1b\\)/g, "")
+    .replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, " ");
+}
+
+function looksLikeApprovalPrompt(text: string) {
+  const clean = plainTerminalText(text).toLowerCase();
+  if (!approvalPromptPattern.test(clean)) {
+    return false;
+  }
+
+  return /[?:]\s*$|\[[yn]\]|y\/n|yes\/no|allow|approve|proceed|continue|autorizar|permitir|aprovar|continuar/.test(clean);
+}
+
+async function requestTerminalAttention(title: string, body: string) {
+  if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
+    void getCurrentWindow().requestUserAttention(UserAttentionType.Informational).catch(() => undefined);
+  }
+
+  if (!("Notification" in window)) {
+    return;
+  }
+
+  if (Notification.permission === "default") {
+    await Notification.requestPermission().catch(() => "denied");
+  }
+  if (Notification.permission === "granted") {
+    new Notification(title, { body });
+  }
+}
 
 function normalizePastedText(text: string) {
   return text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
@@ -299,12 +345,15 @@ function PaneLeaf({ node, workspaceId }: { node: Extract<PaneNode, { type: "leaf
     deleteTemplateInstance,
     layouts,
     moveTabToPane,
+    renameSession,
+    renameTemplateInstance,
     sessions,
     setActivePane,
     setActivePaneTab,
     templateInstances,
   } = useCortexStore();
   const [newTabChooserOpen, setNewTabChooserOpen] = useState(false);
+  const [tabContextMenu, setTabContextMenu] = useState<TabContextMenuState>(null);
   const layout = layouts.find((item) => item.workspaceId === workspaceId);
   const active = layout?.activePaneId === node.id;
   const activeTabId = node.activeTabId && node.tabIds.includes(node.activeTabId)
@@ -403,6 +452,48 @@ function PaneLeaf({ node, workspaceId }: { node: Extract<PaneNode, { type: "leaf
     }
   };
 
+  const renameTab = (tabId: string) => {
+    const terminal = sessions.find((item) => item.id === tabId);
+    const template = templateInstances.find((item) => item.id === tabId);
+    const currentName = terminal?.name ?? template?.title;
+    if (!currentName) {
+      return;
+    }
+
+    const nextName = window.prompt("Novo nome da aba", currentName)?.trim();
+    if (!nextName || nextName === currentName) {
+      return;
+    }
+
+    if (terminal) {
+      renameSession(terminal.id, nextName);
+    } else if (template) {
+      renameTemplateInstance(template.id, nextName);
+    }
+  };
+
+  useEffect(() => {
+    if (!tabContextMenu) {
+      return;
+    }
+
+    const closeContextMenu = () => setTabContextMenu(null);
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        closeContextMenu();
+      }
+    };
+
+    window.addEventListener("click", closeContextMenu);
+    window.addEventListener("contextmenu", closeContextMenu);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("click", closeContextMenu);
+      window.removeEventListener("contextmenu", closeContextMenu);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [tabContextMenu]);
+
   return (
     <div
       className={cn("flex h-full min-h-0 min-w-0 flex-col overflow-hidden border border-transparent", active && "border-primary/35")}
@@ -428,6 +519,17 @@ function PaneLeaf({ node, workspaceId }: { node: Extract<PaneNode, { type: "leaf
                 onClick={() => {
                   setNewTabChooserOpen(false);
                   setActivePaneTab(workspaceId, node.id, entry.id);
+                }}
+                onContextMenu={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  setNewTabChooserOpen(false);
+                  setActivePaneTab(workspaceId, node.id, entry.id);
+                  setTabContextMenu({
+                    tabId: entry.id,
+                    x: event.clientX,
+                    y: event.clientY,
+                  });
                 }}
                 onDragOver={(event) => event.preventDefault()}
                 onDragStart={(event) => {
@@ -460,6 +562,26 @@ function PaneLeaf({ node, workspaceId }: { node: Extract<PaneNode, { type: "leaf
               </button>
             );
           })}
+          {tabContextMenu && (
+            <div
+              className="fixed z-50 min-w-44 rounded-md border border-border bg-card p-1 shadow-2xl"
+              onClick={(event) => event.stopPropagation()}
+              onContextMenu={(event) => event.preventDefault()}
+              style={{ left: tabContextMenu.x, top: tabContextMenu.y }}
+            >
+              <button
+                className="flex h-9 w-full items-center gap-2 rounded px-2 text-left text-sm text-foreground hover:bg-secondary"
+                onClick={() => {
+                  renameTab(tabContextMenu.tabId);
+                  setTabContextMenu(null);
+                }}
+                type="button"
+              >
+                <SquarePen className="h-4 w-4 text-primary" />
+                Renomear aba
+              </button>
+            </div>
+          )}
           <button
             className={cn(
               "grid h-7 w-8 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground",
@@ -541,6 +663,9 @@ function TerminalPane({
     status: "idle" | "loading" | "connected" | "exited" | "error";
     error: string | null;
   }>({ status: "idle", error: null });
+  const [approvalPrompt, setApprovalPrompt] = useState<string | null>(null);
+  const approvalPromptBufferRef = useRef("");
+  const lastApprovalPromptAtRef = useRef(0);
   const {
     addCommandHistoryEntry,
     appendTerminalHistory,
@@ -593,7 +718,20 @@ function TerminalPane({
     fitAddon.fit();
 
     const unsubscribe = subscribeTerminalSession(session.id, {
-      onData: (data) => terminal.write(data),
+      onData: (data) => {
+        terminal.write(data);
+        const nextBuffer = `${approvalPromptBufferRef.current}${plainTerminalText(data)}`.slice(-1200);
+        approvalPromptBufferRef.current = nextBuffer;
+        if (
+          looksLikeApprovalPrompt(nextBuffer) &&
+          Date.now() - lastApprovalPromptAtRef.current > approvalPromptCooldownMs
+        ) {
+          lastApprovalPromptAtRef.current = Date.now();
+          const message = "Terminal aguardando autorização";
+          setApprovalPrompt(message);
+          void requestTerminalAttention("Cortex", `${session.name}: ${message}`);
+        }
+      },
       onStatus: (status, error) => {
         if (disposed) {
           return;
@@ -637,6 +775,8 @@ function TerminalPane({
     });
 
     const dataDisposable = terminal.onData((data) => {
+      setApprovalPrompt(null);
+      approvalPromptBufferRef.current = "";
       recorder.accept(data);
       void writeTerminal(session.id, data);
     });
@@ -789,6 +929,31 @@ function TerminalPane({
       </div>
       <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden bg-[#0b0d10]">
         <div ref={terminalRef} className="h-full min-h-0 min-w-0 overflow-hidden" />
+        {approvalPrompt && (
+          <div className="absolute right-4 top-4 max-w-[min(30rem,calc(100%-2rem))] rounded-md border border-cortex-amber/50 bg-card/95 p-4 shadow-2xl">
+            <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+              <AlertCircle className="h-4 w-4 text-cortex-amber" />
+              {approvalPrompt}
+            </div>
+            <p className="mt-2 text-xs leading-5 text-muted-foreground">
+              Codex, Claude ou outro CLI parece estar pedindo uma confirmação neste terminal.
+            </p>
+            <div className="mt-3 flex gap-2">
+              <Button
+                size="sm"
+                onClick={() => {
+                  setApprovalPrompt(null);
+                  focusTerminal(session.id);
+                }}
+              >
+                Focar terminal
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setApprovalPrompt(null)}>
+                Dispensar
+              </Button>
+            </div>
+          </div>
+        )}
         {connectionState.status === "loading" && (
           <TerminalOverlay icon={<Loader2 className="h-4 w-4 animate-spin text-primary" />} message="Starting terminal" />
         )}
