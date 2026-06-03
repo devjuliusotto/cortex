@@ -1,51 +1,51 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Cortex",
-  "version": "0.1.3",
-  "identifier": "dev.cortex.workspace",
-  "build": {
-    "beforeDevCommand": "npm run dev",
-    "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "npm run build",
-    "frontendDist": "../dist"
-  },
   "app": {
-    "windows": [
-      {
-        "title": "Cortex",
-        "width": 1440,
-        "height": 920,
-        "minWidth": 1100,
-        "minHeight": 720,
-        "decorations": true,
-        "resizable": true,
-        "center": true
-      }
-    ],
     "security": {
       "csp": null
-    }
+    },
+    "windows": [
+      {
+        "center": true,
+        "decorations": true,
+        "height": 920,
+        "minHeight": 720,
+        "minWidth": 1100,
+        "resizable": true,
+        "title": "Cortex",
+        "width": 1440
+      }
+    ]
+  },
+  "build": {
+    "beforeBuildCommand": "npm run build",
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "frontendDist": "../dist"
   },
   "bundle": {
     "active": true,
-    "targets": "all",
     "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.ico"
-    ]
+    ],
+    "targets": "all"
   },
+  "identifier": "dev.cortex.workspace",
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDZFNDhBQTY4RkM1OThGOQpSV1Q1bU1XUHBvcmtCa0JNTmZKZWtQbEdqSDcybEM3LzVRZ0grOXVWdm1XWW1tMlpIR0JUMjlCdAo=",
       "endpoints": [
         "https://github.com/devjuliusotto/cortex/releases/latest/download/latest.json"
       ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDZFNDhBQTY4RkM1OThGOQpSV1Q1bU1XUHBvcmtCa0JNTmZKZWtQbEdqSDcybEM3LzVRZ0grOXVWdm1XWW1tMlpIR0JUMjlCdAo=",
       "windows": {
         "installMode": "basicUi"
       }
     }
-  }
+  },
+  "productName": "Cortex",
+  "version": "0.1.16"
 }
