@@ -1,5 +1,6 @@
 import { GitBranch, Loader2, RefreshCw } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { GitBranchesTab } from "@/features/git/GitBranchesTab";
 import { GitChangesTab } from "@/features/git/GitChangesTab";
@@ -46,10 +47,29 @@ export function GitMapPanel({ paneId, template, workspaceId }: Props) {
   const [actionLoading, setActionLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const refreshStatusRef = useRef<(() => Promise<void>) | null>(null);
 
   const repoReady = useMemo(() => Boolean(repoPath && overview?.isRepo), [overview?.isRepo, repoPath]);
 
-  const refresh = async () => {
+  const refreshStatus = useCallback(async () => {
+    if (!repoPath) {
+      setStatus(null);
+      return;
+    }
+
+    try {
+      const nextStatus = await gitService.getStatus(repoPath);
+      setStatus(nextStatus);
+    } catch (reason) {
+      setError(String(reason));
+    }
+  }, [repoPath]);
+
+  useEffect(() => {
+    refreshStatusRef.current = refreshStatus;
+  }, [refreshStatus]);
+
+  const refresh = useCallback(async () => {
     if (!repoPath) {
       setOverview(null);
       setStatus(null);
@@ -88,11 +108,68 @@ export function GitMapPanel({ paneId, template, workspaceId }: Props) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [repoPath]);
 
   useEffect(() => {
     void refresh();
-  }, [repoPath]);
+  }, [refresh]);
+
+  useEffect(() => {
+    if (activeTab !== "changes" || !repoPath || !overview?.isRepo) {
+      return;
+    }
+
+    let disposed = false;
+    let watchedRoot: string | null = null;
+    let debounceId: ReturnType<typeof setTimeout> | null = null;
+    let unlisten: (() => void) | null = null;
+
+    const dispose = () => {
+      disposed = true;
+      if (debounceId) {
+        clearTimeout(debounceId);
+      }
+      unlisten?.();
+      if (watchedRoot) {
+        void gitService.watchStop(watchedRoot);
+      }
+    };
+
+    void (async () => {
+      try {
+        watchedRoot = await gitService.watchStart(repoPath);
+        if (disposed) {
+          if (watchedRoot) {
+            void gitService.watchStop(watchedRoot);
+          }
+          return;
+        }
+
+        const nextUnlisten = await listen<{ root: string }>("git-working-tree-changed", (event) => {
+          if (event.payload.root !== watchedRoot) {
+            return;
+          }
+          if (debounceId) {
+            clearTimeout(debounceId);
+          }
+          debounceId = setTimeout(() => {
+            void refreshStatusRef.current?.();
+          }, 700);
+        });
+        if (disposed) {
+          nextUnlisten();
+          return;
+        }
+        unlisten = nextUnlisten;
+      } catch (reason) {
+        if (!disposed) {
+          setError(String(reason));
+        }
+      }
+    })();
+
+    return dispose;
+  }, [activeTab, overview?.isRepo, repoPath]);
 
   const runAction = async (action: () => Promise<unknown>, success: string) => {
     setActionLoading(true);

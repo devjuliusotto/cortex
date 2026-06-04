@@ -1,42 +1,154 @@
-import React, { Suspense, lazy, useEffect, useState } from "react";
+import React, { Suspense, lazy, useEffect, useMemo, useState } from "react";
 
 const CortexScene = lazy(() =>
   import("./CortexScene.jsx").then(module => ({ default: module.CortexScene })),
 );
 
 const releaseUrl = "https://github.com/devjuliusotto/cortex/releases";
+const repositoryUrl = "https://github.com/devjuliusotto/cortex";
 const releasesApiUrl = "https://api.github.com/repos/devjuliusotto/cortex/releases";
+const portfolioUrl = "https://juliusotto.dev";
+const coffeeUrl = "https://www.buymeacoffee.com/devjuliusotto";
 
 const imageExtensions = ["png", "jpg", "jpeg", "webp"];
 const videoSources = ["/media/video-geral.webm", "/media/video-geral.mp4", "/media/cortex-overview.webm", "/media/cortex-overview.mp4"];
 
-const features = [
+const productHighlights = [
   {
-    title: "Workspaces reais",
-    text: "Cada projeto guarda caminho padrão, sessões, layout, snippets, notas e preferências locais.",
+    title: "Git Map integrado",
+    text: "Status, branches, histórico, detalhes de commits e fluxo de release ficam ao lado do terminal do workspace.",
   },
   {
-    title: "Terminais persistentes",
-    text: "PowerShell, CMD e WSL ficam organizados por workspace, com panes e histórico de contexto.",
+    title: "Command Palette",
+    text: "Ações do workspace, comandos salvos, histórico recente e atalhos de template em um único lugar pesquisável.",
+  },
+  {
+    title: "Layouts persistentes",
+    text: "Panes horizontais e verticais, notas, Git Map e terminal voltam do jeito que você deixou.",
+  },
+  {
+    title: "Windows-first",
+    text: "PowerShell, CMD e WSL Ubuntu com ConPTY, cwd por sessão e suporte a caminhos com OneDrive e espaços.",
   },
   {
     title: "Local-first",
-    text: "Sem telemetria, analytics, cloud sync ou chamadas externas em segundo plano.",
+    text: "Sem telemetria, analytics, cloud sync, AI ou chamadas externas de fundo. O estado fica no app data local.",
+  },
+  {
+    title: "Release helper",
+    text: "Comandos salvos e Git Map ajudam a preparar versão, tag, changelog e publicação sem sair do contexto.",
   },
 ];
 
 const metrics = [
-  ["Windows", "primeiro alvo"],
+  ["0.1.18", "release atual"],
+  ["5", "abas Git Map"],
   ["0", "telemetria"],
   ["Local", "estado do app"],
-  ["Tauri", "desktop runtime"],
 ];
 
-const gallery = [1, 2, 3, 4, 5].map(number => ({
-  title: `Cortex ${number}`,
-  sources: imageExtensions.map(extension => `/media/${number}.${extension}`),
-  description: "Imagem real do produto. Substitua pelo screenshot correspondente em website/public/media.",
-}));
+const gallery = [
+  {
+    title: "Workspace terminal",
+    sources: imageExtensions.map(extension => `/media/1.${extension}`),
+    description: "Terminal, Git Map, histórico e notas no mesmo workspace local.",
+  },
+  {
+    title: "Git Map",
+    sources: imageExtensions.map(extension => `/media/2.${extension}`),
+    description: "Overview, changes, history, branches e releases sem trocar de ferramenta.",
+  },
+  {
+    title: "Command Palette",
+    sources: imageExtensions.map(extension => `/media/3.${extension}`),
+    description: "Comandos salvos, snippets e ações recorrentes para o projeto atual.",
+  },
+  {
+    title: "Split panes",
+    sources: imageExtensions.map(extension => `/media/4.${extension}`),
+    description: "Divisores arrastáveis e layouts persistidos por workspace.",
+  },
+  {
+    title: "Local setup",
+    sources: imageExtensions.map(extension => `/media/5.${extension}`),
+    description: "Perfis, cwd, auto-start e notas guardados localmente.",
+  },
+];
+
+const docs = [
+  {
+    id: "start",
+    label: "Start",
+    title: "Instalação e primeiro workspace",
+    summary: "Baixe a release mais recente, crie um workspace e defina a pasta padrão do projeto.",
+    steps: [
+      "Baixe o instalador Windows nas GitHub Releases.",
+      "Crie um workspace para cada projeto importante.",
+      "Defina o default working directory no menu do workspace.",
+      "Abra PowerShell, CMD ou WSL Ubuntu dentro do contexto salvo.",
+    ],
+    command: "npm run tauri:dev",
+  },
+  {
+    id: "workspace",
+    label: "Workspace",
+    title: "Workspaces guardam contexto real",
+    summary: "Cada workspace controla caminho, cor, auto-start, snippets, notas, sessões e layout.",
+    steps: [
+      "Use o menu lateral para renomear, duplicar, colorir ou remover workspaces.",
+      "Ative auto-start para iniciar terminais quando o workspace abrir.",
+      "Use notas e snippets para guardar comandos específicos do projeto.",
+      "Caminhos inválidos caem para a pasta do usuário com aviso visível.",
+    ],
+    command: "C:\\Projects\\Cortex",
+  },
+  {
+    id: "terminal",
+    label: "Terminal",
+    title: "Terminal persistente sem cloud",
+    summary: "Sessões guardam cwd, scrollback limitado e associação com panes do workspace.",
+    steps: [
+      "Crie sessões PowerShell, CMD ou WSL Ubuntu conforme o projeto pede.",
+      "Divida o painel para comparar terminal, notas e Git Map.",
+      "Arraste os divisores para ajustar a proporção do layout.",
+      "O histórico local é podado para evitar crescimento indefinido.",
+    ],
+    command: "npm run build",
+  },
+  {
+    id: "git",
+    label: "Git Map",
+    title: "Git operacional dentro do workspace",
+    summary: "Cortex mostra status, histórico, branches e release info para o repositório ativo.",
+    steps: [
+      "Abra um workspace com uma pasta que contenha `.git`.",
+      "Revise changes, stage, unstage, commit, fetch, pull e push.",
+      "Consulte detalhes de commits e branches sem sair do app.",
+      "Use a aba Releases para preparar tags e notas de versão.",
+    ],
+    command: "git status",
+  },
+  {
+    id: "privacy",
+    label: "Privacy",
+    title: "Modelo local-first",
+    summary: "Cortex foi desenhado como ferramenta local, não como serviço remoto.",
+    steps: [
+      "Sem tracking, analytics, telemetria ou sincronização em cloud.",
+      "Sem features de AI ou chamadas externas em segundo plano.",
+      "Update check usa GitHub Releases apenas quando você escolhe verificar.",
+      "Feedback abre GitHub Issues no navegador e não envia dados automaticamente.",
+    ],
+    command: "%APPDATA%\\dev.cortex.workspace",
+  },
+];
+
+const roadmapItems = [
+  "Runtime de terminal mais persistente via tray process local.",
+  "Import/export de perfis de workspace.",
+  "Templates locais opcionais no Marketplace.",
+  "Instalador Windows assinado.",
+];
 
 function useFirstAvailable(sources) {
   const [source, setSource] = useState("");
@@ -109,10 +221,10 @@ function AppMockup({ compact = false }) {
         <div className="mockTopbar">
           <div>
             <strong>Cortex</strong>
-            <small>4 workspace items · Workspace path: C:\Projects\Cortex</small>
+            <small>Git Map aberto · Workspace path: C:\Projects\Cortex</small>
           </div>
           <div className="mockActions">
-            <span>app data</span>
+            <span>local data</span>
             <span>no telemetry</span>
           </div>
         </div>
@@ -120,27 +232,63 @@ function AppMockup({ compact = false }) {
           <div className="mockTerminal">
             <div className="mockTabs">
               <span className="on">PowerShell</span>
+              <span>Git Map</span>
+              <span>History</span>
               <span>Notes</span>
-              <span>Snippets</span>
             </div>
-            <pre>{`PS C:\\Projects\\Cortex> npm run tauri:dev
-ready in 486ms
+            <pre>{`PS C:\\Projects\\Cortex> git status
+ on branch main
+ changes staged: website refresh
 
-workspace loaded
-terminal restored
-layout synchronized`}</pre>
+ git map: clean release path
+ command palette: 38 actions
+ workspace layout restored`}</pre>
           </div>
           {!compact && (
             <div className="mockPanel">
-              <span className="panelTitle">Workspace notes</span>
-              <p>Release checklist, build commands and project-specific context stay beside the terminal.</p>
-              <div className="snippet">npm run build</div>
-              <div className="snippet">cargo check</div>
+              <span className="panelTitle">Git Map</span>
+              <p>Overview, changes, history, branches and releases stay visible beside the shell.</p>
+              <div className="snippet">Release v0.1.18</div>
+              <div className="snippet">git push origin main</div>
             </div>
           )}
         </div>
       </div>
     </div>
+  );
+}
+
+function Hero3DStage() {
+  return (
+    <div className="hero3dStage" aria-hidden="true">
+      <div className="stageOrbit orbitOne" />
+      <div className="stageOrbit orbitTwo" />
+      <div className="stageOrbit orbitThree" />
+      <div className="stageCore">
+        <img src="/cortex-logo.svg" alt="" />
+      </div>
+      <div className="stageSignal signalOne" />
+      <div className="stageSignal signalTwo" />
+      <div className="stageSignal signalThree" />
+      <div className="stageCaption">
+        <span>local workspace</span>
+        <strong>CORTEX</strong>
+      </div>
+    </div>
+  );
+}
+
+function ImpactReveal() {
+  return (
+    <section className="impactReveal" aria-label="Cortex product statement">
+      <div className="impactLine">
+        <span>Terminal</span>
+        <span>Git Map</span>
+        <span>Snippets</span>
+        <span>Notas</span>
+      </div>
+      <h2>Um lugar para voltar ao projeto sem reconstruir o contexto.</h2>
+    </section>
   );
 }
 
@@ -151,20 +299,19 @@ function MediaShowcase() {
     <section className="section mediaSection" id="demo">
       <div className="sectionEyebrow">Product demo</div>
       <div className="sectionHeader">
-        <h2>Vídeo, screenshots reais e uma narrativa de produto completa.</h2>
+        <h2>Terminal, Git, snippets e notas no mesmo fluxo.</h2>
         <p>
-          Coloque <code>video-geral.mp4</code> e imagens <code>1</code> a <code>5</code> em
-          <code> website/public/media</code>. O site detecta os arquivos automaticamente.
+          O site usa mídia real quando ela existe em <code>website/public/media</code> e cai para
+          uma pré-visualização fiel do app quando ainda falta screenshot ou vídeo.
         </p>
       </div>
 
       <div className="videoFrame">
         {videoSrc ? (
-          <video controls playsInline poster="/media/workspace-terminal.jpg" src={videoSrc} />
+          <video controls playsInline poster="/media/1.png" src={videoSrc} />
         ) : (
           <div className="videoFallback">
             <AppMockup compact />
-            <p>Coloque o vídeo como <code>video-geral.mp4</code> ou <code>video-geral.webm</code>.</p>
           </div>
         )}
       </div>
@@ -193,6 +340,131 @@ function MediaCard({ item }) {
       <h3>{item.title}</h3>
       <p>{item.description}</p>
     </article>
+  );
+}
+
+function DocScreenshot({ activeId }) {
+  const content = {
+    start: {
+      title: "Welcome",
+      tabs: ["Workspace", "Terminal", "Docs"],
+      body: ["Create workspace", "Set default path", "Open PowerShell"],
+      terminal: "PS C:\\Projects\\Cortex>",
+    },
+    workspace: {
+      title: "Workspace settings",
+      tabs: ["Color", "Auto-start", "Path"],
+      body: ["C:\\Projects\\Cortex", "Auto-start enabled", "Local snippets: 6"],
+      terminal: "workspace restored",
+    },
+    terminal: {
+      title: "Split terminal",
+      tabs: ["PowerShell", "WSL", "Notes"],
+      body: ["Pane A: npm run dev", "Pane B: git status", "Scrollback saved"],
+      terminal: "layout synchronized",
+    },
+    git: {
+      title: "Git Map",
+      tabs: ["Overview", "Changes", "History", "Releases"],
+      body: ["main · clean", "v0.1.18 ready", "3 commits ahead"],
+      terminal: "git push origin main",
+    },
+    privacy: {
+      title: "Local-first",
+      tabs: ["App data", "No telemetry", "Manual update"],
+      body: ["No analytics", "No cloud sync", "No background API"],
+      terminal: "%APPDATA%\\dev.cortex.workspace",
+    },
+  }[activeId] ?? {
+    title: "Cortex",
+    tabs: ["Workspace"],
+    body: ["Local-first"],
+    terminal: "ready",
+  };
+
+  return (
+    <div className="docScreenshot" aria-hidden="true">
+      <div className="shotSidebar">
+        <img src="/cortex-logo.svg" alt="" />
+        <span />
+        <span />
+        <span />
+      </div>
+      <div className="shotMain">
+        <div className="shotTopbar">
+          <strong>{content.title}</strong>
+          <small>local session</small>
+        </div>
+        <div className="shotTabs">
+          {content.tabs.map(tab => (
+            <span key={tab}>{tab}</span>
+          ))}
+        </div>
+        <div className="shotBody">
+          {content.body.map(item => (
+            <div key={item}>{item}</div>
+          ))}
+        </div>
+        <pre>{content.terminal}</pre>
+      </div>
+    </div>
+  );
+}
+
+function Documentation() {
+  const [activeId, setActiveId] = useState(docs[0].id);
+  const activeDoc = useMemo(() => docs.find(item => item.id === activeId) ?? docs[0], [activeId]);
+
+  return (
+    <section className="section docsSection" id="docs">
+      <div className="sectionEyebrow">Documentation</div>
+      <div className="sectionHeader">
+        <h2>Uma aba de documentação para entender Cortex em minutos.</h2>
+        <p>
+          A estrutura segue o que importa para o usuário: instalar, criar workspace, operar terminal,
+          usar Git Map e entender exatamente o que fica local.
+        </p>
+      </div>
+
+      <div className="docsShell">
+        <div className="docTabs" role="tablist" aria-label="Documentation sections">
+          {docs.map(item => (
+            <button
+              aria-controls={`doc-panel-${item.id}`}
+              aria-selected={item.id === activeDoc.id}
+              className={item.id === activeDoc.id ? "active" : ""}
+              id={`doc-tab-${item.id}`}
+              key={item.id}
+              onClick={() => setActiveId(item.id)}
+              role="tab"
+              type="button"
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+
+        <article
+          aria-labelledby={`doc-tab-${activeDoc.id}`}
+          className="docPanel"
+          id={`doc-panel-${activeDoc.id}`}
+          role="tabpanel"
+        >
+          <div>
+            <span className="docLabel">{activeDoc.label}</span>
+            <h3>{activeDoc.title}</h3>
+            <p>{activeDoc.summary}</p>
+          </div>
+          <ol>
+            {activeDoc.steps.map(step => (
+              <li key={step}>{step}</li>
+            ))}
+          </ol>
+          <DocScreenshot activeId={activeDoc.id} />
+          <pre>{activeDoc.command}</pre>
+        </article>
+      </div>
+    </section>
   );
 }
 
@@ -239,10 +511,10 @@ function DownloadCenter() {
     <section className="section download downloadCenter" id="download">
       <div className="downloadHeader">
         <span className="sectionEyebrow">Download center</span>
-        <h2>Instalador sempre atualizado direto das GitHub Releases.</h2>
+        <h2>Instalador Windows direto das GitHub Releases.</h2>
         <p>
-          Quando você publicar uma nova release com executáveis no GitHub, esta seção atualiza
-          sozinha. As versões antigas continuam disponíveis no histórico abaixo.
+          Cortex ainda é unsigned, então o Microsoft SmartScreen pode pedir confirmação. A página
+          lê releases públicas do GitHub e mostra o instalador mais recente quando ele existe.
         </p>
       </div>
 
@@ -318,6 +590,40 @@ function DownloadCenter() {
   );
 }
 
+function SupportAndAbout() {
+  return (
+    <section className="section supportAbout" id="about">
+      <div className="sectionEyebrow">Support & About</div>
+      <div className="supportGrid">
+        <article className="supportPanel coffeePanel">
+          <span className="panelKicker">Buy Me a Coffee</span>
+          <h2>Apoie o desenvolvimento local-first do Cortex.</h2>
+          <p>
+            Se o Cortex economiza tempo no seu setup diário, você pode apoiar o projeto sem colocar
+            pagamentos, popups ou tracking dentro do app.
+          </p>
+          <a className="button coffeeButton" href={coffeeUrl}>
+            Buy Me a Coffee
+          </a>
+        </article>
+
+        <article className="supportPanel aboutPanel">
+          <span className="panelKicker">About me</span>
+          <h2>Feito por Julius Otto.</h2>
+          <p>
+            Desenvolvo ferramentas locais, interfaces desktop e produtos pequenos que reduzem atrito
+            em workflows reais. O portfólio reúne projetos, contato e trabalhos recentes.
+          </p>
+          <div className="aboutLinks">
+            <a href={portfolioUrl}>Portfólio</a>
+            <a href={repositoryUrl}>GitHub repo</a>
+          </div>
+        </article>
+      </div>
+    </section>
+  );
+}
+
 export function App() {
   return (
     <main className="siteShell">
@@ -333,54 +639,82 @@ export function App() {
         <div className="navLinks">
           <a href="#demo">Demo</a>
           <a href="#features">Features</a>
+          <a href="#docs">Docs</a>
           <a href="#download">Download</a>
+          <a href="#about">About</a>
         </div>
       </nav>
 
       <section className="hero" id="top">
         <div className="heroText">
-          <p className="kicker">Local-first · Windows desktop · terminal workspace</p>
-          <h1>Cortex organiza seus projetos sem tirar você do terminal.</h1>
-          <p className="lead">
-            Um app desktop para manter workspaces, PowerShell, CMD, WSL, notas, snippets e
-            layouts persistentes no mesmo lugar.
-          </p>
+          <p className="kicker">Local-first desktop workspace</p>
+          <h1>Bem-vindo ao Cortex.</h1>
+          <p className="lead heroPunch">Seu terminal. Seu Git. Seu contexto.</p>
           <div className="heroActions">
             <a className="button primary" href="#download">
               Baixar para Windows
             </a>
-            <a className="button secondary" href="#demo">
-              Ver demo
+            <a className="button secondary" href="#docs">
+              Abrir documentação
             </a>
+          </div>
+          <div className="heroMeta" aria-label="Cortex quick facts">
+            <span>Windows-first</span>
+            <span>Sem telemetria</span>
+            <span>Workspaces locais</span>
           </div>
         </div>
         <div className="heroVisual" aria-hidden="true">
-          <AppMockup />
+          <Hero3DStage />
         </div>
         <a className="scrollCue" href="#demo" aria-label="Scroll to demo" />
       </section>
 
+      <ImpactReveal />
+
       <section className="section introStrip">
         <div>
-          <span className="sectionEyebrow">Why Cortex</span>
-          <h2>Feito para quem abre vários projetos e precisa recuperar o contexto rápido.</h2>
+          <span className="sectionEyebrow">Reveal</span>
+          <h2>Primeiro impacto simples. Depois, profundidade.</h2>
         </div>
         <p>
-          Cortex não tenta virar cloud, rede social ou dashboard pesado. Ele foca no básico que
-          incomoda todo dia: sessão local, caminho certo, terminal certo e comandos recorrentes.
+          Cortex agora aparece como produto antes de virar documentação: abre com presença visual,
+          revela a promessa em poucas palavras e só então mostra Git Map, Command Palette,
+          histórico por workspace, releases e comandos salvos.
         </p>
       </section>
 
       <MediaShowcase />
 
       <section className="section featureGrid" id="features">
-        {features.map(feature => (
+        {productHighlights.map(feature => (
           <article className="feature" key={feature.title}>
             <h3>{feature.title}</h3>
             <p>{feature.text}</p>
           </article>
         ))}
       </section>
+
+      <section className="section workflowSection">
+        <div className="sectionEyebrow">Workflow</div>
+        <div className="workflowGrid">
+          <div>
+            <h2>Do terminal ao release sem perder o contexto.</h2>
+            <p>
+              Cortex não substitui Git, shell ou editor. Ele organiza o entorno: caminho certo,
+              abas certas, comandos recorrentes e contexto de release sempre no mesmo workspace.
+            </p>
+          </div>
+          <ol className="workflowSteps">
+            <li>Abra o workspace e restaure layout, terminal, notas e Git Map.</li>
+            <li>Rode comandos salvos ou recentes pela Command Palette.</li>
+            <li>Revise status, commits, branches e release info pelo Git Map.</li>
+            <li>Publique a versão usando seu fluxo local e GitHub Releases.</li>
+          </ol>
+        </div>
+      </section>
+
+      <Documentation />
 
       <section className="section stats">
         {metrics.map(([value, label]) => (
@@ -391,7 +725,20 @@ export function App() {
         ))}
       </section>
 
+      <section className="section roadmapSection">
+        <div>
+          <span className="sectionEyebrow">Roadmap</span>
+          <h2>Próximos passos com a mesma regra: local primeiro.</h2>
+        </div>
+        <ul>
+          {roadmapItems.map(item => (
+            <li key={item}>{item}</li>
+          ))}
+        </ul>
+      </section>
+
       <DownloadCenter />
+      <SupportAndAbout />
     </main>
   );
 }

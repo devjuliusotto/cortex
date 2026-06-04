@@ -12,11 +12,23 @@ export const gitService = {
   detectRepo(path: string) {
     return invoke<boolean>("git_detect_repo", { path });
   },
+  initRepo(path: string) {
+    return invoke("git_init_repo", { path });
+  },
+  setOrigin(path: string, url: string) {
+    return invoke("git_set_origin", { path, url });
+  },
   getOverview(path: string) {
     return invoke<GitOverview>("git_get_overview", { path });
   },
   getStatus(path: string) {
     return invoke<GitStatusSnapshot>("git_get_status", { path });
+  },
+  watchStart(path: string) {
+    return invoke<string>("git_watch_start", { path });
+  },
+  watchStop(root: string) {
+    return invoke("git_watch_stop", { root });
   },
   stageFile(path: string, file: string) {
     return invoke("git_stage_file", { path, file });

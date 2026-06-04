@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
-import { GitBranch, GitCommitHorizontal, RadioTower, RefreshCw, Upload, Download, RotateCcw } from "lucide-react";
+import { useState } from "react";
+import { GitBranch, GitCommitHorizontal, Link, RadioTower, RefreshCw, Upload, Download, RotateCcw, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { gitService } from "@/features/git/gitService";
 import type { GitOverview } from "@/features/git/gitTypes";
@@ -25,15 +26,43 @@ function formatRefresh(value?: string | null) {
 }
 
 export function GitOverviewTab({ actionLoading, onAction, onRefresh, overview, repoPath }: Props) {
+  const [remoteUrl, setRemoteUrl] = useState("");
+
   if (!repoPath) {
     return <div className="rounded-md border border-border bg-card/55 p-4 text-sm text-muted-foreground">No workspace folder selected.</div>;
   }
 
   if (overview && !overview.isRepo) {
     return (
-      <div className="rounded-md border border-border bg-card/55 p-6">
-        <div className="text-base font-semibold">This workspace is not a Git repository.</div>
-        <div className="mt-2 text-sm text-muted-foreground">Open a folder that contains a `.git` directory, or initialize one from your terminal for now.</div>
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+        <section className="rounded-md border border-border bg-card/55 p-6">
+          <div className="flex items-center gap-2 text-base font-semibold">
+            <Sparkles className="h-4 w-4 text-primary" />
+            Start Git for this project
+          </div>
+          <div className="mt-2 max-w-2xl text-sm text-muted-foreground">
+            Initialize this folder as a local Git repository, then connect the GitHub repository URL when you have one.
+          </div>
+          <div className="mt-4">
+            <Button disabled={actionLoading} onClick={() => onAction(() => gitService.initRepo(repoPath), "Git repository initialized.")} size="sm">
+              <GitBranch className="mr-2 h-4 w-4" />
+              Initialize Git
+            </Button>
+          </div>
+        </section>
+
+        <GitRemoteSetup
+          actionLoading={actionLoading}
+          onChange={setRemoteUrl}
+          onConnect={() =>
+            onAction(async () => {
+              await gitService.initRepo(repoPath);
+              await gitService.setOrigin(repoPath, remoteUrl);
+            }, "Git initialized and GitHub origin connected.")
+          }
+          primaryLabel="Initialize & set origin"
+          remoteUrl={remoteUrl}
+        />
       </div>
     );
   }
@@ -98,8 +127,55 @@ export function GitOverviewTab({ actionLoading, onAction, onRefresh, overview, r
             Last refresh: {formatRefresh(overview?.refreshedAt)}
           </div>
         </section>
+
+        {!overview?.remoteUrl && (
+          <GitRemoteSetup
+            actionLoading={actionLoading}
+            onChange={setRemoteUrl}
+            onConnect={() => onAction(() => gitService.setOrigin(repoPath, remoteUrl), "GitHub origin connected.")}
+            remoteUrl={remoteUrl}
+          />
+        )}
       </aside>
     </div>
+  );
+}
+
+function GitRemoteSetup({
+  actionLoading,
+  disabled,
+  onChange,
+  onConnect,
+  primaryLabel = "Set origin",
+  remoteUrl,
+}: {
+  actionLoading: boolean;
+  disabled?: boolean;
+  onChange: (value: string) => void;
+  onConnect: () => void;
+  primaryLabel?: string;
+  remoteUrl: string;
+}) {
+  return (
+    <section className="rounded-md border border-border bg-card/55 p-4">
+      <div className="flex items-center gap-2 text-sm font-semibold">
+        <Link className="h-4 w-4 text-primary" />
+        Connect GitHub origin
+      </div>
+      <input
+        className="mt-3 h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus:border-primary disabled:cursor-not-allowed disabled:opacity-60"
+        disabled={disabled || actionLoading}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder="https://github.com/user/repo.git"
+        value={remoteUrl}
+      />
+      <Button className="mt-3 w-full" disabled={disabled || actionLoading || !remoteUrl.trim()} onClick={onConnect} size="sm" variant="outline">
+        {primaryLabel}
+      </Button>
+      <div className="mt-2 text-xs text-muted-foreground">
+        Use the repository URL from GitHub after creating an empty repo there.
+      </div>
+    </section>
   );
 }
 

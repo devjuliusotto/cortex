@@ -1,16 +1,18 @@
 mod db;
 mod pty;
 
+use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use pty::{
     PlatformPtyBackend, PtyBackend, PtyBackendStatus, PtyError, PtyOutput, PtySessionId, PtySize,
     ShellProfile, ShellProfileKind,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, State};
@@ -22,8 +24,19 @@ struct PtyState {
     backend: Arc<dyn PtyBackend>,
 }
 
+struct GitWatchState {
+    watchers: Mutex<HashMap<String, GitWatchEntry>>,
+}
+
+struct GitWatchEntry {
+    _watcher: RecommendedWatcher,
+    subscribers: usize,
+}
+
 const GITHUB_OWNER: &str = "devjuliusotto";
 const GITHUB_REPO: &str = "cortex";
+
+const GIT_WATCH_EVENT: &str = "git-working-tree-changed";
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -146,6 +159,12 @@ struct GitReleaseOptions {
     push_tag: bool,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GitWatchEvent {
+    root: String,
+}
+
 fn create_pty_state(app: AppHandle) -> PtyState {
     let backend = PlatformPtyBackend::new(move |session_id, output| match output {
         PtyOutput::Data(data) => {
@@ -161,6 +180,12 @@ fn create_pty_state(app: AppHandle) -> PtyState {
 
     PtyState {
         backend: Arc::new(backend),
+    }
+}
+
+fn create_git_watch_state() -> GitWatchState {
+    GitWatchState {
+        watchers: Mutex::new(HashMap::new()),
     }
 }
 
@@ -674,6 +699,90 @@ fn git_status_counts(files: &[GitFileChange]) -> (usize, usize, usize) {
     (staged_count, modified_count, untracked_count)
 }
 
+fn git_watch_should_ignore(path: &Path) -> bool {
+    path.components().any(|component| {
+        let value = component.as_os_str().to_string_lossy();
+        matches!(
+            value.as_ref(),
+            "node_modules" | "target" | "dist" | "build" | ".vite" | ".next"
+        )
+    })
+}
+
+fn git_watch_event_is_relevant(paths: &[PathBuf]) -> bool {
+    paths.is_empty() || paths.iter().any(|path| !git_watch_should_ignore(path))
+}
+
+#[tauri::command]
+fn git_watch_start(
+    app: AppHandle,
+    state: State<'_, GitWatchState>,
+    path: String,
+) -> Result<String, String> {
+    let root = git_panel_root(&workspace_path(path)?)?;
+    let root_key = root.to_string_lossy().to_string();
+    let mut watchers = state.watchers.lock().map_err(|error| error.to_string())?;
+
+    if let Some(entry) = watchers.get_mut(&root_key) {
+        entry.subscribers += 1;
+        return Ok(root_key);
+    }
+
+    let event_root = root_key.clone();
+    let event_app = app.clone();
+    let mut watcher = notify::recommended_watcher(move |result: notify::Result<notify::Event>| {
+        let Ok(event) = result else {
+            return;
+        };
+        if !git_watch_event_is_relevant(&event.paths) {
+            return;
+        }
+        let _ = event_app.emit(
+            GIT_WATCH_EVENT,
+            GitWatchEvent {
+                root: event_root.clone(),
+            },
+        );
+    })
+    .map_err(|error| error.to_string())?;
+
+    watcher
+        .watch(&root, RecursiveMode::Recursive)
+        .map_err(|error| error.to_string())?;
+
+    watchers.insert(
+        root_key.clone(),
+        GitWatchEntry {
+            _watcher: watcher,
+            subscribers: 1,
+        },
+    );
+
+    Ok(root_key)
+}
+
+#[tauri::command]
+fn git_watch_stop(state: State<'_, GitWatchState>, root: String) -> Result<(), String> {
+    let mut watchers = state.watchers.lock().map_err(|error| error.to_string())?;
+    let trimmed = root.trim();
+    if trimmed.is_empty() {
+        return Ok(());
+    }
+
+    let should_remove = if let Some(entry) = watchers.get_mut(trimmed) {
+        entry.subscribers = entry.subscribers.saturating_sub(1);
+        entry.subscribers == 0
+    } else {
+        false
+    };
+
+    if should_remove {
+        watchers.remove(trimmed);
+    }
+
+    Ok(())
+}
+
 fn validate_repo_file_path(file: &str) -> Result<String, String> {
     let trimmed = file.trim().replace('\\', "/");
     if trimmed.is_empty() || trimmed.starts_with('/') || trimmed.contains("../") || trimmed == ".." {
@@ -763,6 +872,43 @@ fn update_cargo_version(path: &Path, version: &str) -> Result<(), String> {
 fn git_detect_repo(path: String) -> Result<bool, String> {
     let workspace = workspace_path(path)?;
     Ok(git_panel_root(&workspace).is_ok())
+}
+
+#[tauri::command]
+fn git_init_repo(path: String) -> Result<(), String> {
+    let workspace = workspace_path(path)?;
+    git_panel_command(&workspace, &["init"])?;
+    git_panel_command(&workspace, &["checkout", "-B", "main"]).map(|_| ())
+}
+
+fn validate_remote_url(url: &str) -> Result<String, String> {
+    let trimmed = url.trim();
+    if trimmed.is_empty() {
+        return Err("GitHub repository URL is empty.".to_string());
+    }
+
+    let is_supported = trimmed.starts_with("https://github.com/")
+        || trimmed.starts_with("http://github.com/")
+        || trimmed.starts_with("git@github.com:")
+        || trimmed.starts_with("ssh://git@github.com/");
+
+    if !is_supported {
+        return Err("Use a GitHub HTTPS or SSH repository URL.".to_string());
+    }
+
+    Ok(trimmed.to_string())
+}
+
+#[tauri::command]
+fn git_set_origin(path: String, url: String) -> Result<(), String> {
+    let root = git_panel_root(&workspace_path(path)?)?;
+    let url = validate_remote_url(&url)?;
+    if git_remote_url(&root).is_some() {
+        git_panel_command_owned(&root, vec!["remote".into(), "set-url".into(), "origin".into(), url])
+    } else {
+        git_panel_command_owned(&root, vec!["remote".into(), "add".into(), "origin".into(), url])
+    }
+    .map(|_| ())
 }
 
 #[tauri::command]
@@ -1257,8 +1403,12 @@ pub fn run() {
             write_clipboard_text,
             validate_working_directory,
             git_detect_repo,
+            git_init_repo,
+            git_set_origin,
             git_get_overview,
             git_get_status,
+            git_watch_start,
+            git_watch_stop,
             git_stage_file,
             git_unstage_file,
             git_stage_all,
@@ -1284,6 +1434,7 @@ pub fn run() {
         .setup(|app| {
             db::prepare_app_storage(app)?;
             app.manage(create_pty_state(app.handle().clone()));
+            app.manage(create_git_watch_state());
             restore_window_state(app.handle());
             Ok(())
         })
