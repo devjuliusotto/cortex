@@ -45,5 +45,5 @@ jobs:
             Windows-first local terminal manager.
 
             This release is unsigned and may trigger Microsoft SmartScreen warnings.
-          releaseDraft: true
+          releaseDraft: false
           prerelease: false
