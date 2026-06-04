@@ -133,6 +133,7 @@ type CortexState = CortexPersistedState & {
   profiles: TerminalProfile[];
   hydrated: boolean;
   hydrate: () => Promise<void>;
+  createMarketingModeDemo: () => void;
   createWorkspace: () => void;
   duplicateWorkspace: (workspaceId: string) => void;
   renameWorkspace: (workspaceId: string, name: string) => void;
@@ -334,6 +335,364 @@ function createStandardWorkspaceItems(workspaceId: string, timestamp: string) {
       paneTree,
       activePaneId: leftPane.id,
     } satisfies WorkspaceLayout,
+  };
+}
+
+type DemoGitSnapshot = {
+  overview: {
+    isRepo: true;
+    root: string;
+    currentBranch: string;
+    remoteName: string;
+    remoteUrl: string;
+    clean: boolean;
+    modifiedCount: number;
+    stagedCount: number;
+    untrackedCount: number;
+    ahead: number;
+    behind: number;
+    latestCommit: {
+      hash: string;
+      shortHash: string;
+      message: string;
+      author: string;
+      date: string;
+      files: string[];
+    };
+    refreshedAt: string;
+  };
+  status: {
+    isRepo: true;
+    root: string;
+    files: Array<{
+      path: string;
+      originalPath: string | null;
+      status: string;
+      staged: boolean;
+    }>;
+    stagedCount: number;
+    modifiedCount: number;
+    untrackedCount: number;
+  };
+  history: Array<{
+    hash: string;
+    shortHash: string;
+    message: string;
+    author: string;
+    date: string;
+    files: string[];
+  }>;
+  branches: {
+    isRepo: true;
+    currentBranch: string;
+    dirty: boolean;
+    local: Array<{
+      name: string;
+      isCurrent: boolean;
+      isRemote: boolean;
+      upstream: string | null;
+      lastCommit: string;
+    }>;
+    remote: Array<{
+      name: string;
+      isCurrent: boolean;
+      isRemote: boolean;
+      upstream: string | null;
+      lastCommit: string;
+    }>;
+  };
+  releaseInfo: {
+    isRepo: true;
+    currentBranch: string;
+    clean: boolean;
+    packageVersion: string;
+    tauriVersion: string;
+    cargoVersion: string;
+    latestTag: string;
+  };
+};
+
+function isoMinutesAgo(minutes: number) {
+  return new Date(Date.now() - minutes * 60_000).toISOString();
+}
+
+function demoTerminalHistory(project: string, branch: string) {
+  return [
+    `PS C:\\Projects\\${project}> git status --short --branch`,
+    `## ${branch}...origin/${branch} [ahead 2]`,
+    " M src/features/dashboard/ActivityFeed.tsx",
+    " M src/styles.css",
+    "?? docs/screenshot-checklist.md",
+    "",
+    `PS C:\\Projects\\${project}> npm run build`,
+    "",
+    "> cortex-demo@0.4.0 build",
+    "> tsc && vite build",
+    "",
+    "vite v6.4.2 building for production...",
+    "✓ 2148 modules transformed.",
+    "✓ built in 4.88s",
+    "",
+    `PS C:\\Projects\\${project}> git add src docs`,
+    `PS C:\\Projects\\${project}> git commit -m "Polish screenshot workflow"`,
+    `[${branch} 8f42c91] Polish screenshot workflow`,
+    " 3 files changed, 128 insertions(+), 14 deletions(-)",
+    "",
+  ].join("\r\n");
+}
+
+function demoGitSnapshot(project: string, branch: string, remote: string): DemoGitSnapshot {
+  const root = `C:\\Projects\\${project}`;
+  const history = [
+    {
+      hash: "8f42c91d7c2a9ef9d84755e32e74b21de190a411",
+      shortHash: "8f42c91",
+      message: "Polish screenshot workflow",
+      author: "Julius Otto",
+      date: isoMinutesAgo(18),
+      files: ["src/features/dashboard/ActivityFeed.tsx", "docs/screenshot-checklist.md"],
+    },
+    {
+      hash: "51d0c24b2d0679770e72166bbdbf73441c231aef",
+      shortHash: "51d0c24",
+      message: "Add marketing capture workspace",
+      author: "Julius Otto",
+      date: isoMinutesAgo(74),
+      files: ["src/stores/cortexStore.ts", "src/features/git/GitMapPanel.tsx"],
+    },
+    {
+      hash: "f14ac7c8e57a420de46ddf4498cfb82bf7b1904a",
+      shortHash: "f14ac7c",
+      message: "Tune command palette copy",
+      author: "Mira Chen",
+      date: isoMinutesAgo(165),
+      files: ["src/features/command-palette/components/CommandPalette.tsx"],
+    },
+    {
+      hash: "b8a6e3fce5428bb39c2942034ff0725a55c99ab1",
+      shortHash: "b8a6e3f",
+      message: "Create release checklist notes",
+      author: "Julius Otto",
+      date: isoMinutesAgo(260),
+      files: ["docs/release-checklist.md", "src/features/git/GitReleasesTab.tsx"],
+    },
+  ];
+  const files = [
+    { path: "src/features/dashboard/ActivityFeed.tsx", originalPath: null, status: "Modified", staged: true },
+    { path: "src/styles.css", originalPath: null, status: "Modified", staged: false },
+    { path: "docs/screenshot-checklist.md", originalPath: null, status: "Untracked", staged: false },
+  ];
+  return {
+    overview: {
+      isRepo: true,
+      root,
+      currentBranch: branch,
+      remoteName: "origin",
+      remoteUrl: remote,
+      clean: false,
+      modifiedCount: 1,
+      stagedCount: 1,
+      untrackedCount: 1,
+      ahead: 2,
+      behind: 0,
+      latestCommit: history[0],
+      refreshedAt: String(Math.floor(Date.now() / 1000)),
+    },
+    status: {
+      isRepo: true,
+      root,
+      files,
+      stagedCount: 1,
+      modifiedCount: 1,
+      untrackedCount: 1,
+    },
+    history,
+    branches: {
+      isRepo: true,
+      currentBranch: branch,
+      dirty: true,
+      local: [
+        { name: branch, isCurrent: true, isRemote: false, upstream: `origin/${branch}`, lastCommit: history[0].message },
+        { name: "main", isCurrent: false, isRemote: false, upstream: "origin/main", lastCommit: "Release v0.4.0" },
+        { name: "feature/onboarding", isCurrent: false, isRemote: false, upstream: null, lastCommit: "Improve empty workspace setup" },
+      ],
+      remote: [
+        { name: `origin/${branch}`, isCurrent: false, isRemote: true, upstream: null, lastCommit: history[0].message },
+        { name: "origin/main", isCurrent: false, isRemote: true, upstream: null, lastCommit: "Release v0.4.0" },
+      ],
+    },
+    releaseInfo: {
+      isRepo: true,
+      currentBranch: branch,
+      clean: false,
+      packageVersion: "0.4.0",
+      tauriVersion: "0.4.0",
+      cargoVersion: "0.4.0",
+      latestTag: "v0.4.0",
+    },
+  };
+}
+
+function createMarketingWorkspace(
+  name: string,
+  project: string,
+  branch: string,
+  remote: string,
+  note: string,
+  timestamp: string,
+) {
+  const workspaceId = createId("workspace");
+  const terminalId = createId("session");
+  const gitMapId = createId("template");
+  const commandHistoryId = createId("template");
+  const noteId = createId("template");
+  const leftPane = createLeaf([terminalId], terminalId);
+  const rightPane = createLeaf([gitMapId, commandHistoryId, noteId], gitMapId);
+  const root = `C:\\Projects\\${project}`;
+
+  const workspace: Workspace = {
+    id: workspaceId,
+    name: `Marketing · ${name}`,
+    defaultWorkingDirectory: root,
+    autoStartTerminalsOnOpen: false,
+    color: "#8b5cf6",
+    snippets: [
+      {
+        id: createId("snippet"),
+        name: "Capture build",
+        command: "npm run build && git status --short",
+        description: "Screenshot-ready build verification",
+        profileId: "powershell",
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      },
+    ],
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+
+  const sessions: TerminalSession[] = [
+    {
+      id: terminalId,
+      workspaceId,
+      name: "Demo Terminal",
+      profileId: "powershell",
+      cwd: root,
+      status: "completed",
+      terminalHistory: demoTerminalHistory(project, branch),
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    },
+  ];
+
+  const templates: TemplateInstance[] = [
+    {
+      id: gitMapId,
+      workspaceId,
+      templateId: "git-map",
+      kind: "git-map",
+      title: "Git Map",
+      content: JSON.stringify({ marketingDemo: true, ...demoGitSnapshot(project, branch, remote) }),
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    },
+    {
+      id: commandHistoryId,
+      workspaceId,
+      templateId: "command-history",
+      kind: "command-history",
+      title: "Command History",
+      content: "",
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    },
+    {
+      id: noteId,
+      workspaceId,
+      templateId: "workspace-note",
+      kind: "note",
+      title: "Launch Notes",
+      content: note,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    },
+  ];
+
+  const commands = [
+    "git status --short --branch",
+    "npm run build",
+    "git add src docs",
+    "git commit -m \"Polish screenshot workflow\"",
+    "git push origin HEAD",
+    "npm run tauri:build",
+  ].map<CommandHistoryEntry>((command, index) => ({
+    id: createId("history"),
+    workspaceId,
+    sessionId: terminalId,
+    command,
+    profileId: "powershell",
+    cwd: root,
+    createdAt: isoMinutesAgo(12 + index * 9),
+  }));
+
+  const paneTree: PaneNode = {
+    id: createId("pane-split"),
+    type: "split",
+    direction: "horizontal",
+    ratio: 0.56,
+    first: leftPane,
+    second: rightPane,
+  };
+
+  const layout: WorkspaceLayout = {
+    workspaceId,
+    activeSessionId: terminalId,
+    activeItemId: terminalId,
+    tabOrder: [terminalId, gitMapId, commandHistoryId, noteId],
+    splitPanePreview: true,
+    paneTree,
+    activePaneId: leftPane.id,
+  };
+
+  return { workspace, sessions, templates, commands, layout };
+}
+
+function createMarketingModeState() {
+  const timestamp = now();
+  const demos = [
+    createMarketingWorkspace(
+      "Launch Console",
+      "cortex-launch",
+      "feature/landing-assets",
+      "https://github.com/devjuliusotto/cortex-launch.git",
+      "# Launch Notes\n\n- Capture Git Map with pending changes visible\n- Show command history filtered to release/build commands\n- Keep terminal output at successful build state\n- Use Overview for hero screenshot and Changes for feature crop\n",
+      timestamp,
+    ),
+    createMarketingWorkspace(
+      "Client Portal",
+      "client-portal",
+      "feature/billing-flow",
+      "https://github.com/acme/client-portal.git",
+      "# Client Portal\n\n## Screenshot Beats\n\n- Terminal: tests passing\n- Git Map: staged UI changes\n- Notes: deployment checklist\n\n## Status\n\nReady for landing page capture.\n",
+      timestamp,
+    ),
+    createMarketingWorkspace(
+      "Release Desk",
+      "release-desk",
+      "release/v1.2.0",
+      "git@github.com:studio/release-desk.git",
+      "# Release Desk\n\n- Verify changelog\n- Build desktop artifacts\n- Tag release after screenshot pass\n",
+      timestamp,
+    ),
+  ];
+
+  return {
+    workspaces: demos.map((demo) => demo.workspace),
+    sessions: demos.flatMap((demo) => demo.sessions),
+    templateInstances: demos.flatMap((demo) => demo.templates),
+    commandHistory: demos.flatMap((demo) => demo.commands),
+    layouts: demos.map((demo) => demo.layout),
+    activeWorkspaceId: demos[0]?.workspace.id ?? null,
   };
 }
 
@@ -663,6 +1022,42 @@ export const useCortexStore = create<CortexState>((set) => ({
       profiles,
     }));
   },
+
+  createMarketingModeDemo: () =>
+    set((state) => {
+      const demo = createMarketingModeState();
+      const demoWorkspaceIds = new Set(
+        state.workspaces
+          .filter((workspace) => workspace.name.startsWith("Marketing · "))
+          .map((workspace) => workspace.id),
+      );
+      const next: CortexState = {
+        ...state,
+        workspaces: [
+          ...state.workspaces.filter((workspace) => !demoWorkspaceIds.has(workspace.id)),
+          ...demo.workspaces,
+        ],
+        sessions: [
+          ...state.sessions.filter((session) => !demoWorkspaceIds.has(session.workspaceId)),
+          ...demo.sessions,
+        ],
+        commandHistory: [
+          ...state.commandHistory.filter((entry) => !demoWorkspaceIds.has(entry.workspaceId)),
+          ...demo.commandHistory,
+        ],
+        templateInstances: [
+          ...state.templateInstances.filter((template) => !demoWorkspaceIds.has(template.workspaceId)),
+          ...demo.templateInstances,
+        ],
+        layouts: [
+          ...state.layouts.filter((layout) => !demoWorkspaceIds.has(layout.workspaceId)),
+          ...demo.layouts,
+        ],
+        activeWorkspaceId: demo.activeWorkspaceId,
+      };
+      saveState(next);
+      return next;
+    }),
 
   createWorkspace: () =>
     set((state) => {

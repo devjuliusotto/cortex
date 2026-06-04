@@ -25,6 +25,15 @@ type Props = {
   workspaceId: string;
 };
 
+type MarketingGitDemo = {
+  marketingDemo: true;
+  overview: GitOverview;
+  status: GitStatusSnapshot;
+  history: GitCommitInfo[];
+  branches: GitBranchesSnapshot;
+  releaseInfo: GitReleaseInfo;
+};
+
 const tabs: Array<{ id: GitMapTab; label: string }> = [
   { id: "overview", label: "Overview" },
   { id: "changes", label: "Changes" },
@@ -32,6 +41,21 @@ const tabs: Array<{ id: GitMapTab; label: string }> = [
   { id: "branches", label: "Branches" },
   { id: "releases", label: "Releases" },
 ];
+
+function parseMarketingGitDemo(content: string): MarketingGitDemo | null {
+  if (!content.trim()) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(content) as Partial<MarketingGitDemo>;
+    if (parsed.marketingDemo && parsed.overview && parsed.status && parsed.history && parsed.branches && parsed.releaseInfo) {
+      return parsed as MarketingGitDemo;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
 
 export function GitMapPanel({ paneId, template, workspaceId }: Props) {
   const { setActivePaneTab, workspaces } = useCortexStore();
@@ -48,10 +72,21 @@ export function GitMapPanel({ paneId, template, workspaceId }: Props) {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const refreshStatusRef = useRef<(() => Promise<void>) | null>(null);
+  const marketingDemo = useMemo(() => parseMarketingGitDemo(template.content), [template.content]);
+  const displayOverview = marketingDemo?.overview ?? overview;
+  const displayStatus = marketingDemo?.status ?? status;
+  const displayHistory = marketingDemo?.history ?? history;
+  const displayBranches = marketingDemo?.branches ?? branches;
+  const displayReleaseInfo = marketingDemo?.releaseInfo ?? releaseInfo;
+  const displayRepoPath = marketingDemo?.overview.root ?? repoPath;
 
-  const repoReady = useMemo(() => Boolean(repoPath && overview?.isRepo), [overview?.isRepo, repoPath]);
+  const repoReady = useMemo(() => Boolean(displayRepoPath && displayOverview?.isRepo), [displayOverview?.isRepo, displayRepoPath]);
 
   const refreshStatus = useCallback(async () => {
+    if (marketingDemo) {
+      setStatus(marketingDemo.status);
+      return;
+    }
     if (!repoPath) {
       setStatus(null);
       return;
@@ -63,13 +98,22 @@ export function GitMapPanel({ paneId, template, workspaceId }: Props) {
     } catch (reason) {
       setError(String(reason));
     }
-  }, [repoPath]);
+  }, [marketingDemo, repoPath]);
 
   useEffect(() => {
     refreshStatusRef.current = refreshStatus;
   }, [refreshStatus]);
 
   const refresh = useCallback(async () => {
+    if (marketingDemo) {
+      setOverview(marketingDemo.overview);
+      setStatus(marketingDemo.status);
+      setHistory(marketingDemo.history);
+      setBranches(marketingDemo.branches);
+      setReleaseInfo(marketingDemo.releaseInfo);
+      setError(null);
+      return;
+    }
     if (!repoPath) {
       setOverview(null);
       setStatus(null);
@@ -108,14 +152,14 @@ export function GitMapPanel({ paneId, template, workspaceId }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [repoPath]);
+  }, [marketingDemo, repoPath]);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
   useEffect(() => {
-    if (activeTab !== "changes" || !repoPath || !overview?.isRepo) {
+    if (marketingDemo || activeTab !== "changes" || !repoPath || !overview?.isRepo) {
       return;
     }
 
@@ -169,7 +213,7 @@ export function GitMapPanel({ paneId, template, workspaceId }: Props) {
     })();
 
     return dispose;
-  }, [activeTab, overview?.isRepo, repoPath]);
+  }, [activeTab, marketingDemo, overview?.isRepo, repoPath]);
 
   const runAction = async (action: () => Promise<unknown>, success: string) => {
     setActionLoading(true);
@@ -208,10 +252,10 @@ export function GitMapPanel({ paneId, template, workspaceId }: Props) {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="min-w-0">
               <div className="truncate text-sm font-semibold">{workspace?.name ?? "Workspace"}</div>
-              <div className="truncate text-xs text-muted-foreground" title={repoPath ?? ""}>{repoPath ?? "No default working directory"}</div>
+              <div className="truncate text-xs text-muted-foreground" title={displayRepoPath ?? ""}>{displayRepoPath ?? "No default working directory"}</div>
             </div>
             <div className={cn("rounded px-2 py-1 text-xs", repoReady ? "bg-primary/15 text-primary" : "bg-secondary text-muted-foreground")}>
-              {repoReady ? overview?.currentBranch ?? "Git repository" : "No repository loaded"}
+              {repoReady ? displayOverview?.currentBranch ?? "Git repository" : "No repository loaded"}
             </div>
           </div>
           <div className="mt-3 flex gap-1 overflow-x-auto rounded-md border border-border bg-card/35 p-1">
@@ -237,46 +281,46 @@ export function GitMapPanel({ paneId, template, workspaceId }: Props) {
 
           {activeTab === "overview" && (
             <GitOverviewTab
-              actionLoading={actionLoading}
+              actionLoading={actionLoading || Boolean(marketingDemo)}
               onAction={runAction}
               onRefresh={() => void refresh()}
-              overview={overview}
-              repoPath={repoPath}
+              overview={displayOverview}
+              repoPath={displayRepoPath}
             />
           )}
           {activeTab === "changes" && (
             <GitChangesTab
-              actionLoading={actionLoading}
+              actionLoading={actionLoading || Boolean(marketingDemo)}
               onAction={runAction}
               onRefresh={() => void refresh()}
-              repoPath={repoPath}
-              status={status}
+              repoPath={displayRepoPath}
+              status={displayStatus}
             />
           )}
           {activeTab === "history" && (
             <GitHistoryTab
-              actionLoading={actionLoading}
-              commits={history}
+              actionLoading={actionLoading || Boolean(marketingDemo)}
+              commits={displayHistory}
               onError={setError}
               onRefresh={() => void refresh()}
-              repoPath={repoPath}
+              repoPath={marketingDemo ? null : repoPath}
             />
           )}
           {activeTab === "branches" && (
             <GitBranchesTab
-              actionLoading={actionLoading}
-              branches={branches}
+              actionLoading={actionLoading || Boolean(marketingDemo)}
+              branches={displayBranches}
               onAction={runAction}
               onRefresh={() => void refresh()}
-              repoPath={repoPath}
+              repoPath={displayRepoPath}
             />
           )}
           {activeTab === "releases" && (
             <GitReleasesTab
-              actionLoading={actionLoading}
-              info={releaseInfo}
+              actionLoading={actionLoading || Boolean(marketingDemo)}
+              info={displayReleaseInfo}
               onAction={runAction}
-              repoPath={repoPath}
+              repoPath={displayRepoPath}
             />
           )}
         </div>

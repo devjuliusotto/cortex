@@ -29,7 +29,7 @@ export function CortexScene() {
 
     const clock = new THREE.Clock();
     const group = new THREE.Group();
-    group.position.set(1.9, 0.08, 0);
+    group.position.set(-2.1, 0.08, 0);
     group.scale.setScalar(1.08);
     scene.add(group);
 
@@ -136,60 +136,11 @@ export function CortexScene() {
     resize();
 
     const interaction = {
-      pointerX: 0,
-      pointerY: 0,
       scroll: 0,
       impulse: 0,
-      targetX: 1.9,
-      currentX: 1.9,
     };
 
     host.style.setProperty("--scene-dim", "0");
-
-    function handlePointerMove(event) {
-      interaction.pointerX = (event.clientX / window.innerWidth - 0.5) * 2;
-      interaction.pointerY = (event.clientY / window.innerHeight - 0.5) * 2;
-      interaction.impulse = Math.max(interaction.impulse, Math.abs(interaction.pointerY) * 0.8);
-    }
-
-    function handleScroll() {
-      interaction.scroll = Math.min(window.scrollY / Math.max(window.innerHeight, 1), 2.4);
-      interaction.impulse = Math.max(interaction.impulse, Math.min(window.scrollY / 360, 1));
-      host.style.setProperty("--scene-dim", String(Math.min(interaction.scroll / 1.35, 1)));
-
-      const viewportCenter = window.innerHeight / 2;
-      const candidates = [...document.querySelectorAll(".heroText, .heroVisual, .sectionHeader, .introStrip, .featureGrid, .stats, .downloadHeader, .releasePanel")];
-      const active = candidates
-        .map(element => {
-          const rect = element.getBoundingClientRect();
-          return {
-            rect,
-            distance: Math.abs(rect.top + rect.height / 2 - viewportCenter),
-          };
-        })
-        .filter(item => item.rect.bottom > 0 && item.rect.top < window.innerHeight)
-        .sort((a, b) => a.distance - b.distance)[0];
-
-      if (!active) {
-        interaction.targetX = 1.9;
-        return;
-      }
-
-      const contentCenter = active.rect.left + active.rect.width / 2;
-      const contentIsLeft = contentCenter < window.innerWidth * 0.5;
-      const nearCenter = Math.abs(contentCenter - window.innerWidth * 0.5) < window.innerWidth * 0.14;
-      const sectionIndex = Math.max(0, Math.round(window.scrollY / Math.max(window.innerHeight * 0.85, 1)));
-
-      if (nearCenter) {
-        interaction.targetX = sectionIndex % 2 === 0 ? 2.45 : -2.45;
-      } else {
-        interaction.targetX = contentIsLeft ? 2.45 : -2.45;
-      }
-    }
-
-    window.addEventListener("pointermove", handlePointerMove, { passive: true });
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    handleScroll();
 
     let frameId = 0;
     const still = reducedMotion();
@@ -197,29 +148,26 @@ export function CortexScene() {
       const elapsed = clock.getElapsedTime();
       const speed = still ? 0 : elapsed;
       interaction.impulse *= 0.94;
-      const scrollEnergy = still ? 0 : interaction.scroll;
-      const pointerEnergy = still ? 0 : interaction.pointerY;
       const pulse = still ? 0 : interaction.impulse;
-      interaction.currentX += (interaction.targetX - interaction.currentX) * 0.06;
 
-      group.rotation.y = -0.38 + Math.sin(speed * 0.18) * 0.09 + interaction.pointerX * 0.18 + scrollEnergy * 0.42;
-      group.rotation.x = Math.sin(speed * 0.12) * 0.045 + pointerEnergy * 0.12;
-      group.position.y = 0.18 - scrollEnergy * 0.54 + pointerEnergy * 0.22;
-      group.position.x = interaction.currentX + interaction.pointerX * 0.16;
-      core.rotation.y = speed * (0.22 + pulse * 0.5) + scrollEnergy * 1.7;
-      core.rotation.x = speed * 0.12 + pointerEnergy * 0.4;
-      const fade = Math.max(0.2, 1 - scrollEnergy * 0.46);
+      group.rotation.y = -0.38 + Math.sin(speed * 0.18) * 0.09;
+      group.rotation.x = Math.sin(speed * 0.12) * 0.045;
+      group.position.y = 0.18;
+      group.position.x = -2.1;
+      core.rotation.y = speed * (0.22 + pulse * 0.5);
+      core.rotation.x = speed * 0.12;
+      const fade = 0.84;
       core.material.emissiveIntensity = (0.12 + pulse * 0.28) * fade;
       wire.rotation.y = -speed * (0.16 + pulse * 0.7);
       wire.material.opacity = (0.17 + pulse * 0.16) * fade;
-      particles.rotation.y = speed * (0.025 + scrollEnergy * 0.08);
+      particles.rotation.y = speed * 0.025;
       particles.material.opacity = (0.34 + pulse * 0.16) * fade;
-      pathGroup.position.x = Math.sin(speed * 0.4) * 0.18 + interaction.pointerX * 0.2;
-      pathGroup.rotation.z = scrollEnergy * 0.12;
+      pathGroup.position.x = Math.sin(speed * 0.4) * 0.18;
+      pathGroup.rotation.z = 0;
 
       rings.forEach((ring, index) => {
-        ring.rotation.z = speed * (0.12 + index * 0.045 + pulse * 0.22) + scrollEnergy * 0.7 * (index + 1);
-        ring.scale.setScalar(1 + pulse * 0.08 + scrollEnergy * 0.025 * (index + 1));
+        ring.rotation.z = speed * (0.12 + index * 0.045 + pulse * 0.22);
+        ring.scale.setScalar(1 + pulse * 0.08);
         ring.material.opacity = (0.22 + Math.sin(speed + index) * 0.08 + pulse * 0.1) * fade;
       });
 
@@ -231,8 +179,6 @@ export function CortexScene() {
     return () => {
       window.cancelAnimationFrame(frameId);
       resizeObserver.disconnect();
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("scroll", handleScroll);
       host.removeChild(renderer.domElement);
       scene.traverse(object => {
         object.geometry?.dispose?.();

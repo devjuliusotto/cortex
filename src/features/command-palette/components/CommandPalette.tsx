@@ -96,6 +96,7 @@ export function CommandPalette({ open, onClose, onSavedCommandsOpen }: CommandPa
   const {
     activeWorkspaceId,
     commandHistory,
+    createMarketingModeDemo,
     createSavedCommand,
     createSession,
     createTemplateInstance,
@@ -207,6 +208,15 @@ export function CommandPalette({ open, onClose, onSavedCommandsOpen }: CommandPa
         run: installWorkflowTemplates,
       },
       {
+        id: "marketing:demo",
+        title: "Create Marketing Mode",
+        subtitle: "Generate demo workspaces for screenshots",
+        section: "Marketing",
+        keywords: "marketing demo screenshots landing page fake terminal git notes history",
+        icon: <Sparkles className="h-4 w-4 text-cortex-amber" />,
+        run: createMarketingModeDemo,
+      },
+      {
         id: "commands:manage",
         title: "Gerenciar comandos salvos",
         subtitle: "Criar, editar, importar e executar",
@@ -283,6 +293,7 @@ export function CommandPalette({ open, onClose, onSavedCommandsOpen }: CommandPa
     activeWorkspace?.name,
     activeWorkspaceId,
     commandHistory,
+    createMarketingModeDemo,
     createSession,
     onSavedCommandsOpen,
     savedCommands,
