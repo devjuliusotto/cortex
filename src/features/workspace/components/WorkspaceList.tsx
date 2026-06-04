@@ -101,7 +101,7 @@ export function WorkspaceList() {
         </Button>
       </div>
 
-      <div className="min-h-0 flex-1 space-y-1 overflow-y-auto p-2">
+      <div className="min-h-0 flex-1 space-y-1 overflow-y-auto p-[var(--cortex-workspace-list-padding)]">
         {workspaces.length === 0 ? (
           <div className="rounded-md border border-dashed border-border p-3 text-xs leading-5 text-muted-foreground">
             Create a workspace to start organizing terminal sessions.
@@ -141,7 +141,7 @@ export function WorkspaceList() {
                 }}
               >
                 <button
-                  className="flex min-w-0 w-full items-start gap-2 text-left"
+                  className="flex min-w-0 w-full items-center gap-[var(--cortex-workspace-item-gap)] text-left"
                   onClick={() => setActiveWorkspace(workspace.id)}
                   type="button"
                   title={
@@ -150,16 +150,20 @@ export function WorkspaceList() {
                       : workspace.name
                   }
                 >
-                  <span
-                    className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded-sm border border-border"
-                    style={{ backgroundColor: workspace.color ?? "transparent" }}
-                  />
-                  <Folder
-                    className={cn(
-                      "mt-0.5 h-4 w-4 shrink-0 text-muted-foreground",
-                      active && "text-primary",
+                  <span className="relative grid h-5 w-5 shrink-0 place-items-center">
+                    <Folder
+                      className={cn(
+                        "h-4 w-4 text-muted-foreground",
+                        active && "text-primary",
+                      )}
+                    />
+                    {workspace.color && (
+                      <span
+                        className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-sm border border-background"
+                        style={{ backgroundColor: workspace.color }}
+                      />
                     )}
-                  />
+                  </span>
                   <span className="min-w-0 flex-1">
                     <span className="flex min-w-0 items-center gap-2">
                       <span className="min-w-0 flex-1 truncate text-sm text-foreground">{workspace.name}</span>

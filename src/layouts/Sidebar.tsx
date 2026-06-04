@@ -34,12 +34,12 @@ export function Sidebar({
       transition={{ duration: 0.2, ease: "easeOut" }}
     >
       <div className="flex h-14 items-center justify-between border-b border-border px-3">
-        <div className={cn("flex items-center gap-3 overflow-hidden", collapsed && "justify-center")}>
+        <div className={cn("flex items-center gap-[var(--cortex-brand-text-gap)] overflow-hidden", collapsed && "justify-center")}>
           <CortexLogo className="h-8 w-8 shrink-0 rounded-md shadow-glow" />
           {!collapsed && (
-              <div className="min-w-0">
-                <div className="truncate text-sm font-semibold tracking-wide">Cortex</div>
-              <div className="text-[11px] text-muted-foreground">Local terminal manager</div>
+            <div className="min-w-0 leading-none">
+              <div className="truncate text-sm font-semibold">Cortex</div>
+              <div className="mt-1.5 text-[11px] text-muted-foreground">Workspaces locais</div>
             </div>
           )}
         </div>

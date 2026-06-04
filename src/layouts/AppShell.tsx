@@ -185,7 +185,7 @@ export function AppShell() {
                 ? `${itemCount} workspace item${itemCount === 1 ? "" : "s"} · Workspace path: ${
                     activeWorkspace.defaultWorkingDirectory ?? "not set"
                   }`
-                : "Local-first Windows terminal manager"}
+                : "Terminais, comandos e contexto local"}
             </p>
           </div>
 
