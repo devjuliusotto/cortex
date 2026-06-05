@@ -11,6 +11,7 @@ const portfolioUrl = "https://juliusotto.dev";
 const coffeeUrl = "https://www.buymeacoffee.com/devjuliusotto";
 const contactUrl = "https://juliusotto.vercel.app/contact";
 const privacyPolicyUrl = "/privacy-policy";
+const installerExitCodesPath = "/installer-exit-codes";
 const legalCopy = {
   navPrivacy: "Privacy",
   title: "Privacy and data",
@@ -227,9 +228,19 @@ const pages = [
   { id: "demo", label: "Demo" },
   { id: "features", label: "Features" },
   { id: "docs", label: "Docs" },
+  { id: "installer-exit-codes", label: "Exit Codes", path: installerExitCodesPath },
   { id: "privacy", label: "Privacy" },
   { id: "about", label: "About" },
 ];
+
+function getPageFromLocation() {
+  if (window.location.pathname === installerExitCodesPath) {
+    return "installer-exit-codes";
+  }
+
+  const hash = window.location.hash.replace("#", "");
+  return pages.some(page => page.id === hash) || hash === "download" ? hash : "home";
+}
 
 function useFirstAvailable(sources) {
   const [source, setSource] = useState("");
@@ -912,13 +923,84 @@ function LegalPrivacyPage() {
   );
 }
 
+function InstallerExitCodesPage() {
+  return (
+    <section className="section exitCodesSection" id="installer-exit-codes">
+      <div className="exitCodesHeader">
+        <span className="sectionEyebrow">Installer Reference</span>
+
+        <h1>Cortex Installer Exit Codes</h1>
+
+        <p>
+          The Cortex installer may return the following exit codes during
+          installation.
+        </p>
+      </div>
+
+      <table className="exitCodesTable">
+        <thead>
+          <tr>
+            <th>Code</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          <tr>
+            <td>0</td>
+            <td>Installation completed successfully.</td>
+          </tr>
+
+          <tr>
+            <td>1</td>
+            <td>Installation cancelled by the user.</td>
+          </tr>
+
+          <tr>
+            <td>2</td>
+            <td>The application is already installed.</td>
+          </tr>
+
+          <tr>
+            <td>3</td>
+            <td>Another installation is currently in progress.</td>
+          </tr>
+
+          <tr>
+            <td>4</td>
+            <td>Insufficient disk space available.</td>
+          </tr>
+
+          <tr>
+            <td>5</td>
+            <td>A system restart is required.</td>
+          </tr>
+
+          <tr>
+            <td>6</td>
+            <td>A network-related error occurred.</td>
+          </tr>
+
+          <tr>
+            <td>7</td>
+            <td>The package was blocked by a device security policy.</td>
+          </tr>
+
+          <tr>
+            <td>8</td>
+            <td>A generic installation error occurred.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+  );
+}
+
+
 export function App() {
   const [introDone, setIntroDone] = useState(false);
   const [loadProgress, setLoadProgress] = useState(0);
-  const [activePage, setActivePage] = useState(() => {
-    const hash = window.location.hash.replace("#", "");
-    return pages.some(page => page.id === hash) || hash === "download" ? hash : "home";
-  });
+  const [activePage, setActivePage] = useState(getPageFromLocation);
 
   useEffect(() => {
     const startedAt = Date.now();
@@ -937,20 +1019,20 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    const handleHashChange = () => {
-      const hash = window.location.hash.replace("#", "");
-      if (pages.some(page => page.id === hash) || hash === "download") {
-        setActivePage(hash);
-      }
-    };
+    const handleLocationChange = () => setActivePage(getPageFromLocation());
 
-    window.addEventListener("hashchange", handleHashChange);
-    return () => window.removeEventListener("hashchange", handleHashChange);
+    window.addEventListener("hashchange", handleLocationChange);
+    window.addEventListener("popstate", handleLocationChange);
+    return () => {
+      window.removeEventListener("hashchange", handleLocationChange);
+      window.removeEventListener("popstate", handleLocationChange);
+    };
   }, []);
 
   function selectPage(pageId) {
     setActivePage(pageId);
-    window.history.pushState(null, "", `#${pageId}`);
+    const page = pages.find(item => item.id === pageId);
+    window.history.pushState(null, "", page?.path ?? `/#${pageId}`);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -1121,6 +1203,7 @@ export function App() {
         )}
 
         {activePage === "docs" && <Documentation />}
+        {activePage === "installer-exit-codes" && <InstallerExitCodesPage />}
         {activePage === "privacy" && <LegalPrivacyPage />}
         {activePage === "download" && <DownloadCenter />}
         {activePage === "about" && <SupportAndAbout />}
@@ -1131,6 +1214,9 @@ export function App() {
           Privacy
         </button>
         <a href={privacyPolicyUrl}>Privacy policy</a>
+        <button onClick={() => selectPage("installer-exit-codes")} type="button">
+          Installer exit codes
+        </button>
       </footer>
     </main>
   );

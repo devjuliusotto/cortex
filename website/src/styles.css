@@ -430,6 +430,7 @@ code {
 .pagePanel > .mediaSection:first-child,
 .pagePanel > .docsSection:first-child,
 .pagePanel > .downloadCenter:first-child,
+.pagePanel > .exitCodesSection:first-child,
 .pagePanel > .supportAbout:first-child,
 .pagePanel > .coreSections:first-child {
   padding-top: 150px;
@@ -1890,6 +1891,68 @@ code {
   text-transform: uppercase;
 }
 
+.exitCodesSection {
+  min-height: 680px;
+}
+
+.exitCodesHeader {
+  display: grid;
+  gap: 18px;
+  margin-bottom: 30px;
+}
+
+.exitCodesHeader h1 {
+  max-width: 900px;
+  margin: 0;
+  font-size: clamp(42px, 6vw, 86px);
+  line-height: 0.96;
+  letter-spacing: -0.04em;
+}
+
+.exitCodesList {
+  display: grid;
+  gap: 1px;
+  overflow: hidden;
+  max-width: 880px;
+  margin: 0;
+  border: 1px solid rgb(86 240 255 / 0.24);
+  border-radius: 8px;
+  padding: 0;
+  background: var(--line);
+  list-style: none;
+  box-shadow: 0 32px 80px rgb(0 0 0 / 0.28);
+}
+
+.exitCodesList li {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 18px;
+  align-items: center;
+  padding: 24px 28px;
+  background:
+    linear-gradient(90deg, rgb(86 240 255 / 0.08), transparent 42%),
+    rgb(8 11 15 / 0.92);
+}
+
+.exitCodesList strong {
+  display: inline-grid;
+  place-items: center;
+  width: 54px;
+  height: 54px;
+  border: 1px solid rgb(122 247 166 / 0.44);
+  border-radius: 8px;
+  color: var(--green);
+  background: rgb(122 247 166 / 0.08);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 24px;
+}
+
+.exitCodesList span {
+  color: var(--muted-strong);
+  font-size: 18px;
+  line-height: 1.55;
+}
+
 .supportGrid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -2787,8 +2850,23 @@ code {
 
   .docsArticle,
   .legalPanel,
+  .exitCodesList li,
   .supportPanel {
     padding: 22px;
+  }
+
+  .exitCodesList li {
+    grid-template-columns: 64px minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .exitCodesList strong {
+    width: 48px;
+    height: 48px;
+  }
+
+  .exitCodesList span {
+    font-size: 16px;
   }
 
   .docScreenshot {
