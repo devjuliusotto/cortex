@@ -1,5 +1,6 @@
 import { useCallback } from "react";
 import type { Graphics } from "pixi.js";
+import { RESEARCH_LIBRARY_LAYOUT } from "../officeLayout";
 
 export function OfficeBackground({ workspaceName, waiting }: { workspaceName: string; waiting: boolean }) {
   const draw = useCallback((g: Graphics) => {
@@ -45,10 +46,21 @@ export function OfficeBackground({ workspaceName, waiting }: { workspaceName: st
     for (const x of [365, 895]) g.rect(x, 516, 16, 50).fill(0x49332c);
 
     // Library / research corner.
-    g.rect(63, 178, 226, 302).fill(0x352d37).stroke({ color: 0x786054, width: 4 });
-    for (const y of [225, 287, 349, 411]) g.rect(74, y, 204, 9).fill(0x815c46);
+    // Bookshelf dimensions and shelf count are controlled by RESEARCH_LIBRARY_LAYOUT.
+    const { bookshelf, shelfCount, booksPerShelf } = RESEARCH_LIBRARY_LAYOUT;
+    g.rect(bookshelf.x, bookshelf.y, bookshelf.width, bookshelf.height).fill(0x352d37).stroke({ color: 0x786054, width: 4 });
+    const shelfHeight = bookshelf.height / shelfCount;
     const books = [0xc86b69, 0x6ba6b8, 0xd8ae68, 0x7e8bc4, 0x73a37d];
-    for (let row = 0; row < 4; row += 1) for (let i = 0; i < 8; i += 1) g.rect(82 + i * 23, 190 + row * 62, 15, 34 + (i % 3) * 5).fill(books[(row + i) % books.length]);
+    for (let row = 0; row < shelfCount; row += 1) {
+      const shelfY = bookshelf.y + shelfHeight * (row + 1);
+      g.rect(bookshelf.x + 8, shelfY - 8, bookshelf.width - 16, 8).fill(0x815c46);
+      for (let i = 0; i < booksPerShelf; i += 1) {
+        const bookWidth = 14;
+        const bookGap = (bookshelf.width - 28) / booksPerShelf;
+        const bookHeight = Math.min(38 + (i % 3) * 5, shelfHeight - 16);
+        g.rect(bookshelf.x + 14 + i * bookGap, shelfY - 8 - bookHeight, bookWidth, bookHeight).fill(books[(row + i) % books.length]);
+      }
+    }
 
     // Build rack.
     g.roundRect(978, 236, 232, 214, 6).fill(0x252937).stroke({ color: 0x606b82, width: 4 });
@@ -89,7 +101,7 @@ export function OfficeBackground({ workspaceName, waiting }: { workspaceName: st
       <pixiText text={workspaceName.toUpperCase()} x={640} y={78} anchor={0.5} style={{ fill: 0xf0e8d5, fontFamily: "monospace", fontSize: 24, fontWeight: "bold", letterSpacing: 4 }} />
       <pixiText text={waiting ? "NO ACTIVE AI AGENTS DETECTED" : "OFFICE ONLINE"} x={640} y={121} anchor={0.5} style={{ fill: waiting ? 0xc6bda9 : 0x6fd8a0, fontFamily: "monospace", fontSize: 11, letterSpacing: 2 }} />
       {waiting && <pixiText text="Start Claude, Codex, GPT, or Gemini in a terminal" x={640} y={140} anchor={0.5} style={{ fill: 0x8f96a8, fontFamily: "monospace", fontSize: 8 }} />}
-      <pixiText text="RESEARCH" x={176} y={158} anchor={0.5} style={zoneStyle} />
+      <pixiText text="RESEARCH" x={RESEARCH_LIBRARY_LAYOUT.label.x} y={RESEARCH_LIBRARY_LAYOUT.label.y} anchor={0.5} style={zoneStyle} />
       <pixiText text="BUILD LAB" x={1094} y={210} anchor={0.5} style={zoneStyle} />
       <pixiText text="TEST BOARD" x={1093} y={460} anchor={0.5} style={zoneStyle} />
       <pixiText text="REPOSITORY" x={428} y={551} anchor={0.5} style={zoneStyle} />

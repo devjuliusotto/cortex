@@ -4,6 +4,14 @@ export const OFFICE_SCENE_WIDTH = 1280;
 export const OFFICE_SCENE_HEIGHT = 760;
 export const AGENT_EXIT_DELAY_MS = 4200;
 
+// Adjust these values together to resize or reposition the compact research corner.
+export const RESEARCH_LIBRARY_LAYOUT = {
+  bookshelf: { x: 66, y: 246, width: 174, height: 184 },
+  shelfCount: 3,
+  booksPerShelf: 6,
+  label: { x: 153, y: 226 },
+} as const;
+
 export type OfficeAnchor = {
   id: string;
   deskRect: { x: number; y: number; width: number; height: number };
@@ -32,7 +40,12 @@ export const OFFICE_ZONE_ANCHORS: Record<OfficeZone, OfficeAnchor[]> = {
     anchor("codingDesk3", 711, 455, 711, 548),
     anchor("codingDesk4", 851, 455, 851, 548),
   ],
-  researchLibrary: [anchor("research1", 112, 300, 302, 332), anchor("research2", 135, 380, 304, 410), anchor("research3", 155, 438, 304, 466)],
+  // Research agents stay beside the shelf, clear of its furniture footprint.
+  researchLibrary: [
+    anchor("research1", 270, 292, 278, 302),
+    anchor("research2", 270, 350, 282, 362),
+    anchor("research3", 270, 408, 278, 420),
+  ],
   buildLab: [anchor("build1", 1024, 348, 946, 350), anchor("build2", 1140, 392, 946, 410)],
   testBoard: [anchor("test1", 1015, 548, 930, 548), anchor("test2", 1120, 548, 1230, 548)],
   debugCorner: [anchor("debug1", 820, 625, 744, 652), anchor("debug2", 935, 625, 1004, 652)],

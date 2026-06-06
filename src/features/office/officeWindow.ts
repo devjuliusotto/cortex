@@ -2,6 +2,7 @@ import type { CommandHistoryEntry } from "@/features/terminal/commandHistory";
 import type { TerminalSession, Workspace } from "@/stores/cortexStore";
 
 const CHANNEL_NAME = "cortex-office-window-v1";
+const OFFICE_WINDOW_PATH = "/office?mode=window";
 
 export type OfficeWindowSnapshot = {
   activeWorkspaceId: string | null;
@@ -15,10 +16,49 @@ type OfficeWindowMessage =
   | { type: "snapshot"; snapshot: OfficeWindowSnapshot }
   | { type: "focusTerminal"; terminalId: string };
 
-export function openOfficeWindow() {
+function browserOfficeWindowUrl() {
   const url = new URL(window.location.href);
-  url.hash = "/office?mode=window";
-  window.open(url.toString(), "cortex-office", "noopener,noreferrer");
+  url.hash = OFFICE_WINDOW_PATH;
+  return url.toString();
+}
+
+function openBrowserOfficeWindow() {
+  const officeWindow = window.open(browserOfficeWindowUrl(), "_blank", "noopener,noreferrer");
+  if (!officeWindow) {
+    console.warn("Office window popup was blocked by the browser");
+    return false;
+  }
+  return true;
+}
+
+export async function openOfficeWindow() {
+  if (!("__TAURI_INTERNALS__" in window)) {
+    return openBrowserOfficeWindow();
+  }
+
+  try {
+    const { WebviewWindow } = await import("@tauri-apps/api/webviewWindow");
+    const label = `office-${Date.now()}`;
+    const officeWindow = new WebviewWindow(label, {
+      url: `/#${OFFICE_WINDOW_PATH}`,
+      title: "Cortex Office View",
+      width: 1280,
+      height: 820,
+      minWidth: 900,
+      minHeight: 620,
+      resizable: true,
+      center: true,
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      void officeWindow.once("tauri://created", () => resolve());
+      void officeWindow.once<string>("tauri://error", (event) => reject(new Error(event.payload)));
+    });
+    return true;
+  } catch (error) {
+    console.warn("Tauri Office window creation failed; trying browser fallback", error);
+    return openBrowserOfficeWindow();
+  }
 }
 
 export function createOfficeWindowChannel(onMessage: (message: OfficeWindowMessage) => void) {

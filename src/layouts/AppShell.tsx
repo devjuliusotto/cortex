@@ -319,7 +319,7 @@ export function AppShell() {
                 </button>
               </div>
             )}
-            {OFFICE_VIEW_ADDON_ENABLED && activeWorkspace && <Button className="hidden gap-2 sm:inline-flex" size="sm" variant="outline" onClick={openOfficeWindow} title="Open Office in a separate window"><ExternalLink className="h-4 w-4" /><span className="hidden xl:inline">Open Office Window</span></Button>}
+            {OFFICE_VIEW_ADDON_ENABLED && activeWorkspace && <Button className="hidden gap-2 sm:inline-flex" size="sm" variant="outline" onClick={() => void openOfficeWindow()} title="Open Office in a separate window"><ExternalLink className="h-4 w-4" /><span className="hidden xl:inline">Open Office Window</span></Button>}
             {!officeViewEnabled && <Button
               className="hidden gap-2 border-border bg-secondary/70 text-muted-foreground hover:text-foreground md:inline-flex"
               size="sm"
@@ -347,7 +347,7 @@ export function AppShell() {
               <FolderPlus className="mr-2 h-4 w-4" />
               Workspace
             </Button>
-            {!officeViewEnabled && <label
+            {!officeViewEnabled && !officeDeepLink && <label
               className="flex h-9 items-center gap-2 rounded-md border border-border bg-secondary px-3 text-xs text-muted-foreground"
               title={
                 activeTerminal
