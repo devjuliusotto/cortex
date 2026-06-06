@@ -1,4 +1,5 @@
 import {
+  Building2,
   ClipboardList,
   FileText,
   GitBranch,
@@ -21,6 +22,7 @@ import { useCortexStore, type SavedCommand, type TerminalSession } from "@/store
 type CommandPaletteProps = {
   open: boolean;
   onClose: () => void;
+  onOfficeOpen: () => void;
   onSavedCommandsOpen: () => void;
 };
 
@@ -92,7 +94,7 @@ function activeTerminalForWorkspace(
   );
 }
 
-export function CommandPalette({ open, onClose, onSavedCommandsOpen }: CommandPaletteProps) {
+export function CommandPalette({ open, onClose, onOfficeOpen, onSavedCommandsOpen }: CommandPaletteProps) {
   const {
     activeWorkspaceId,
     commandHistory,
@@ -158,6 +160,16 @@ export function CommandPalette({ open, onClose, onSavedCommandsOpen }: CommandPa
 
   const actions = useMemo<PaletteAction[]>(() => {
     const baseActions: PaletteAction[] = [
+      {
+        id: "workspace:office",
+        title: "Open Office View",
+        subtitle: "Pixel overview of workspace terminals",
+        section: "Workspace",
+        keywords: "office desks agents workers pixel view",
+        icon: <Building2 className="h-4 w-4 text-primary" />,
+        disabled: !activeWorkspaceId,
+        run: onOfficeOpen,
+      },
       {
         id: "workspace:new-terminal",
         title: "Novo terminal",
@@ -296,6 +308,7 @@ export function CommandPalette({ open, onClose, onSavedCommandsOpen }: CommandPa
     createMarketingModeDemo,
     createSession,
     onSavedCommandsOpen,
+    onOfficeOpen,
     savedCommands,
     sessions,
     setActiveItem,

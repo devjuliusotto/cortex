@@ -1,4 +1,5 @@
 import {
+  Building2,
   ChevronLeft,
   ChevronRight,
   ClipboardList,
@@ -14,6 +15,8 @@ import { cn } from "@/lib/utils";
 
 type SidebarProps = {
   collapsed: boolean;
+  officeActive: boolean;
+  onOfficeOpen: () => void;
   onSavedCommandsOpen: () => void;
   onMarketplaceOpen: () => void;
   onSettingsOpen: () => void;
@@ -22,6 +25,8 @@ type SidebarProps = {
 
 export function Sidebar({
   collapsed,
+  officeActive,
+  onOfficeOpen,
   onMarketplaceOpen,
   onSavedCommandsOpen,
   onSettingsOpen,
@@ -63,6 +68,19 @@ export function Sidebar({
       )}
 
       <div className="border-t border-border p-3">
+        <button
+          className={cn(
+            "mb-1 flex h-10 w-full items-center gap-3 rounded-md px-3 text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground",
+            officeActive && "bg-secondary text-foreground shadow-glow",
+            collapsed && "justify-center px-0",
+          )}
+          onClick={onOfficeOpen}
+          type="button"
+          title="Open Office View"
+        >
+          <Building2 className="h-4 w-4 shrink-0" />
+          {!collapsed && <span>Office View</span>}
+        </button>
         <button
           className={cn(
             "mb-1 flex h-10 w-full items-center gap-3 rounded-md px-3 text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground",

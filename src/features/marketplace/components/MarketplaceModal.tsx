@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import {
   AlertTriangle,
+  Building2,
   Bug,
   CheckSquare,
   ExternalLink,
@@ -270,6 +271,11 @@ function AddOnsTab() {
         remote code, run third-party plugins, or include paid marketplace logic.
       </p>
       <div className="mt-5 grid gap-3 md:grid-cols-2">
+        <InfoCard
+          icon={<Building2 className="h-4 w-4 text-cortex-green" />}
+          title="Office View · Enabled"
+          text="Built-in lightweight PixiJS workspace visualization. Open it from the sidebar or command palette."
+        />
         <InfoCard
           icon={<Puzzle className="h-4 w-4 text-primary" />}
           title="No plugin runtime"

@@ -12,31 +12,24 @@ const coffeeUrl = "https://www.buymeacoffee.com/devjuliusotto";
 
 const imageExtensions = ["png", "jpg", "jpeg", "webp"];
 const videoSources = ["/media/video-geral.webm", "/media/video-geral.mp4", "/media/cortex-overview.webm", "/media/cortex-overview.mp4"];
+const heroImageSources = ["/assets/cortex-hero.png"];
 
 const productHighlights = [
   {
-    title: "Projetos isolados",
-    text: "Cada workspace mantém caminho, layout, notas, histórico, comandos e terminais separados por projeto.",
+    title: "Persistent Workspaces",
+    text: "Each project keeps terminals, paths, layout, notes, history and saved commands in one local workspace.",
   },
   {
-    title: "Agentes em paralelo",
-    text: "Abra vários terminais para agentes de IA, scripts e servidores sem misturar contexto entre projetos.",
+    title: "Git Map",
+    text: "Branches, commits, changes and releases become visible without forcing beginners to memorize every command first.",
   },
   {
-    title: "GUI para terminal",
-    text: "Use abas, panes, Git Map, notas e command palette para operar o terminal com menos fricção.",
-  },
-  {
-    title: "Windows-first",
-    text: "PowerShell, CMD e WSL Ubuntu com ConPTY, cwd por sessão e suporte a caminhos com OneDrive e espaços.",
+    title: "Notes & Command History",
+    text: "Save important commands, decisions and project notes next to the terminals that need them.",
   },
   {
     title: "Local-first",
-    text: "Sem telemetria, analytics, cloud sync, AI ou chamadas externas de fundo. O estado fica no app data local.",
-  },
-  {
-    title: "Release helper",
-    text: "Comandos salvos e Git Map ajudam a preparar versão, tag, changelog e publicação sem sair do contexto.",
+    text: "No telemetry, analytics, cloud sync or backend. Cortex keeps the workspace state on your machine.",
   },
 ];
 
@@ -194,6 +187,49 @@ const demoProjects = [
   },
 ];
 
+const cortexDemo = {
+  workspaces: [
+    { name: "Portfolio", status: "clean" },
+    { name: "Cortex", status: "3 changes" },
+    { name: "API Server", status: "tests running" },
+    { name: "Docs", status: "draft" },
+  ],
+  terminal: [
+    "PS C:\\Projects\\Cortex> npm run dev",
+    "vite v6.3.5 ready in 421 ms",
+    "local: http://127.0.0.1:5173/",
+    "workspace restored: terminal + git map + notes",
+    "agent pane: waiting for next task",
+  ],
+  git: {
+    branch: "main",
+    status: "3 files changed",
+    commits: [
+      "Improve website demo flow",
+      "Polish hacker hero motion",
+      "Add docs page structure",
+    ],
+  },
+  notes: [
+    "Explain Git visually for beginners.",
+    "Keep agent terminals separated by project.",
+    "Next release: validate installer assets.",
+  ],
+  history: [
+    "npm run build",
+    "git status",
+    "cargo check --manifest-path .\\src-tauri\\Cargo.toml",
+    "git tag v0.1.18",
+  ],
+};
+
+const demoTabs = [
+  { id: "terminal", label: "Terminal" },
+  { id: "git", label: "Git Map" },
+  { id: "notes", label: "Notes" },
+  { id: "history", label: "Command History" },
+];
+
 const roadmapItems = [
   "Runtime de terminal mais persistente via tray process local.",
   "Import/export de perfis de workspace.",
@@ -337,6 +373,125 @@ function Hero3DStage() {
   );
 }
 
+function CortexDemoWindow({ hero = false }) {
+  const [activeTab, setActiveTab] = useState("terminal");
+
+  return (
+    <div className={`cortexDemoWindow ${hero ? "heroDemo" : ""}`} aria-label="Interactive Cortex product demo">
+      <aside className="cortexDemoSidebar" aria-label="Workspace sidebar">
+        <div className="demoBrand">
+          <img src="/cortex-logo.svg" alt="" />
+          <span>Cortex</span>
+        </div>
+        <span className="demoRailLabel">Workspaces</span>
+        {cortexDemo.workspaces.map(workspace => (
+          <button
+            className={workspace.name === "Cortex" ? "active" : ""}
+            key={workspace.name}
+            type="button"
+          >
+            <strong>{workspace.name}</strong>
+            <small>{workspace.status}</small>
+          </button>
+        ))}
+      </aside>
+
+      <div className="cortexDemoMain">
+        <header className="cortexDemoTopbar">
+          <div>
+            <strong>Cortex</strong>
+            <small>C:\Projects\Cortex</small>
+          </div>
+          <div className="demoBadges">
+            <span>local-first</span>
+            <span>open source</span>
+          </div>
+        </header>
+
+        <div className="cortexDemoTabs" role="tablist" aria-label="Demo panels">
+          {demoTabs.map(tab => (
+            <button
+              aria-selected={activeTab === tab.id}
+              className={activeTab === tab.id ? "active" : ""}
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              role="tab"
+              type="button"
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        <section className="cortexDemoPanel" role="tabpanel">
+          {activeTab === "terminal" && (
+            <pre className="fakeTerminal">
+              {cortexDemo.terminal.join("\n")}
+            </pre>
+          )}
+
+          {activeTab === "git" && (
+            <div className="fakeGitMap">
+              <div className="gitStatusCard">
+                <span>Branch</span>
+                <strong>{cortexDemo.git.branch}</strong>
+              </div>
+              <div className="gitStatusCard">
+                <span>Status</span>
+                <strong>{cortexDemo.git.status}</strong>
+              </div>
+              <div className="commitRail">
+                {cortexDemo.git.commits.map((commit, index) => (
+                  <article key={commit}>
+                    <span>{index + 1}</span>
+                    <p>{commit}</p>
+                  </article>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {activeTab === "notes" && (
+            <div className="fakeNotes">
+              {cortexDemo.notes.map(note => (
+                <article key={note}>
+                  <span>note</span>
+                  <p>{note}</p>
+                </article>
+              ))}
+            </div>
+          )}
+
+          {activeTab === "history" && (
+            <div className="fakeHistory">
+              {cortexDemo.history.map(command => (
+                <button key={command} type="button">
+                  <code>{command}</code>
+                  <span>saved</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function HeroProductPreview() {
+  const heroImage = useFirstAvailable(heroImageSources);
+
+  if (heroImage) {
+    return (
+      <div className="heroScreenshotFrame">
+        <img src={heroImage} alt="Cortex workspace preview" />
+      </div>
+    );
+  }
+
+  return <CortexDemoWindow hero />;
+}
+
 function ImpactReveal() {
   return (
     <section className="impactReveal" aria-label="Cortex product statement">
@@ -417,81 +572,15 @@ function CoreSections() {
 }
 
 function MediaShowcase() {
-  const videoSrc = useFirstAvailable(videoSources);
-  const [activeProjectId, setActiveProjectId] = useState(demoProjects[0].id);
-  const activeProject = demoProjects.find(project => project.id === activeProjectId) ?? demoProjects[0];
-
   return (
     <section className="section mediaSection" id="demo">
-      <div className="sectionEyebrow">Interactive demo</div>
       <div className="sectionHeader">
-        <h2>Troque de projeto sem perder o agente certo.</h2>
-        <p>
-          Clique em um workspace e veja como terminal, Git, notas e comandos mudam juntos.
-          A ideia é simples: cada projeto carrega seu próprio contexto operacional.
-        </p>
+        <span className="sectionEyebrow">Demo</span>
+        <h2>See Cortex in action</h2>
+        <p>Static preview. No terminal, Git connection, backend or real app state.</p>
       </div>
 
-      <div className="interactiveDemo">
-        <aside className="demoSidebar">
-          <span className="demoLabel">Workspaces</span>
-          {demoProjects.map(project => (
-            <button
-              className={project.id === activeProject.id ? "active" : ""}
-              key={project.id}
-              onClick={() => setActiveProjectId(project.id)}
-              type="button"
-            >
-              <strong>{project.name}</strong>
-              <small>{project.agent}</small>
-            </button>
-          ))}
-        </aside>
-
-        <div className="demoWorkspace">
-          <div className="demoTopbar">
-            <div>
-              <strong>{activeProject.name}</strong>
-              <small>{activeProject.path}</small>
-            </div>
-            <span>{activeProject.git}</span>
-          </div>
-          <div className="demoPanes">
-            <section className="demoTerminalPane">
-              <div className="paneTitle">Terminal agent</div>
-              <pre>{`PS ${activeProject.path}> ${activeProject.command}
-${activeProject.output.map(line => `\n${line}`).join("")}`}</pre>
-            </section>
-            <section className="demoSidePane">
-              <div className="paneTitle">Project context</div>
-              <div className="contextCard">
-                <strong>Nota ativa</strong>
-                <p>{activeProject.note}</p>
-              </div>
-              <div className="contextCard">
-                <strong>Comando salvo</strong>
-                <code>{activeProject.command}</code>
-              </div>
-            </section>
-          </div>
-        </div>
-      </div>
-
-      <div className="videoFrame">
-        {videoSrc ? (
-          <video controls playsInline poster="/media/1.png" src={videoSrc} />
-        ) : (
-          <div className="videoFallback">
-            <AppMockup compact />
-          </div>
-        )}
-      </div>
-
-      <div className="gallery">
-        {gallery.map(item => (
-          <MediaCard item={item} key={item.title} />
-        ))}
-      </div>
+      <CortexDemoWindow />
     </section>
   );
 }
@@ -898,38 +987,31 @@ export function App() {
       <div className="pagePanel" role="tabpanel">
         {activePage === "home" && (
           <>
-            <section className="hero" id="top">
+            <section className="hero productHero" id="top">
               <div className="heroShock" aria-hidden="true">
                 <span className="shockLine shockLineA" />
                 <span className="shockLine shockLineB" />
                 <span className="shockNode shockNodeA" />
                 <span className="shockNode shockNodeB" />
               </div>
-              <div className="heroVisual" aria-hidden="true">
-                <Hero3DStage />
+              <div className="heroVisual">
+                <HeroProductPreview />
               </div>
               <div className="heroText">
-                <div className="hackerWordmark" aria-label="Cortex">
-                  <span className="promptSig">~/workspace</span>
-                  <h1 className="typedTitle">Cortex</h1>
-                  <span className="promptStatus">root context loaded</span>
-                </div>
-                {/* <p className="lead heroPunch">Git visual. Projetos claros. Agentes organizados.</p> */}
-                {/* <div className="heroActions">
+                <h1>Your project. Exactly where you left it.</h1>
+                <p className="heroSubcopy">
+                  Cortex keeps terminals, Git, notes, command history and context together in
+                  persistent local workspaces.
+                </p>
+                <div className="heroActions">
                   <button className="button primary" onClick={() => selectPage("download")} type="button">
-                    Baixar para Windows
+                    Download for Windows
                   </button>
                   <a className="button secondary" href={repositoryUrl}>
-                    Ver no GitHub
+                    View on GitHub
                   </a>
-                </div> */}
-                {/* <p className="heroTrust">Grátis, open source e local-first.</p> */}
-                <div className="heroMeta" aria-label="Cortex quick facts">
-                  {/* <span>produtividade expandida</span>
-                  <span>Open Source</span>
-                  <span>Sem telemetria</span>
-                  <span>seus dados 100% na sua maquina</span> */}
                 </div>
+                <p className="heroTrust">Free, open source and local-first.</p>
               </div>
             </section>
 
@@ -972,7 +1054,13 @@ export function App() {
 
         {activePage === "features" && (
           <>
-            <CoreSections />
+            <section className="section featureIntro">
+              <div className="sectionHeader">
+                <span className="sectionEyebrow">Features</span>
+                <h2>Built for projects, Git and parallel agents.</h2>
+                <p>Cortex gives beginners a clearer Git surface and gives power users a local control panel for many running tasks.</p>
+              </div>
+            </section>
             <section className="section featureGrid">
               {productHighlights.map(feature => (
                 <article className="feature" key={feature.title}>
@@ -980,43 +1068,6 @@ export function App() {
                   <p>{feature.text}</p>
                 </article>
               ))}
-            </section>
-            <section className="section workflowSection">
-              <div className="sectionEyebrow">Workflow</div>
-              <div className="workflowGrid">
-                <div>
-                  <h2>Do terminal ao release sem perder o contexto.</h2>
-                  <p>
-                    Cortex não substitui Git, shell ou editor. Ele organiza o entorno: caminho certo,
-                    abas certas, comandos recorrentes e contexto de release sempre no mesmo workspace.
-                  </p>
-                </div>
-                <ol className="workflowSteps">
-                  <li>Abra o workspace e restaure layout, terminal, notas e Git Map.</li>
-                  <li>Rode comandos salvos ou recentes pela Command Palette.</li>
-                  <li>Revise status, commits, branches e release info pelo Git Map.</li>
-                  <li>Publique a versão usando seu fluxo local e GitHub Releases.</li>
-                </ol>
-              </div>
-            </section>
-            <section className="section stats">
-              {metrics.map(([value, label]) => (
-                <div className="stat" key={label}>
-                  <strong>{value}</strong>
-                  <span>{label}</span>
-                </div>
-              ))}
-            </section>
-            <section className="section roadmapSection">
-              <div>
-                <span className="sectionEyebrow">Roadmap</span>
-                <h2>Próximos passos com a mesma regra: local primeiro.</h2>
-              </div>
-              <ul>
-                {roadmapItems.map(item => (
-                  <li key={item}>{item}</li>
-                ))}
-              </ul>
             </section>
           </>
         )}

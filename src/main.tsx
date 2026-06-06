@@ -9,6 +9,10 @@ const router = createHashRouter([
   {
     path: "/",
     element: <AppShell />,
+    children: [
+      { index: true, element: null },
+      { path: "office", element: null },
+    ],
   },
 ]);
 

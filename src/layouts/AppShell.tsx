@@ -11,13 +11,21 @@ import { TerminalPanel } from "@/features/terminal/components/TerminalPanel";
 import { focusTerminal, terminateTerminals, writeTerminal } from "@/features/terminal/terminalBridge";
 import { Sidebar } from "@/layouts/Sidebar";
 import { useCortexStore } from "@/stores/cortexStore";
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router";
+
+const OfficeView = lazy(() =>
+  import("@/features/office/OfficeView").then((module) => ({ default: module.OfficeView })),
+);
 
 function commandForShell(command: string) {
   return `${command.replace(/\r\n/g, "\n").replace(/\r/g, "\n").replace(/\n/g, "\r")}\r`;
 }
 
 export function AppShell() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const officeOpen = location.pathname === "/office";
   const autoStartedWorkspaceIds = useRef(new Set<string>());
   const autoUpdateChecked = useRef(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -35,6 +43,7 @@ export function AppShell() {
     saveNow,
     savedCommands,
     sessions,
+    setActiveItem,
     settings,
     appendTerminalHistory,
     setSessionStatus,
@@ -66,6 +75,15 @@ export function AppShell() {
     void writeTerminal(activeTerminal.id, commandForShell(command.command)).then(() => {
       focusTerminal(activeTerminal.id);
     });
+  };
+
+  const openTerminalFromOffice = (terminalId: string) => {
+    if (!activeWorkspaceId) {
+      return;
+    }
+    setActiveItem(activeWorkspaceId, terminalId);
+    navigate("/");
+    window.setTimeout(() => focusTerminal(terminalId), 100);
   };
 
   useEffect(() => {
@@ -166,6 +184,8 @@ export function AppShell() {
     <div className="flex h-full overflow-hidden bg-background text-foreground">
       <Sidebar
         collapsed={sidebarCollapsed}
+        officeActive={officeOpen}
+        onOfficeOpen={() => navigate("/office")}
         onMarketplaceOpen={() => setMarketplaceOpen(true)}
         onSavedCommandsOpen={() => setSavedCommandsOpen(true)}
         onSettingsOpen={() => setSettingsOpen(true)}
@@ -254,11 +274,19 @@ export function AppShell() {
           </div>
         </header>
 
-        <TerminalPanel workspaceId={activeWorkspaceId} />
+        <div className={officeOpen ? "hidden" : "contents"}>
+          <TerminalPanel workspaceId={activeWorkspaceId} />
+        </div>
+        {officeOpen && (
+          <Suspense fallback={<div className="grid flex-1 place-items-center text-sm text-muted-foreground">Loading Office View…</div>}>
+            <OfficeView onClose={() => navigate("/")} onTerminalSelect={openTerminalFromOffice} />
+          </Suspense>
+        )}
       </main>
       <CommandPalette
         open={commandPaletteOpen}
         onClose={() => setCommandPaletteOpen(false)}
+        onOfficeOpen={() => navigate("/office")}
         onSavedCommandsOpen={() => {
           setCommandPaletteOpen(false);
           setSavedCommandsOpen(true);
