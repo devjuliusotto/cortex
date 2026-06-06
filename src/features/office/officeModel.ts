@@ -1,100 +1,90 @@
 import type { CommandHistoryEntry } from "@/features/terminal/commandHistory";
 import type { TerminalSession } from "@/stores/cortexStore";
-import type { OfficeDeskModel, OfficeSignal, OfficeSummary } from "./officeTypes";
+import { officeTarget } from "./officeLayout";
+import type { OfficeAgentModel, OfficeAgentPose, OfficeSignal, OfficeSummary, OfficeZone } from "./officeTypes";
 
-export const OFFICE_SCENE_WIDTH = 1200;
-export const OFFICE_SCENE_HEIGHT = 720;
-export const OFFICE_ACTIVITY_LIMIT = 52;
+export const OFFICE_ACTIVITY_LIMIT = 42;
 
 const ansiPattern = /\u001b(?:\[[0-?]*[ -/]*[@-~]|\][^\u0007]*(?:\u0007|\u001b\\))/g;
 const errorPattern = /\b(error|failed|failure|fatal|exception|panic|not found|denied)\b/i;
 const successPattern = /\b(success|succeeded|passed|completed|built|compiled|finished|done|0 errors?)\b/i;
 
-function compactActivity(value: string) {
-  const clean = value
-    .replace(ansiPattern, "")
-    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
+const aiAgentPattern = /\b(claude|codex|gpt|gemini|agent)\b/i;
+const zonePatterns: Array<[OfficeZone, RegExp]> = [
+  ["debugCorner", /\b(error|failed?|debug|exception|panic|stack\s*trace|trace|fix)\b/i],
+  ["testBoard", /\b(test|check|lint|vitest|jest|spec|verify|typecheck|tsc)\b/i],
+  ["buildLab", /\b(build|compile|npm|pnpm|yarn|cargo|vite|webpack|bundle|serve|dev)\b/i],
+  ["researchLibrary", /\b(search|research|docs?|documentation|web|browse|read|fetch|find|lookup)\b/i],
+  ["gitBoard", /\b(git|commit|stage|diff|branch|merge|rebase|push|pull|release)\b/i],
+  ["codingDesks", /\b(code|write|edit|file|implement|refactor|create|patch|component|function)\b/i],
+];
 
-  if (clean.length <= OFFICE_ACTIVITY_LIMIT) {
-    return clean;
-  }
-  return `${clean.slice(0, OFFICE_ACTIVITY_LIMIT - 1).trimEnd()}…`;
+function compactActivity(value: string) {
+  const clean = value.replace(ansiPattern, "").replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "").replace(/\s+/g, " ").trim();
+  if (!clean) return "Working";
+  return clean.length <= OFFICE_ACTIVITY_LIMIT ? clean : `${clean.slice(0, OFFICE_ACTIVITY_LIMIT - 3).trimEnd()}...`;
 }
 
 function lastOutputLine(history: string) {
-  const clean = history.replace(ansiPattern, "");
-  const lines = clean
-    .split(/\r?\n|\r/)
-    .map((line) => compactActivity(line))
-    .filter(Boolean);
-  return lines.at(-1) ?? "No activity yet";
+  return history.replace(ansiPattern, "").split(/\r?\n|\r/).map(compactActivity).filter(Boolean).at(-1) ?? "Working";
 }
 
 function signalForSession(session: TerminalSession, activity: string): OfficeSignal {
-  if (session.status === "error" || errorPattern.test(activity)) {
-    return "warning";
-  }
-  if (session.status === "completed" || successPattern.test(activity)) {
-    return "success";
-  }
-  if (session.status === "running" || session.status === "waiting") {
-    return "active";
-  }
+  if (session.status === "error" || errorPattern.test(activity)) return "warning";
+  if (session.status === "completed" || successPattern.test(activity)) return "success";
+  if (session.status === "running" || session.status === "waiting") return "active";
   return "idle";
 }
 
-function deskActivity(session: TerminalSession, commandHistory: CommandHistoryEntry[]) {
-  const latestCommand = commandHistory
-    .filter((entry) => entry.sessionId === session.id)
-    .at(-1)?.command;
-  return compactActivity(latestCommand || lastOutputLine(session.terminalHistory));
+function zoneForActivity(session: TerminalSession, activity: string): OfficeZone {
+  if (session.status === "error" || errorPattern.test(activity)) return "debugCorner";
+  if (session.status === "waiting") return "lounge";
+  return zonePatterns.find(([, pattern]) => pattern.test(activity))?.[0] ?? "codingDesks";
 }
 
-export function createOfficeDesks(
-  sessions: TerminalSession[],
-  commandHistory: CommandHistoryEntry[],
-): OfficeDeskModel[] {
-  if (sessions.length === 0) {
-    return [];
-  }
+function poseForZone(zone: OfficeZone): OfficeAgentPose {
+  if (zone === "researchLibrary") return "reading";
+  if (zone === "buildLab" || zone === "testBoard" || zone === "gitBoard") return "observing";
+  if (zone === "debugCorner") return "debugging";
+  if (zone === "lounge") return "idle";
+  return "typing";
+}
 
-  const columns = Math.min(4, Math.max(1, Math.ceil(Math.sqrt(sessions.length * 1.55))));
-  const rows = Math.ceil(sessions.length / columns);
-  const cellWidth = 1060 / columns;
-  const cellHeight = 480 / rows;
-  const scale = Math.min(1, cellWidth / 250, cellHeight / 180);
+function sessionActivity(session: TerminalSession, commandHistory: CommandHistoryEntry[]) {
+  const command = commandHistory.filter((entry) => entry.sessionId === session.id).at(-1)?.command;
+  return compactActivity(command || lastOutputLine(session.terminalHistory));
+}
 
-  return sessions.map((session, index) => {
-    const column = index % columns;
-    const row = Math.floor(index / columns);
-    const activity = deskActivity(session, commandHistory);
+function isVisibleAgent(session: TerminalSession) {
+  return session.status === "running" || session.status === "waiting" || session.status === "error";
+}
 
+export function createOfficeAgents(sessions: TerminalSession[], commandHistory: CommandHistoryEntry[]): OfficeAgentModel[] {
+  return sessions.filter(isVisibleAgent).map((session) => {
+    const activity = sessionActivity(session, commandHistory);
+    const zone = zoneForActivity(session, activity);
     return {
       id: session.id,
       terminalName: session.name,
       profileLabel: session.profileId.replace("wsl-", ""),
       sessionStatus: session.status,
       signal: signalForSession(session, activity),
+      phase: "active",
+      pose: poseForZone(zone),
       activity,
-      x: 70 + cellWidth * column + cellWidth / 2,
-      y: 165 + cellHeight * row + cellHeight / 2,
-      scale,
+      zone,
+      target: officeTarget(zone, session.id),
+      isAiAgent: aiAgentPattern.test(`${session.name} ${activity}`),
     };
   });
 }
 
-export function summarizeOffice(desks: OfficeDeskModel[]): OfficeSummary {
-  const latest = desks
-    .slice()
-    .sort((first, second) => (first.sessionStatus === "running" ? -1 : second.sessionStatus === "running" ? 1 : 0))[0];
-
+export function summarizeOffice(agents: OfficeAgentModel[]): OfficeSummary {
+  const latest = agents.find((agent) => agent.signal === "active") ?? agents[0];
   return {
-    active: desks.filter((desk) => desk.signal === "active").length,
-    errors: desks.filter((desk) => desk.signal === "warning").length,
-    total: desks.length,
-    lastActivity: latest?.activity ?? "No terminal activity yet",
+    active: agents.filter((agent) => agent.phase === "active" && agent.signal === "active").length,
+    errors: agents.filter((agent) => agent.signal === "warning").length,
+    total: agents.filter((agent) => agent.phase === "active").length,
+    lastActivity: latest?.activity ?? "Waiting for agents",
   };
 }
-
