@@ -3,7 +3,7 @@ import { useCallback, useRef } from "react";
 import type { Container, Graphics } from "pixi.js";
 import { BOSS_POSITION } from "../officeLayout";
 
-export function OfficeBoss({ onSelect }: { onSelect: () => void }) {
+export function OfficeBoss({ onSelect, lines }: { onSelect: () => void; lines: string[] }) {
   const ref = useRef<Container | null>(null);
   const monitorGlowRef = useRef<Graphics | null>(null);
   const time = useRef(0);
@@ -36,6 +36,7 @@ export function OfficeBoss({ onSelect }: { onSelect: () => void }) {
       <pixiGraphics ref={monitorGlowRef} draw={drawMonitorGlow} />
       <pixiGraphics draw={draw} />
       <pixiText text="YOU · BOSS AGENT" x={0} y={39} anchor={0.5} style={{ fill: 0xf2dfae, fontFamily: "monospace", fontSize: 11, fontWeight: "bold" }} />
+      {lines.map((line, index) => <pixiText key={line} text={line.slice(0, 30)} x={0} y={-73 + index * 9} anchor={0.5} style={{ fill: index === 0 ? 0x75e2d8 : 0x8ba0b5, fontFamily: "monospace", fontSize: 7 }} />)}
     </pixiContainer>
   );
 }

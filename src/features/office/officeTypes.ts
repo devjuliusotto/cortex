@@ -2,8 +2,8 @@ import type { SessionStatus } from "@/stores/cortexStore";
 
 export type OfficeSignal = "active" | "idle" | "success" | "warning";
 export type OfficeAgentPhase = "active" | "exiting";
-export type OfficeAgentPose = "typing" | "reading" | "observing" | "debugging" | "idle";
-export type OfficeZone =
+export type OfficeAgentPose = "typing" | "reading" | "observing" | "debugging" | "idle" | "meeting";
+export type OfficeZoneId =
   | "bossDesk"
   | "codingDesks"
   | "researchLibrary"
@@ -12,9 +12,33 @@ export type OfficeZone =
   | "debugCorner"
   | "gitBoard"
   | "lounge"
+  | "meetingRoom"
   | "entrance";
+export type OfficeZone = OfficeZoneId;
+export type OfficeActivityCategory = "coding" | "research" | "build" | "test" | "git" | "error" | "success" | "idle";
+
+export type OfficeEventType = "spawn" | "activity" | "move" | "build" | "test" | "git" | "error" | "success" | "meeting" | "idle" | "stop";
+
+export type OfficeEvent = {
+  id: string;
+  timestamp: number;
+  agentId?: string;
+  terminalId?: string;
+  workspaceId?: string;
+  type: OfficeEventType;
+  label: string;
+  detail?: string;
+  zone?: OfficeZoneId;
+};
 
 export type OfficePoint = { x: number; y: number };
+
+export type OfficeAgentIdentity = {
+  name: string;
+  role: string;
+  color: number;
+  accessory: "spark" | "brackets" | "note" | "lens" | "terminal";
+};
 
 export type OfficeAgentModel = {
   id: string;
@@ -25,14 +49,30 @@ export type OfficeAgentModel = {
   phase: OfficeAgentPhase;
   pose: OfficeAgentPose;
   activity: string;
-  zone: OfficeZone;
+  category: OfficeActivityCategory;
+  zone: OfficeZoneId;
   target: OfficePoint;
-  isAiAgent: boolean;
+  identity: OfficeAgentIdentity;
+  meetingLabel?: string;
 };
 
 export type OfficeSummary = {
   active: number;
   errors: number;
+  buildsTests: number;
   total: number;
+  lastActivity: string;
+};
+
+export type OfficeKanbanCard = {
+  id: string;
+  title: string;
+  column: "progress" | "done";
+  warning: boolean;
+};
+
+export type OfficeGitSummary = {
+  branch?: string;
+  changedFiles?: number;
   lastActivity: string;
 };

@@ -78,6 +78,7 @@ export type TemplateInstance = {
 
 export type WorkspaceLayout = {
   workspaceId: string;
+  officeViewEnabled: boolean;
   activeSessionId: string | null;
   activeItemId?: string | null;
   tabOrder: string[];
@@ -191,6 +192,7 @@ type CortexState = CortexPersistedState & {
   resizePane: (workspaceId: string, paneId: string, ratio: number) => void;
   setSessionProfile: (sessionId: string, profileId: TerminalProfileId) => void;
   setSessionStatus: (sessionId: string, status: SessionStatus) => void;
+  setOfficeViewEnabled: (workspaceId: string, enabled: boolean) => void;
   setSplitPanePreview: (workspaceId: string, visible: boolean) => void;
   saveNow: () => Promise<void>;
 };
@@ -328,6 +330,7 @@ function createStandardWorkspaceItems(workspaceId: string, timestamp: string) {
     templates: [gitMap, commandHistory, note],
     layout: {
       workspaceId,
+      officeViewEnabled: false,
       activeSessionId: terminalId,
       activeItemId: terminalId,
       tabOrder: [terminalId, gitMapId, commandHistoryId, noteId],
@@ -646,6 +649,7 @@ function createMarketingWorkspace(
 
   const layout: WorkspaceLayout = {
     workspaceId,
+    officeViewEnabled: false,
     activeSessionId: terminalId,
     activeItemId: terminalId,
     tabOrder: [terminalId, gitMapId, commandHistoryId, noteId],
@@ -960,6 +964,7 @@ function normalizeLoadedState(state: CortexPersistedState): CortexPersistedState
       const paneTree = normalizePaneTree(layout);
       return {
         ...layout,
+        officeViewEnabled: layout.officeViewEnabled ?? false,
         activeItemId: layout.activeItemId ?? layout.activeSessionId,
         tabOrder: layout.tabOrder ?? [],
         splitPanePreview: layout.splitPanePreview ?? true,
@@ -1108,6 +1113,7 @@ export const useCortexStore = create<CortexState>((set) => ({
           ...state.layouts,
           {
             workspaceId: workspace.id,
+            officeViewEnabled: false,
             activeSessionId: null,
             activeItemId: null,
             tabOrder: [],
@@ -1410,6 +1416,7 @@ export const useCortexStore = create<CortexState>((set) => ({
               const paneTree = createLeaf([session.id], session.id);
               return {
                 workspaceId,
+                officeViewEnabled: false,
                 activeSessionId: session.id,
                 activeItemId: session.id,
                 tabOrder: [session.id],
@@ -1636,6 +1643,7 @@ export const useCortexStore = create<CortexState>((set) => ({
               const paneTree = createLeaf([instance.id], instance.id);
               return {
                 workspaceId,
+                officeViewEnabled: false,
                 activeSessionId: null,
                 activeItemId: instance.id,
                 tabOrder: [instance.id],
@@ -1926,6 +1934,20 @@ export const useCortexStore = create<CortexState>((set) => ({
         ...state,
         sessions: state.sessions.map((session) =>
           session.id === sessionId ? { ...session, status, updatedAt: now() } : session,
+        ),
+      };
+      saveState(next);
+      return next;
+    }),
+
+  setOfficeViewEnabled: (workspaceId, enabled) =>
+    set((state) => {
+      const next = {
+        ...state,
+        layouts: state.layouts.map((layout) =>
+          layout.workspaceId === workspaceId
+            ? { ...layout, officeViewEnabled: enabled }
+            : layout,
         ),
       };
       saveState(next);

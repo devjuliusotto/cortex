@@ -67,6 +67,11 @@ export function OfficeBackground({ workspaceName, waiting }: { workspaceName: st
     g.roundRect(765, 580, 214, 105, 5).fill(0x241b25).stroke({ color: 0x9c4e61, width: 4 });
     g.rect(783, 598, 178, 55).fill(0x130e17); g.rect(795, 610, 92, 4).fill(0xdf647a); g.rect(795, 624, 134, 4).fill(0x74404e); g.rect(795, 638, 67, 4).fill(0x74404e);
 
+    // Meeting room table and chairs.
+    g.roundRect(586, 574, 145, 90, 9).fill(0x4b3c46).stroke({ color: 0x8d7182, width: 4 });
+    g.ellipse(658, 619, 54, 25).fill(0x8b644f).stroke({ color: 0xb78564, width: 3 });
+    for (const [x, y] of [[600, 590], [716, 590], [600, 650], [716, 650]] as const) g.roundRect(x - 10, y - 8, 20, 16, 4).fill(0x394b5e);
+
     // Lounge and plants.
     g.roundRect(66, 584, 196, 72, 18).fill(0x455a70).stroke({ color: 0x71869a, width: 4 });
     g.roundRect(91, 641, 146, 28, 10).fill(0x334659);
@@ -87,6 +92,7 @@ export function OfficeBackground({ workspaceName, waiting }: { workspaceName: st
       <pixiText text="TEST BOARD" x={1093} y={460} anchor={0.5} style={zoneStyle} />
       <pixiText text="REPOSITORY" x={428} y={551} anchor={0.5} style={zoneStyle} />
       <pixiText text="DEBUG" x={872} y={561} anchor={0.5} style={{ ...zoneStyle, fill: 0xe67b8e }} />
+      <pixiText text="MEETING" x={658} y={554} anchor={0.5} style={zoneStyle} />
       <pixiText text="ENTRANCE" x={643} y={698} anchor={0.5} style={{ fill: 0x9f95a7, fontFamily: "monospace", fontSize: 8, letterSpacing: 1 }} />
     </>
   );

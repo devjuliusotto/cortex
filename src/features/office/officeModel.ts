@@ -1,90 +1,88 @@
 import type { CommandHistoryEntry } from "@/features/terminal/commandHistory";
 import type { TerminalSession } from "@/stores/cortexStore";
+import { compactOfficeText, detectOfficeActivity } from "./officeDetection";
 import { officeTarget } from "./officeLayout";
-import type { OfficeAgentModel, OfficeAgentPose, OfficeSignal, OfficeSummary, OfficeZone } from "./officeTypes";
+import type { OfficeAgentIdentity, OfficeAgentModel, OfficeAgentPose, OfficeKanbanCard, OfficeSignal, OfficeSummary, OfficeZoneId } from "./officeTypes";
 
 export const OFFICE_ACTIVITY_LIMIT = 42;
-
 const ansiPattern = /\u001b(?:\[[0-?]*[ -/]*[@-~]|\][^\u0007]*(?:\u0007|\u001b\\))/g;
-const errorPattern = /\b(error|failed|failure|fatal|exception|panic|not found|denied)\b/i;
-const successPattern = /\b(success|succeeded|passed|completed|built|compiled|finished|done|0 errors?)\b/i;
-
-const aiAgentPattern = /\b(claude|codex|gpt|gemini|agent)\b/i;
-const zonePatterns: Array<[OfficeZone, RegExp]> = [
-  ["debugCorner", /\b(error|failed?|debug|exception|panic|stack\s*trace|trace|fix)\b/i],
-  ["testBoard", /\b(test|check|lint|vitest|jest|spec|verify|typecheck|tsc)\b/i],
-  ["buildLab", /\b(build|compile|npm|pnpm|yarn|cargo|vite|webpack|bundle|serve|dev)\b/i],
-  ["researchLibrary", /\b(search|research|docs?|documentation|web|browse|read|fetch|find|lookup)\b/i],
-  ["gitBoard", /\b(git|commit|stage|diff|branch|merge|rebase|push|pull|release)\b/i],
-  ["codingDesks", /\b(code|write|edit|file|implement|refactor|create|patch|component|function)\b/i],
-];
-
-function compactActivity(value: string) {
-  const clean = value.replace(ansiPattern, "").replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "").replace(/\s+/g, " ").trim();
-  if (!clean) return "Working";
-  return clean.length <= OFFICE_ACTIVITY_LIMIT ? clean : `${clean.slice(0, OFFICE_ACTIVITY_LIMIT - 3).trimEnd()}...`;
-}
 
 function lastOutputLine(history: string) {
-  return history.replace(ansiPattern, "").split(/\r?\n|\r/).map(compactActivity).filter(Boolean).at(-1) ?? "Working";
+  return history.replace(ansiPattern, "").split(/\r?\n|\r/).map((line) => compactOfficeText(line, OFFICE_ACTIVITY_LIMIT)).filter(Boolean).at(-1) ?? "Working";
 }
 
-function signalForSession(session: TerminalSession, activity: string): OfficeSignal {
-  if (session.status === "error" || errorPattern.test(activity)) return "warning";
-  if (session.status === "completed" || successPattern.test(activity)) return "success";
-  if (session.status === "running" || session.status === "waiting") return "active";
+function sessionActivity(session: TerminalSession, history: CommandHistoryEntry[]) {
+  const command = history.filter((entry) => entry.sessionId === session.id).at(-1)?.command;
+  return compactOfficeText(command || lastOutputLine(session.terminalHistory), OFFICE_ACTIVITY_LIMIT);
+}
+
+function identityFor(session: TerminalSession, activity: string): OfficeAgentIdentity {
+  const value = `${session.name} ${activity}`.toLowerCase();
+  if (value.includes("claude")) return { name: "Claude", role: "AI Engineer", color: 0xc98264, accessory: "spark" };
+  if (value.includes("codex")) return { name: "Codex", role: "Code Agent", color: 0x63d9d4, accessory: "brackets" };
+  if (/\bgpt\b/.test(value)) return { name: "GPT", role: "Documentation Agent", color: 0x77b987, accessory: "note" };
+  if (value.includes("gemini")) return { name: "Gemini", role: "Research Agent", color: 0x7196df, accessory: "lens" };
+  return { name: session.name, role: "Terminal Worker", color: 0x8991a5, accessory: "terminal" };
+}
+
+function signalFor(session: TerminalSession, category: ReturnType<typeof detectOfficeActivity>["category"]): OfficeSignal {
+  if (session.status === "error" || category === "error") return "warning";
+  if (session.status === "completed" || category === "success") return "success";
+  if (session.status === "running") return "active";
   return "idle";
 }
 
-function zoneForActivity(session: TerminalSession, activity: string): OfficeZone {
-  if (session.status === "error" || errorPattern.test(activity)) return "debugCorner";
-  if (session.status === "waiting") return "lounge";
-  return zonePatterns.find(([, pattern]) => pattern.test(activity))?.[0] ?? "codingDesks";
-}
-
-function poseForZone(zone: OfficeZone): OfficeAgentPose {
+function poseForZone(zone: OfficeZoneId): OfficeAgentPose {
+  if (zone === "meetingRoom") return "meeting";
   if (zone === "researchLibrary") return "reading";
-  if (zone === "buildLab" || zone === "testBoard" || zone === "gitBoard") return "observing";
+  if (["buildLab", "testBoard", "gitBoard"].includes(zone)) return "observing";
   if (zone === "debugCorner") return "debugging";
   if (zone === "lounge") return "idle";
   return "typing";
 }
 
-function sessionActivity(session: TerminalSession, commandHistory: CommandHistoryEntry[]) {
-  const command = commandHistory.filter((entry) => entry.sessionId === session.id).at(-1)?.command;
-  return compactActivity(command || lastOutputLine(session.terminalHistory));
+function applyMeetingHeuristic(agents: OfficeAgentModel[]) {
+  const errors = agents.filter((agent) => agent.category === "error" || agent.signal === "warning");
+  if (errors.length >= 2) return agents.map((agent) => errors.includes(agent) ? meetingAgent(agent, "Reviewing error") : agent);
+  for (const category of ["build", "test", "git", "coding"] as const) {
+    const group = agents.filter((agent) => agent.category === category && agent.signal === "active");
+    if (group.length >= 2) return agents.map((agent) => group.includes(agent) ? meetingAgent(agent, category === "git" ? "Syncing task" : `Discussing ${category}`) : agent);
+  }
+  return agents;
 }
 
-function isVisibleAgent(session: TerminalSession) {
-  return session.status === "running" || session.status === "waiting" || session.status === "error";
+function meetingAgent(agent: OfficeAgentModel, label: string): OfficeAgentModel {
+  return { ...agent, zone: "meetingRoom", pose: "meeting", meetingLabel: label, target: officeTarget("meetingRoom", agent.id) };
 }
 
-export function createOfficeAgents(sessions: TerminalSession[], commandHistory: CommandHistoryEntry[]): OfficeAgentModel[] {
-  return sessions.filter(isVisibleAgent).map((session) => {
+export function createOfficeAgents(sessions: TerminalSession[], commandHistory: CommandHistoryEntry[]) {
+  const visible = sessions.filter((session) => ["running", "waiting", "error"].includes(session.status));
+  return applyMeetingHeuristic(visible.map((session): OfficeAgentModel => {
     const activity = sessionActivity(session, commandHistory);
-    const zone = zoneForActivity(session, activity);
+    const detected = detectOfficeActivity(activity);
+    const zone = session.status === "waiting" ? "lounge" : detected.zone;
     return {
-      id: session.id,
-      terminalName: session.name,
-      profileLabel: session.profileId.replace("wsl-", ""),
-      sessionStatus: session.status,
-      signal: signalForSession(session, activity),
-      phase: "active",
-      pose: poseForZone(zone),
-      activity,
-      zone,
-      target: officeTarget(zone, session.id),
-      isAiAgent: aiAgentPattern.test(`${session.name} ${activity}`),
+      id: session.id, terminalName: session.name, profileLabel: session.profileId.replace("wsl-", ""),
+      sessionStatus: session.status, signal: signalFor(session, detected.category), phase: "active",
+      pose: poseForZone(zone), activity, category: detected.category, zone, target: officeTarget(zone, session.id),
+      identity: identityFor(session, activity),
     };
-  });
+  }));
 }
 
-export function summarizeOffice(agents: OfficeAgentModel[]): OfficeSummary {
-  const latest = agents.find((agent) => agent.signal === "active") ?? agents[0];
+export function summarizeOffice(agents: OfficeAgentModel[], lastEvent?: string): OfficeSummary {
   return {
     active: agents.filter((agent) => agent.phase === "active" && agent.signal === "active").length,
     errors: agents.filter((agent) => agent.signal === "warning").length,
+    buildsTests: agents.filter((agent) => agent.category === "build" || agent.category === "test").length,
     total: agents.filter((agent) => agent.phase === "active").length,
-    lastActivity: latest?.activity ?? "Waiting for agents",
+    lastActivity: lastEvent ?? agents[0]?.activity ?? "Waiting for agents",
   };
+}
+
+export function createKanbanCards(agents: OfficeAgentModel[]): OfficeKanbanCard[] {
+  return agents.filter((agent) => agent.phase === "active").slice(0, 8).map((agent) => ({
+    id: agent.id, title: compactOfficeText(`${agent.identity.name}: ${agent.activity}`, 30),
+    column: agent.signal === "success" ? "done" : "progress", warning: agent.signal === "warning",
+  }));
 }

@@ -1,12 +1,12 @@
 import { useTick } from "@pixi/react";
 import { useCallback, useEffect, useRef } from "react";
-import type { Container, Graphics } from "pixi.js";
+import type { Container, FederatedPointerEvent, Graphics } from "pixi.js";
 import { ENTRANCE_POSITION } from "../officeLayout";
 import type { OfficeAgentModel, OfficeSignal } from "../officeTypes";
 
 const colors: Record<OfficeSignal, number> = { active: 0x63d9d4, idle: 0x8991a5, success: 0x68d398, warning: 0xed667d };
 
-export function OfficeAgent({ agent, onSelect }: { agent: OfficeAgentModel; onSelect: (id: string) => void }) {
+export function OfficeAgent({ agent, onSelect, onOpen }: { agent: OfficeAgentModel; onSelect: (id: string) => void; onOpen: (id: string) => void }) {
   const ref = useRef<Container | null>(null);
   const time = useRef(0);
   const exitTime = useRef(0);
@@ -47,7 +47,7 @@ export function OfficeAgent({ agent, onSelect }: { agent: OfficeAgentModel; onSe
 
   const drawWorker = useCallback((g: Graphics) => {
     const signal = colors[agent.signal];
-    const shirt = agent.zone === "debugCorner" ? 0x783a4c : agent.zone === "researchLibrary" ? 0x5e527e : agent.zone === "buildLab" ? 0x8a6238 : agent.zone === "gitBoard" ? 0x3d6d54 : 0x316c78;
+    const shirt = agent.zone === "debugCorner" ? 0x783a4c : agent.zone === "researchLibrary" ? 0x5e527e : agent.zone === "buildLab" ? 0x8a6238 : agent.zone === "gitBoard" ? 0x3d6d54 : agent.identity.color;
     const armLift = agent.pose === "reading" ? -8 : agent.pose === "observing" ? -3 : 0;
     g.clear();
     g.ellipse(0, 27, 25, 8).fill({ color: 0x11131b, alpha: 0.3 });
@@ -71,8 +71,10 @@ export function OfficeAgent({ agent, onSelect }: { agent: OfficeAgentModel; onSe
     g.circle(21, -42, 8).fill(signal).stroke({ color: 0x171923, width: 2 });
     if (agent.signal === "warning") { g.rect(20, -47, 3, 7).fill(0x351016); g.rect(20, -37, 3, 3).fill(0x351016); }
     if (agent.signal === "success") g.moveTo(16, -42).lineTo(20, -38).lineTo(26, -46).stroke({ color: 0x123522, width: 3 });
-    if (agent.isAiAgent) g.star(-22, -43, 4, 6, 3).fill(0xb994f4).stroke({ color: 0x272033, width: 2 });
-  }, [agent.isAiAgent, agent.pose, agent.signal, agent.zone]);
+    if (agent.identity.accessory === "spark") g.star(-22, -43, 4, 6, 3).fill(0xb994f4).stroke({ color: 0x272033, width: 2 });
+    if (agent.identity.accessory === "brackets") { g.moveTo(-27, -47).lineTo(-32, -42).lineTo(-27, -37).stroke({ color: 0x9de8e3, width: 2 }); g.moveTo(-18, -47).lineTo(-13, -42).lineTo(-18, -37).stroke({ color: 0x9de8e3, width: 2 }); }
+    if (agent.identity.accessory === "lens") g.circle(-22, -43, 6).stroke({ color: 0x9bb7ed, width: 2 });
+  }, [agent.identity.accessory, agent.identity.color, agent.pose, agent.signal, agent.zone]);
 
   const drawBubble = useCallback((g: Graphics) => {
     g.clear();
@@ -81,11 +83,12 @@ export function OfficeAgent({ agent, onSelect }: { agent: OfficeAgentModel; onSe
   }, [agent.signal]);
 
   return (
-    <pixiContainer ref={ref} eventMode="static" cursor="pointer" onPointerTap={() => onSelect(agent.id)}>
+    <pixiContainer ref={ref} eventMode="static" cursor="pointer" onPointerTap={(event: FederatedPointerEvent) => event.detail >= 2 ? onOpen(agent.id) : onSelect(agent.id)}>
       <pixiGraphics draw={drawBubble} />
-      <pixiText text={agent.phase === "exiting" ? "Wrapping up..." : agent.activity} x={0} y={-78} anchor={0.5} style={{ fill: 0xdde3ef, fontFamily: "monospace", fontSize: 9 }} />
+      <pixiText text={agent.phase === "exiting" ? "Wrapping up..." : agent.meetingLabel ?? agent.activity} x={0} y={-78} anchor={0.5} style={{ fill: 0xdde3ef, fontFamily: "monospace", fontSize: 9 }} />
       <pixiGraphics draw={drawWorker} />
       <pixiText text={agent.terminalName} x={0} y={44} anchor={0.5} style={{ fill: 0xf3f4f8, fontFamily: "monospace", fontSize: 10, fontWeight: "bold" }} />
+      <pixiText text={agent.identity.role} x={0} y={57} anchor={0.5} style={{ fill: 0xaeb6c8, fontFamily: "monospace", fontSize: 7 }} />
     </pixiContainer>
   );
 }

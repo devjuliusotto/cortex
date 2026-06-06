@@ -1,8 +1,9 @@
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
-import { ClipboardList, FolderPlus, HardDrive, Plus, Search, ShieldCheck } from "lucide-react";
+import { Building2, ClipboardList, FolderPlus, HardDrive, Plus, Search, ShieldCheck, TerminalSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CortexLogo } from "@/components/CortexLogo";
+import { OFFICE_VIEW_ADDON_ENABLED } from "@/config/marketplace";
 import { CommandPalette } from "@/features/command-palette/components/CommandPalette";
 import { SavedCommandsModal } from "@/features/commands/components/SavedCommandsModal";
 import { MarketplaceModal } from "@/features/marketplace/components/MarketplaceModal";
@@ -11,7 +12,7 @@ import { TerminalPanel } from "@/features/terminal/components/TerminalPanel";
 import { focusTerminal, terminateTerminals, writeTerminal } from "@/features/terminal/terminalBridge";
 import { Sidebar } from "@/layouts/Sidebar";
 import { useCortexStore } from "@/stores/cortexStore";
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 
 const OfficeView = lazy(() =>
@@ -25,7 +26,7 @@ function commandForShell(command: string) {
 export function AppShell() {
   const location = useLocation();
   const navigate = useNavigate();
-  const officeOpen = location.pathname === "/office";
+  const officeDeepLink = location.pathname === "/office";
   const autoStartedWorkspaceIds = useRef(new Set<string>());
   const autoUpdateChecked = useRef(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -44,6 +45,7 @@ export function AppShell() {
     savedCommands,
     sessions,
     setActiveItem,
+    setOfficeViewEnabled,
     settings,
     appendTerminalHistory,
     setSessionStatus,
@@ -52,6 +54,7 @@ export function AppShell() {
   } = useCortexStore();
   const activeWorkspace = workspaces.find((workspace) => workspace.id === activeWorkspaceId);
   const activeLayout = layouts.find((layout) => layout.workspaceId === activeWorkspaceId);
+  const officeViewEnabled = OFFICE_VIEW_ADDON_ENABLED && (activeLayout?.officeViewEnabled ?? officeDeepLink);
   const activeItemTerminal = sessions.find(
     (session) => session.workspaceId === activeWorkspaceId && session.id === activeLayout?.activeItemId,
   );
@@ -82,13 +85,36 @@ export function AppShell() {
       return;
     }
     setActiveItem(activeWorkspaceId, terminalId);
+    setOfficeViewEnabled(activeWorkspaceId, false);
     navigate("/");
     window.setTimeout(() => focusTerminal(terminalId), 100);
   };
 
+  const setWorkspaceView = useCallback((officeEnabled: boolean) => {
+    if (!activeWorkspaceId || (officeEnabled && !OFFICE_VIEW_ADDON_ENABLED)) {
+      return;
+    }
+    setOfficeViewEnabled(activeWorkspaceId, officeEnabled);
+    if (!officeEnabled || officeDeepLink) {
+      navigate("/");
+    }
+  }, [activeWorkspaceId, navigate, officeDeepLink, setOfficeViewEnabled]);
+
+  const toggleOfficeView = useCallback(
+    () => setWorkspaceView(!officeViewEnabled),
+    [officeViewEnabled, setWorkspaceView],
+  );
+
   useEffect(() => {
     void hydrate();
   }, [hydrate]);
+
+  useEffect(() => {
+    if (!hydrated || !officeDeepLink || !activeWorkspaceId || !OFFICE_VIEW_ADDON_ENABLED) {
+      return;
+    }
+    setOfficeViewEnabled(activeWorkspaceId, true);
+  }, [activeWorkspaceId, hydrated, officeDeepLink, setOfficeViewEnabled]);
 
   useEffect(() => {
     if (
@@ -165,6 +191,12 @@ export function AppShell() {
         target?.isContentEditable;
       const paletteShortcut = (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k";
 
+      if (event.key === "Escape" && officeViewEnabled && !commandPaletteOpen) {
+        event.preventDefault();
+        setWorkspaceView(false);
+        return;
+      }
+
       if (!paletteShortcut) {
         return;
       }
@@ -178,14 +210,15 @@ export function AppShell() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [commandPaletteOpen]);
+  }, [commandPaletteOpen, officeViewEnabled, setWorkspaceView]);
 
   return (
     <div className="flex h-full overflow-hidden bg-background text-foreground">
       <Sidebar
         collapsed={sidebarCollapsed}
-        officeActive={officeOpen}
-        onOfficeOpen={() => navigate("/office")}
+        officeActive={officeViewEnabled}
+        officeAvailable={OFFICE_VIEW_ADDON_ENABLED}
+        onOfficeOpen={toggleOfficeView}
         onMarketplaceOpen={() => setMarketplaceOpen(true)}
         onSavedCommandsOpen={() => setSavedCommandsOpen(true)}
         onSettingsOpen={() => setSettingsOpen(true)}
@@ -210,6 +243,25 @@ export function AppShell() {
           </div>
 
           <div className="flex items-center gap-2">
+            {OFFICE_VIEW_ADDON_ENABLED && activeWorkspace && (
+              <div className="hidden h-9 items-center rounded-md border border-border bg-secondary/70 p-1 sm:flex" aria-label="Workspace view">
+                <button
+                  className={`flex h-7 items-center gap-1.5 rounded px-2 text-xs transition-colors ${!officeViewEnabled ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+                  onClick={() => setWorkspaceView(false)}
+                  type="button"
+                >
+                  <TerminalSquare className="h-3.5 w-3.5" /> Terminal
+                </button>
+                <button
+                  className={`flex h-7 items-center gap-1.5 rounded px-2 text-xs transition-colors ${officeViewEnabled ? "bg-primary/15 text-primary shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+                  onClick={() => setWorkspaceView(true)}
+                  type="button"
+                >
+                  <Building2 className="h-3.5 w-3.5" /> Office
+                  {officeViewEnabled && <span className="h-1.5 w-1.5 rounded-full bg-cortex-green" />}
+                </button>
+              </div>
+            )}
             <Button
               className="hidden gap-2 border-border bg-secondary/70 text-muted-foreground hover:text-foreground md:inline-flex"
               size="sm"
@@ -274,19 +326,23 @@ export function AppShell() {
           </div>
         </header>
 
-        <div className={officeOpen ? "hidden" : "contents"}>
+        <div className={officeViewEnabled ? "hidden" : "contents"}>
           <TerminalPanel workspaceId={activeWorkspaceId} />
         </div>
-        {officeOpen && (
+        {officeViewEnabled && (
           <Suspense fallback={<div className="grid flex-1 place-items-center text-sm text-muted-foreground">Loading Office View…</div>}>
-            <OfficeView onClose={() => navigate("/")} onTerminalSelect={openTerminalFromOffice} />
+            <OfficeView onClose={() => setWorkspaceView(false)} onTerminalSelect={openTerminalFromOffice} />
           </Suspense>
         )}
       </main>
       <CommandPalette
         open={commandPaletteOpen}
         onClose={() => setCommandPaletteOpen(false)}
-        onOfficeOpen={() => navigate("/office")}
+        officeAvailable={OFFICE_VIEW_ADDON_ENABLED}
+        officeViewEnabled={officeViewEnabled}
+        onOfficeOpen={() => setWorkspaceView(true)}
+        onOfficeToggle={toggleOfficeView}
+        onTerminalViewOpen={() => setWorkspaceView(false)}
         onSavedCommandsOpen={() => {
           setCommandPaletteOpen(false);
           setSavedCommandsOpen(true);

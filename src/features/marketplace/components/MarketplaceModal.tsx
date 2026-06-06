@@ -18,6 +18,7 @@ import {
   FEEDBACK_TYPES,
   GITHUB_ISSUE_URL,
   GITHUB_REPOSITORY,
+  OFFICE_VIEW_ADDON_ENABLED,
   type FeedbackType,
 } from "@/config/marketplace";
 import {
@@ -273,8 +274,8 @@ function AddOnsTab() {
       <div className="mt-5 grid gap-3 md:grid-cols-2">
         <InfoCard
           icon={<Building2 className="h-4 w-4 text-cortex-green" />}
-          title="Office View · Enabled"
-          text="Built-in lightweight PixiJS workspace visualization. Open it from the sidebar or command palette."
+          title={`Office View · ${OFFICE_VIEW_ADDON_ENABLED ? "Enabled" : "Disabled"}`}
+          text="Built-in lightweight PixiJS visualization available from the workspace view switcher and command palette."
         />
         <InfoCard
           icon={<Puzzle className="h-4 w-4 text-primary" />}

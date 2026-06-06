@@ -13,6 +13,7 @@ export const OFFICE_ZONES: Record<OfficeZone, OfficePoint[]> = {
   debugCorner: [{ x: 820, y: 655 }, { x: 935, y: 655 }],
   gitBoard: [{ x: 350, y: 650 }, { x: 485, y: 650 }],
   lounge: [{ x: 130, y: 650 }, { x: 235, y: 650 }],
+  meetingRoom: [{ x: 620, y: 625 }, { x: 690, y: 625 }, { x: 655, y: 670 }],
   entrance: [{ x: 633, y: 710 }, { x: 674, y: 710 }],
 };
 

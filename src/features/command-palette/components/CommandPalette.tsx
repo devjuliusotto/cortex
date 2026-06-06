@@ -22,7 +22,11 @@ import { useCortexStore, type SavedCommand, type TerminalSession } from "@/store
 type CommandPaletteProps = {
   open: boolean;
   onClose: () => void;
+  officeAvailable: boolean;
+  officeViewEnabled: boolean;
   onOfficeOpen: () => void;
+  onOfficeToggle: () => void;
+  onTerminalViewOpen: () => void;
   onSavedCommandsOpen: () => void;
 };
 
@@ -94,7 +98,16 @@ function activeTerminalForWorkspace(
   );
 }
 
-export function CommandPalette({ open, onClose, onOfficeOpen, onSavedCommandsOpen }: CommandPaletteProps) {
+export function CommandPalette({
+  open,
+  onClose,
+  officeAvailable,
+  officeViewEnabled,
+  onOfficeOpen,
+  onOfficeToggle,
+  onTerminalViewOpen,
+  onSavedCommandsOpen,
+}: CommandPaletteProps) {
   const {
     activeWorkspaceId,
     commandHistory,
@@ -159,7 +172,17 @@ export function CommandPalette({ open, onClose, onOfficeOpen, onSavedCommandsOpe
   };
 
   const actions = useMemo<PaletteAction[]>(() => {
-    const baseActions: PaletteAction[] = [
+    const officeActions: PaletteAction[] = officeAvailable ? [
+      {
+        id: "workspace:office-toggle",
+        title: "Toggle Office View",
+        subtitle: officeViewEnabled ? "Switch to Terminal View" : "Switch to Office View",
+        section: "Workspace",
+        keywords: "toggle office terminal view mode agents pixel",
+        icon: <Building2 className="h-4 w-4 text-primary" />,
+        disabled: !activeWorkspaceId,
+        run: onOfficeToggle,
+      },
       {
         id: "workspace:office",
         title: "Open Office View",
@@ -170,6 +193,20 @@ export function CommandPalette({ open, onClose, onOfficeOpen, onSavedCommandsOpe
         disabled: !activeWorkspaceId,
         run: onOfficeOpen,
       },
+      {
+        id: "workspace:terminal-view",
+        title: "Switch to Terminal View",
+        subtitle: "Show the terminal workspace layout",
+        section: "Workspace",
+        keywords: "terminal view mode close office",
+        icon: <TerminalSquare className="h-4 w-4 text-primary" />,
+        disabled: !activeWorkspaceId || !officeViewEnabled,
+        run: onTerminalViewOpen,
+      },
+    ] : [];
+
+    const baseActions: PaletteAction[] = [
+      ...officeActions,
       {
         id: "workspace:new-terminal",
         title: "Novo terminal",
@@ -307,8 +344,12 @@ export function CommandPalette({ open, onClose, onOfficeOpen, onSavedCommandsOpe
     commandHistory,
     createMarketingModeDemo,
     createSession,
+    officeAvailable,
+    officeViewEnabled,
     onSavedCommandsOpen,
     onOfficeOpen,
+    onOfficeToggle,
+    onTerminalViewOpen,
     savedCommands,
     sessions,
     setActiveItem,
