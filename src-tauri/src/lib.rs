@@ -823,6 +823,36 @@ fn git_remote_url(root: &Path) -> Option<String> {
     optional_git_panel_command(root, &["config", "--get", "remote.origin.url"])
 }
 
+fn git_push_current_branch(root: &Path) -> Result<(), String> {
+    if git_remote_url(root).is_none() {
+        return Err("Connect this project to a GitHub repository before pushing.".to_string());
+    }
+
+    let branch = optional_git_panel_command(root, &["branch", "--show-current"])
+        .ok_or_else(|| "Switch to a branch before pushing to GitHub.".to_string())?;
+    let has_upstream = git_panel_command(
+        root,
+        &["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"],
+    )
+    .is_ok();
+
+    if has_upstream {
+        git_panel_command(root, &["push"])?;
+    } else {
+        git_panel_command_owned(
+            root,
+            vec![
+                "push".into(),
+                "--set-upstream".into(),
+                "origin".into(),
+                branch,
+            ],
+        )?;
+    }
+
+    Ok(())
+}
+
 fn git_release_version_from_json(path: &Path) -> Option<String> {
     let content = fs::read_to_string(path).ok()?;
     let value = serde_json::from_str::<Value>(&content).ok()?;
@@ -1038,7 +1068,7 @@ fn git_commit(path: String, message: String) -> Result<(), String> {
 #[tauri::command]
 fn git_push(path: String) -> Result<(), String> {
     let root = git_panel_root(&workspace_path(path)?)?;
-    git_panel_command(&root, &["push"]).map(|_| ())
+    git_push_current_branch(&root)
 }
 
 #[tauri::command]
@@ -1211,7 +1241,7 @@ fn git_create_release(
         git_panel_command_owned(&root, vec!["tag".into(), "-a".into(), tag.clone(), "-m".into(), notes])?;
     }
     if options.push_branch {
-        git_panel_command(&root, &["push"])?;
+        git_push_current_branch(&root)?;
     }
     if options.push_tag {
         git_panel_command_owned(&root, vec!["push".into(), "origin".into(), tag])?;
