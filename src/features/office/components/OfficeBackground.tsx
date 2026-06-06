@@ -41,6 +41,7 @@ export function OfficeBackground({ workspaceName, waiting }: { workspaceName: st
       g.rect(x + 8, 424, 66, 36).fill(0x102b35); g.rect(x + 15, 431, 46, 3).fill(0x65d9d4);
       g.rect(x + 34, 471, 12, 12).fill(0x4a3c3b);
     }
+    for (const x of [431, 571, 711, 851]) g.roundRect(x - 24, 520, 48, 13, 4).fill(0x39465a).stroke({ color: 0x637089, width: 2 });
     for (const x of [365, 895]) g.rect(x, 516, 16, 50).fill(0x49332c);
 
     // Library / research corner.

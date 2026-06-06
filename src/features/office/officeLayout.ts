@@ -4,26 +4,51 @@ export const OFFICE_SCENE_WIDTH = 1280;
 export const OFFICE_SCENE_HEIGHT = 760;
 export const AGENT_EXIT_DELAY_MS = 4200;
 
-export const OFFICE_ZONES: Record<OfficeZone, OfficePoint[]> = {
-  bossDesk: [{ x: 640, y: 258 }],
-  codingDesks: [{ x: 414, y: 442 }, { x: 554, y: 442 }, { x: 694, y: 442 }, { x: 834, y: 442 }],
-  researchLibrary: [{ x: 146, y: 354 }, { x: 238, y: 382 }, { x: 155, y: 438 }],
-  buildLab: [{ x: 1024, y: 348 }, { x: 1140, y: 392 }],
-  testBoard: [{ x: 1015, y: 548 }, { x: 1120, y: 548 }],
-  debugCorner: [{ x: 820, y: 655 }, { x: 935, y: 655 }],
-  gitBoard: [{ x: 350, y: 650 }, { x: 485, y: 650 }],
-  lounge: [{ x: 130, y: 650 }, { x: 235, y: 650 }],
-  meetingRoom: [{ x: 620, y: 625 }, { x: 690, y: 625 }, { x: 655, y: 670 }],
-  entrance: [{ x: 633, y: 710 }, { x: 674, y: 710 }],
+export type OfficeAnchor = {
+  id: string;
+  deskRect: { x: number; y: number; width: number; height: number };
+  chairPoint: OfficePoint;
+  monitorPoint: OfficePoint;
+  standingPoint: OfficePoint;
+  agentWorkPoint: OfficePoint;
+  zIndexHint: number;
 };
 
-export const BOSS_POSITION = OFFICE_ZONES.bossDesk[0];
-export const ENTRANCE_POSITION = OFFICE_ZONES.entrance[0];
+const anchor = (id: string, x: number, y: number, workX = x, workY = y): OfficeAnchor => ({
+  id,
+  deskRect: { x: x - 34, y: y - 34, width: 68, height: 42 },
+  chairPoint: { x: workX, y: workY + 8 },
+  monitorPoint: { x, y: y - 28 },
+  standingPoint: { x: workX + 28, y: workY + 6 },
+  agentWorkPoint: { x: workX, y: workY },
+  zIndexHint: Math.round(workY),
+});
+
+export const OFFICE_ZONE_ANCHORS: Record<OfficeZone, OfficeAnchor[]> = {
+  bossDesk: [anchor("bossDesk", 640, 222, 640, 258)],
+  codingDesks: [
+    anchor("codingDesk1", 431, 455, 431, 548),
+    anchor("codingDesk2", 571, 455, 571, 548),
+    anchor("codingDesk3", 711, 455, 711, 548),
+    anchor("codingDesk4", 851, 455, 851, 548),
+  ],
+  researchLibrary: [anchor("research1", 112, 300, 302, 332), anchor("research2", 135, 380, 304, 410), anchor("research3", 155, 438, 304, 466)],
+  buildLab: [anchor("build1", 1024, 348, 946, 350), anchor("build2", 1140, 392, 946, 410)],
+  testBoard: [anchor("test1", 1015, 548, 930, 548), anchor("test2", 1120, 548, 1230, 548)],
+  debugCorner: [anchor("debug1", 820, 625, 744, 652), anchor("debug2", 935, 625, 1004, 652)],
+  gitBoard: [anchor("git1", 350, 620, 286, 650), anchor("git2", 485, 620, 570, 650)],
+  lounge: [anchor("lounge1", 130, 620, 130, 690), anchor("lounge2", 235, 620, 235, 690)],
+  meetingRoom: [anchor("meeting1", 620, 625), anchor("meeting2", 690, 625), anchor("meeting3", 655, 670)],
+  entrance: [anchor("entrance1", 633, 710), anchor("entrance2", 674, 710)],
+};
+
+export const BOSS_POSITION = OFFICE_ZONE_ANCHORS.bossDesk[0].agentWorkPoint;
+export const ENTRANCE_POSITION = OFFICE_ZONE_ANCHORS.entrance[0].agentWorkPoint;
 
 export function officeTarget(zone: OfficeZone, id: string): OfficePoint {
-  const points = OFFICE_ZONES[zone];
+  const anchors = OFFICE_ZONE_ANCHORS[zone];
   const hash = Array.from(id).reduce((value, char) => value + char.charCodeAt(0), 0);
-  const point = points[hash % points.length];
-  const jitter = zone === "entrance" || zone === "bossDesk" ? 0 : (hash % 15) - 7;
+  const point = anchors[hash % anchors.length].agentWorkPoint;
+  const jitter = zone === "entrance" || zone === "bossDesk" || zone === "codingDesks" ? 0 : (hash % 9) - 4;
   return { x: point.x + jitter, y: point.y + Math.round(jitter / 3) };
 }

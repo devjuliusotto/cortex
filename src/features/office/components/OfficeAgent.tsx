@@ -6,8 +6,9 @@ import type { OfficeAgentModel, OfficeSignal } from "../officeTypes";
 
 const colors: Record<OfficeSignal, number> = { active: 0x63d9d4, idle: 0x8991a5, success: 0x68d398, warning: 0xed667d };
 
-export function OfficeAgent({ agent, onSelect, onOpen }: { agent: OfficeAgentModel; onSelect: (id: string) => void; onOpen: (id: string) => void }) {
+export function OfficeAgent({ agent, showWorkspaceLabel, onSelect, onOpen }: { agent: OfficeAgentModel; showWorkspaceLabel: boolean; onSelect: (id: string) => void; onOpen: (id: string) => void }) {
   const ref = useRef<Container | null>(null);
+  const workerRef = useRef<Graphics | null>(null);
   const time = useRef(0);
   const exitTime = useRef(0);
   const initialized = useRef(false);
@@ -37,6 +38,7 @@ export function OfficeAgent({ agent, onSelect, onOpen }: { agent: OfficeAgentMod
     node.rotation = walking ? Math.sin(time.current * 1.8) * 0.025 : 0;
     node.scale.x = walking ? 1 + Math.sin(time.current * 2) * 0.025 : 1;
     node.scale.y = 1 + Math.sin(time.current) * (walking ? 0.045 : agent.pose === "typing" ? 0.025 : 0.012);
+    if (workerRef.current) workerRef.current.y = !walking && agent.pose === "typing" ? Math.sin(time.current * 3) * 1.2 : 0;
 
     if (agent.phase === "exiting") {
       exitTime.current += 1 / 60;
@@ -77,17 +79,18 @@ export function OfficeAgent({ agent, onSelect, onOpen }: { agent: OfficeAgentMod
   }, [agent.identity.accessory, agent.identity.color, agent.pose, agent.signal, agent.zone]);
 
   const drawBubble = useCallback((g: Graphics) => {
+    const y = agent.zone === "codingDesks" ? -160 : -86;
     g.clear();
-    g.roundRect(-82, -86, 164, 27, 2).fill({ color: 0x111622, alpha: 0.94 }).stroke({ color: colors[agent.signal], alpha: 0.65, width: 2 });
-    g.moveTo(-8, -59).lineTo(0, -51).lineTo(8, -59).fill(0x111622);
-  }, [agent.signal]);
+    g.roundRect(-82, y, 164, 27, 2).fill({ color: 0x111622, alpha: 0.94 }).stroke({ color: colors[agent.signal], alpha: 0.65, width: 2 });
+    g.moveTo(-8, y + 27).lineTo(0, y + 35).lineTo(8, y + 27).fill(0x111622);
+  }, [agent.signal, agent.zone]);
 
   return (
     <pixiContainer ref={ref} eventMode="static" cursor="pointer" onPointerTap={(event: FederatedPointerEvent) => event.detail >= 2 ? onOpen(agent.id) : onSelect(agent.id)}>
       <pixiGraphics draw={drawBubble} />
-      <pixiText text={agent.phase === "exiting" ? "Wrapping up..." : agent.meetingLabel ?? agent.activity} x={0} y={-78} anchor={0.5} style={{ fill: 0xdde3ef, fontFamily: "monospace", fontSize: 9 }} />
-      <pixiGraphics draw={drawWorker} />
-      <pixiText text={agent.terminalName} x={0} y={44} anchor={0.5} style={{ fill: 0xf3f4f8, fontFamily: "monospace", fontSize: 10, fontWeight: "bold" }} />
+      <pixiText text={agent.phase === "exiting" ? "Wrapping up..." : agent.meetingLabel ?? agent.activity} x={0} y={agent.zone === "codingDesks" ? -152 : -78} anchor={0.5} style={{ fill: 0xdde3ef, fontFamily: "monospace", fontSize: 9 }} />
+      <pixiGraphics ref={workerRef} draw={drawWorker} />
+      <pixiText text={showWorkspaceLabel ? `${agent.terminalName} · ${agent.workspaceShortName}` : agent.terminalName} x={0} y={44} anchor={0.5} style={{ fill: 0xf3f4f8, fontFamily: "monospace", fontSize: showWorkspaceLabel ? 8 : 10, fontWeight: "bold" }} />
       <pixiText text={agent.identity.role} x={0} y={57} anchor={0.5} style={{ fill: 0xaeb6c8, fontFamily: "monospace", fontSize: 7 }} />
     </pixiContainer>
   );

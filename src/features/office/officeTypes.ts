@@ -32,6 +32,7 @@ export type OfficeEvent = {
 };
 
 export type OfficePoint = { x: number; y: number };
+export type OfficeScope = "currentWorkspace" | "allWorkspaces";
 
 export type OfficeAgentIdentity = {
   name: string;
@@ -42,6 +43,9 @@ export type OfficeAgentIdentity = {
 
 export type OfficeAgentModel = {
   id: string;
+  workspaceId: string;
+  workspaceName: string;
+  workspaceShortName: string;
   terminalName: string;
   profileLabel: string;
   sessionStatus: SessionStatus;

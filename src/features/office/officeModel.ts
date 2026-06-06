@@ -1,8 +1,8 @@
 import type { CommandHistoryEntry } from "@/features/terminal/commandHistory";
-import type { TerminalSession } from "@/stores/cortexStore";
+import type { TerminalSession, Workspace } from "@/stores/cortexStore";
 import { compactOfficeText, detectOfficeActivity } from "./officeDetection";
 import { officeTarget } from "./officeLayout";
-import type { OfficeAgentIdentity, OfficeAgentModel, OfficeAgentPose, OfficeKanbanCard, OfficeSignal, OfficeSummary, OfficeZoneId } from "./officeTypes";
+import type { OfficeAgentIdentity, OfficeAgentModel, OfficeAgentPose, OfficeKanbanCard, OfficeScope, OfficeSignal, OfficeSummary, OfficeZoneId } from "./officeTypes";
 
 export const OFFICE_ACTIVITY_LIMIT = 42;
 const ansiPattern = /\u001b(?:\[[0-?]*[ -/]*[@-~]|\][^\u0007]*(?:\u0007|\u001b\\))/g;
@@ -55,19 +55,41 @@ function meetingAgent(agent: OfficeAgentModel, label: string): OfficeAgentModel 
   return { ...agent, zone: "meetingRoom", pose: "meeting", meetingLabel: label, target: officeTarget("meetingRoom", agent.id) };
 }
 
-export function createOfficeAgents(sessions: TerminalSession[], commandHistory: CommandHistoryEntry[]) {
-  const visible = sessions.filter((session) => ["running", "waiting", "error"].includes(session.status));
-  return applyMeetingHeuristic(visible.map((session): OfficeAgentModel => {
+type CreateOfficeAgentsOptions = {
+  scope: OfficeScope;
+  currentWorkspaceId: string | null;
+  workspaces: Workspace[];
+};
+
+function shortWorkspaceName(name: string) {
+  const compact = name.trim().replace(/\s+/g, " ");
+  return compact.length > 14 ? `${compact.slice(0, 13)}…` : compact;
+}
+
+export function createOfficeAgents(sessions: TerminalSession[], commandHistory: CommandHistoryEntry[], options: CreateOfficeAgentsOptions) {
+  const workspaceById = new Map(options.workspaces.map((workspace) => [workspace.id, workspace]));
+  const visible = sessions.filter((session) =>
+    ["running", "waiting", "error"].includes(session.status) &&
+    (options.scope === "allWorkspaces" || session.workspaceId === options.currentWorkspaceId),
+  );
+  const agents = visible.map((session): OfficeAgentModel => {
     const activity = sessionActivity(session, commandHistory);
     const detected = detectOfficeActivity(activity);
     const zone = session.status === "waiting" ? "lounge" : detected.zone;
+    const workspaceName = workspaceById.get(session.workspaceId)?.name ?? "Unknown project";
     return {
-      id: session.id, terminalName: session.name, profileLabel: session.profileId.replace("wsl-", ""),
+      id: session.id, workspaceId: session.workspaceId, workspaceName,
+      workspaceShortName: shortWorkspaceName(workspaceName), terminalName: session.name,
+      profileLabel: session.profileId.replace("wsl-", ""),
       sessionStatus: session.status, signal: signalFor(session, detected.category), phase: "active",
       pose: poseForZone(zone), activity, category: detected.category, zone, target: officeTarget(zone, session.id),
       identity: identityFor(session, activity),
     };
-  }));
+  });
+  if (options.scope === "currentWorkspace") return applyMeetingHeuristic(agents);
+  return [...new Set(agents.map((agent) => agent.workspaceId))].flatMap((workspaceId) =>
+    applyMeetingHeuristic(agents.filter((agent) => agent.workspaceId === workspaceId)),
+  );
 }
 
 export function summarizeOffice(agents: OfficeAgentModel[], lastEvent?: string): OfficeSummary {
