@@ -33,6 +33,40 @@ export type OfficeEvent = {
 
 export type OfficePoint = { x: number; y: number };
 export type OfficeScope = "currentWorkspace" | "allWorkspaces";
+export type OfficeAgentProvider = "claude" | "codex" | "gpt" | "gemini" | "cursor" | "aider" | "cline" | "unknown";
+export type OfficeAiAgentStatus = "idle" | "thinking" | "researching" | "coding" | "testing" | "building" | "debugging" | "git" | "waiting" | "success" | "error" | "stopped";
+
+export type OfficeAiAgent = {
+  id: string;
+  provider: OfficeAgentProvider;
+  name: string;
+  role: string;
+  terminalId?: string;
+  workspaceId?: string;
+  workspaceName: string;
+  workspaceShortName: string;
+  parentAgentId?: string;
+  isSubagent: boolean;
+  status: OfficeAiAgentStatus;
+  activity: string;
+  toolName?: string;
+  zone: OfficeZoneId;
+  confidence: number;
+  lastSeenAt: number;
+};
+
+export type OfficeAdapterInput = {
+  scope: OfficeScope;
+  currentWorkspaceId: string | null;
+  workspaces: import("@/stores/cortexStore").Workspace[];
+  sessions: import("@/stores/cortexStore").TerminalSession[];
+  commandHistory: import("@/features/terminal/commandHistory").CommandHistoryEntry[];
+};
+
+export type OfficeActivityAdapter = {
+  id: string;
+  detectAgents(input: OfficeAdapterInput): OfficeAiAgent[] | Promise<OfficeAiAgent[]>;
+};
 
 export type OfficeAgentIdentity = {
   name: string;
@@ -41,11 +75,9 @@ export type OfficeAgentIdentity = {
   accessory: "spark" | "brackets" | "note" | "lens" | "terminal";
 };
 
-export type OfficeAgentModel = {
-  id: string;
+export type OfficeAgentModel = OfficeAiAgent & {
   workspaceId: string;
-  workspaceName: string;
-  workspaceShortName: string;
+  terminalId?: string;
   terminalName: string;
   profileLabel: string;
   sessionStatus: SessionStatus;

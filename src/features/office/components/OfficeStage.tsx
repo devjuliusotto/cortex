@@ -26,7 +26,7 @@ export function OfficeStage({ agents, workspaceName, showWorkspaceLabels, summar
     <OfficeBackground workspaceName={workspaceName} waiting={agents.length === 0} />
     <OfficeKanbanWall cards={cards} /><OfficeGitWall summary={git} />
     <OfficeBoss onSelect={onBossSelect} lines={bossLines} />
-    {agents.map((agent) => <OfficeAgent key={agent.id} agent={agent} showWorkspaceLabel={showWorkspaceLabels} onSelect={onAgentSelect} onOpen={onTerminalOpen} />)}
+    {agents.map((agent) => <OfficeAgent key={agent.id} agent={agent} showWorkspaceLabel={showWorkspaceLabels} onSelect={onAgentSelect} onOpen={() => agent.terminalId && onTerminalOpen(agent.terminalId)} />)}
     <OfficeFurnitureFront agents={agents} />
   </pixiContainer></Application></div>;
 }

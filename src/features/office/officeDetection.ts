@@ -17,6 +17,18 @@ export const categoryZones: Record<OfficeActivityCategory, OfficeZoneId> = {
   git: "gitBoard", error: "debugCorner", success: "lounge", idle: "lounge",
 };
 
+export function providerFromText(value: string) {
+  const text = value.toLowerCase();
+  if (/\bclaude(?:\s+code)?\b/.test(text)) return "claude" as const;
+  if (/\bcodex\b/.test(text)) return "codex" as const;
+  if (/\b(?:chat)?gpt\b/.test(text)) return "gpt" as const;
+  if (/\bgemini\b/.test(text)) return "gemini" as const;
+  if (/\bcursor\b/.test(text)) return "cursor" as const;
+  if (/\baider\b/.test(text)) return "aider" as const;
+  if (/\bcline\b/.test(text)) return "cline" as const;
+  return null;
+}
+
 export function compactOfficeText(value: string, limit = 58) {
   const clean = value.replace(ansiPattern, "").replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim();
   if (!clean) return "Working";

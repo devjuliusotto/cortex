@@ -87,13 +87,14 @@ export function OfficeBackground({ workspaceName, waiting }: { workspaceName: st
     <>
       <pixiGraphics draw={draw} />
       <pixiText text={workspaceName.toUpperCase()} x={640} y={78} anchor={0.5} style={{ fill: 0xf0e8d5, fontFamily: "monospace", fontSize: 24, fontWeight: "bold", letterSpacing: 4 }} />
-      <pixiText text={waiting ? "WAITING FOR AGENTS" : "OFFICE ONLINE"} x={640} y={121} anchor={0.5} style={{ fill: waiting ? 0xc6bda9 : 0x6fd8a0, fontFamily: "monospace", fontSize: 11, letterSpacing: 2 }} />
+      <pixiText text={waiting ? "NO ACTIVE AI AGENTS DETECTED" : "OFFICE ONLINE"} x={640} y={121} anchor={0.5} style={{ fill: waiting ? 0xc6bda9 : 0x6fd8a0, fontFamily: "monospace", fontSize: 11, letterSpacing: 2 }} />
+      {waiting && <pixiText text="Start Claude, Codex, GPT, or Gemini in a terminal" x={640} y={140} anchor={0.5} style={{ fill: 0x8f96a8, fontFamily: "monospace", fontSize: 8 }} />}
       <pixiText text="RESEARCH" x={176} y={158} anchor={0.5} style={zoneStyle} />
       <pixiText text="BUILD LAB" x={1094} y={210} anchor={0.5} style={zoneStyle} />
       <pixiText text="TEST BOARD" x={1093} y={460} anchor={0.5} style={zoneStyle} />
       <pixiText text="REPOSITORY" x={428} y={551} anchor={0.5} style={zoneStyle} />
       <pixiText text="DEBUG" x={872} y={561} anchor={0.5} style={{ ...zoneStyle, fill: 0xe67b8e }} />
-      <pixiText text="MEETING" x={658} y={554} anchor={0.5} style={zoneStyle} />
+      <pixiText text="PLANNING" x={658} y={554} anchor={0.5} style={zoneStyle} />
       <pixiText text="ENTRANCE" x={643} y={698} anchor={0.5} style={{ fill: 0x9f95a7, fontFamily: "monospace", fontSize: 8, letterSpacing: 1 }} />
     </>
   );

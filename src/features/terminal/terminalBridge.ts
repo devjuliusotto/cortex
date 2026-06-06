@@ -1,7 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { useCortexStore, type TerminalProfileId } from "@/stores/cortexStore";
-import { ingestOfficeOutput, ingestOfficeStatus } from "@/features/office/officeEvents";
 
 type PtySessionId = string;
 type TerminalStatus = "idle" | "loading" | "connected" | "exited" | "error";
@@ -208,9 +207,6 @@ function ensureEventListeners() {
         process.buffer += event.payload.data;
       }
       useCortexStore.getState().appendTerminalHistory(appSessionId, event.payload.data);
-      const session = useCortexStore.getState().sessions.find((item) => item.id === appSessionId);
-      if (session) ingestOfficeOutput(session.id, session.name, session.workspaceId, event.payload.data);
-
       for (const subscriber of subscribers.get(appSessionId) ?? []) {
         subscriber.onData(event.payload.data);
       }
@@ -246,8 +242,6 @@ function ensureEventListeners() {
 }
 
 function notifyStatus(appSessionId: string, status: TerminalStatus, error: string | null) {
-  const session = useCortexStore.getState().sessions.find((item) => item.id === appSessionId);
-  if (session) ingestOfficeStatus(session.id, session.name, session.workspaceId, status, error);
   for (const subscriber of subscribers.get(appSessionId) ?? []) {
     subscriber.onStatus?.(status, error);
   }

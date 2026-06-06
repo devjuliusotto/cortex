@@ -1,4 +1,3 @@
-import { detectOfficeActivity, eventTypeForCategory } from "./officeDetection";
 import type { OfficeEvent, OfficeEventType, OfficeZoneId } from "./officeTypes";
 
 const MAX_EVENTS = 500;
@@ -30,29 +29,6 @@ export function addOfficeEvent(input: Omit<OfficeEvent, "id" | "timestamp"> & { 
   return event;
 }
 
-export function ensureAgentSpawned(agentId: string, terminalName: string, workspaceId?: string) {
-  if (events.some((event) => event.agentId === agentId && event.type === "spawn")) return;
-  addOfficeEvent({ agentId, terminalId: agentId, workspaceId, type: "spawn", label: `${terminalName} entered office`, zone: "entrance" });
-}
-
-export function ingestOfficeOutput(agentId: string, terminalName: string, workspaceId: string | undefined, output: string) {
-  const { category, detail, zone } = detectOfficeActivity(output.slice(-800));
-  ensureAgentSpawned(agentId, terminalName, workspaceId);
-  const type = eventTypeForCategory(category);
-  addOfficeEvent({ agentId, terminalId: agentId, workspaceId, type, label: labelFor(type, detail), detail, zone });
-}
-
-export function ingestOfficeStatus(agentId: string, terminalName: string, workspaceId: string | undefined, status: string, error?: string | null) {
-  ensureAgentSpawned(agentId, terminalName, workspaceId);
-  if (status === "error") addOfficeEvent({ agentId, terminalId: agentId, workspaceId, type: "error", label: "Terminal error detected", detail: error?.slice(0, 90), zone: "debugCorner" });
-  if (status === "exited" || status === "idle") addOfficeEvent({ agentId, terminalId: agentId, workspaceId, type: "stop", label: "Terminal stopped", zone: "lounge" });
-}
-
 export function addMoveEvent(agentId: string, workspaceId: string | undefined, zone: OfficeZoneId, label: string, type: OfficeEventType = "move") {
-  addOfficeEvent({ agentId, terminalId: agentId, workspaceId, type, label, zone });
-}
-
-function labelFor(type: OfficeEventType, detail: string) {
-  const labels: Partial<Record<OfficeEventType, string>> = { build: "Build started", test: "Test/check started", git: "Git activity", error: "Error detected", success: "Success detected", idle: "Agent waiting" };
-  return labels[type] ?? detail;
+  addOfficeEvent({ agentId, workspaceId, type, label, zone });
 }

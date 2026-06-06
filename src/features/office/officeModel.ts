@@ -1,95 +1,63 @@
-import type { CommandHistoryEntry } from "@/features/terminal/commandHistory";
-import type { TerminalSession, Workspace } from "@/stores/cortexStore";
-import { compactOfficeText, detectOfficeActivity } from "./officeDetection";
+import type { TerminalSession } from "@/stores/cortexStore";
+import { compactOfficeText } from "./officeDetection";
 import { officeTarget } from "./officeLayout";
-import type { OfficeAgentIdentity, OfficeAgentModel, OfficeAgentPose, OfficeKanbanCard, OfficeScope, OfficeSignal, OfficeSummary, OfficeZoneId } from "./officeTypes";
+import type { OfficeActivityCategory, OfficeAgentIdentity, OfficeAgentModel, OfficeAgentPose, OfficeAiAgent, OfficeAiAgentStatus, OfficeKanbanCard, OfficeSignal, OfficeSummary, OfficeZoneId } from "./officeTypes";
 
 export const OFFICE_ACTIVITY_LIMIT = 42;
-const ansiPattern = /\u001b(?:\[[0-?]*[ -/]*[@-~]|\][^\u0007]*(?:\u0007|\u001b\\))/g;
 
-function lastOutputLine(history: string) {
-  return history.replace(ansiPattern, "").split(/\r?\n|\r/).map((line) => compactOfficeText(line, OFFICE_ACTIVITY_LIMIT)).filter(Boolean).at(-1) ?? "Working";
+function identityFor(agent: OfficeAiAgent): OfficeAgentIdentity {
+  const providers: Record<OfficeAiAgent["provider"], Pick<OfficeAgentIdentity, "color" | "accessory">> = {
+    claude: { color: 0xc98264, accessory: "spark" }, codex: { color: 0x63d9d4, accessory: "brackets" },
+    gpt: { color: 0x77b987, accessory: "note" }, gemini: { color: 0x7196df, accessory: "lens" },
+    cursor: { color: 0x8b82c4, accessory: "brackets" }, aider: { color: 0xd2aa62, accessory: "terminal" },
+    cline: { color: 0x68a8c4, accessory: "terminal" }, unknown: { color: 0x8991a5, accessory: "terminal" },
+  };
+  return { name: agent.name, role: agent.role, ...providers[agent.provider] };
 }
 
-function sessionActivity(session: TerminalSession, history: CommandHistoryEntry[]) {
-  const command = history.filter((entry) => entry.sessionId === session.id).at(-1)?.command;
-  return compactOfficeText(command || lastOutputLine(session.terminalHistory), OFFICE_ACTIVITY_LIMIT);
+function categoryFor(status: OfficeAiAgentStatus): OfficeActivityCategory {
+  if (status === "researching") return "research";
+  if (status === "testing") return "test";
+  if (status === "building") return "build";
+  if (status === "debugging" || status === "error") return "error";
+  if (status === "git") return "git";
+  if (status === "success") return "success";
+  if (status === "idle" || status === "waiting" || status === "stopped") return "idle";
+  return "coding";
 }
 
-function identityFor(session: TerminalSession, activity: string): OfficeAgentIdentity {
-  const value = `${session.name} ${activity}`.toLowerCase();
-  if (value.includes("claude")) return { name: "Claude", role: "AI Engineer", color: 0xc98264, accessory: "spark" };
-  if (value.includes("codex")) return { name: "Codex", role: "Code Agent", color: 0x63d9d4, accessory: "brackets" };
-  if (/\bgpt\b/.test(value)) return { name: "GPT", role: "Documentation Agent", color: 0x77b987, accessory: "note" };
-  if (value.includes("gemini")) return { name: "Gemini", role: "Research Agent", color: 0x7196df, accessory: "lens" };
-  return { name: session.name, role: "Terminal Worker", color: 0x8991a5, accessory: "terminal" };
+function signalFor(status: OfficeAiAgentStatus): OfficeSignal {
+  if (status === "error" || status === "debugging") return "warning";
+  if (status === "success") return "success";
+  if (status === "idle" || status === "waiting" || status === "stopped") return "idle";
+  return "active";
 }
 
-function signalFor(session: TerminalSession, category: ReturnType<typeof detectOfficeActivity>["category"]): OfficeSignal {
-  if (session.status === "error" || category === "error") return "warning";
-  if (session.status === "completed" || category === "success") return "success";
-  if (session.status === "running") return "active";
-  return "idle";
-}
-
-function poseForZone(zone: OfficeZoneId): OfficeAgentPose {
-  if (zone === "meetingRoom") return "meeting";
-  if (zone === "researchLibrary") return "reading";
-  if (["buildLab", "testBoard", "gitBoard"].includes(zone)) return "observing";
-  if (zone === "debugCorner") return "debugging";
-  if (zone === "lounge") return "idle";
+function poseFor(status: OfficeAiAgentStatus, zone: OfficeZoneId): OfficeAgentPose {
+  if (status === "waiting" || status === "thinking" || zone === "meetingRoom") return "meeting";
+  if (status === "researching") return "reading";
+  if (status === "building" || status === "testing" || status === "git") return "observing";
+  if (status === "debugging" || status === "error") return "debugging";
+  if (status === "idle" || status === "success" || status === "stopped") return "idle";
   return "typing";
 }
 
-function applyMeetingHeuristic(agents: OfficeAgentModel[]) {
-  const errors = agents.filter((agent) => agent.category === "error" || agent.signal === "warning");
-  if (errors.length >= 2) return agents.map((agent) => errors.includes(agent) ? meetingAgent(agent, "Reviewing error") : agent);
-  for (const category of ["build", "test", "git", "coding"] as const) {
-    const group = agents.filter((agent) => agent.category === category && agent.signal === "active");
-    if (group.length >= 2) return agents.map((agent) => group.includes(agent) ? meetingAgent(agent, category === "git" ? "Syncing task" : `Discussing ${category}`) : agent);
-  }
-  return agents;
-}
-
-function meetingAgent(agent: OfficeAgentModel, label: string): OfficeAgentModel {
-  return { ...agent, zone: "meetingRoom", pose: "meeting", meetingLabel: label, target: officeTarget("meetingRoom", agent.id) };
-}
-
-type CreateOfficeAgentsOptions = {
-  scope: OfficeScope;
-  currentWorkspaceId: string | null;
-  workspaces: Workspace[];
-};
-
-function shortWorkspaceName(name: string) {
-  const compact = name.trim().replace(/\s+/g, " ");
-  return compact.length > 14 ? `${compact.slice(0, 13)}…` : compact;
-}
-
-export function createOfficeAgents(sessions: TerminalSession[], commandHistory: CommandHistoryEntry[], options: CreateOfficeAgentsOptions) {
-  const workspaceById = new Map(options.workspaces.map((workspace) => [workspace.id, workspace]));
-  const visible = sessions.filter((session) =>
-    ["running", "waiting", "error"].includes(session.status) &&
-    (options.scope === "allWorkspaces" || session.workspaceId === options.currentWorkspaceId),
-  );
-  const agents = visible.map((session): OfficeAgentModel => {
-    const activity = sessionActivity(session, commandHistory);
-    const detected = detectOfficeActivity(activity);
-    const zone = session.status === "waiting" ? "lounge" : detected.zone;
-    const workspaceName = workspaceById.get(session.workspaceId)?.name ?? "Unknown project";
+export function createOfficeActors(aiAgents: OfficeAiAgent[], sessions: TerminalSession[]) {
+  const sessionsById = new Map(sessions.map((session) => [session.id, session]));
+  return aiAgents.map((agent): OfficeAgentModel => {
+    const session = agent.terminalId ? sessionsById.get(agent.terminalId) : undefined;
+    const category = categoryFor(agent.status);
     return {
-      id: session.id, workspaceId: session.workspaceId, workspaceName,
-      workspaceShortName: shortWorkspaceName(workspaceName), terminalName: session.name,
-      profileLabel: session.profileId.replace("wsl-", ""),
-      sessionStatus: session.status, signal: signalFor(session, detected.category), phase: "active",
-      pose: poseForZone(zone), activity, category: detected.category, zone, target: officeTarget(zone, session.id),
-      identity: identityFor(session, activity),
+      ...agent,
+      workspaceId: agent.workspaceId ?? "unknown",
+      terminalName: session?.name ?? agent.name,
+      profileLabel: session?.profileId.replace("wsl-", "") ?? agent.provider,
+      sessionStatus: session?.status ?? (agent.status === "error" ? "error" : agent.status === "stopped" ? "completed" : "running"),
+      signal: signalFor(agent.status), phase: agent.status === "stopped" ? "exiting" : "active",
+      pose: poseFor(agent.status, agent.zone), category, target: officeTarget(agent.zone, agent.id),
+      identity: identityFor(agent), meetingLabel: agent.status === "waiting" ? "Waiting for input" : undefined,
     };
   });
-  if (options.scope === "currentWorkspace") return applyMeetingHeuristic(agents);
-  return [...new Set(agents.map((agent) => agent.workspaceId))].flatMap((workspaceId) =>
-    applyMeetingHeuristic(agents.filter((agent) => agent.workspaceId === workspaceId)),
-  );
 }
 
 export function summarizeOffice(agents: OfficeAgentModel[], lastEvent?: string): OfficeSummary {
@@ -98,7 +66,7 @@ export function summarizeOffice(agents: OfficeAgentModel[], lastEvent?: string):
     errors: agents.filter((agent) => agent.signal === "warning").length,
     buildsTests: agents.filter((agent) => agent.category === "build" || agent.category === "test").length,
     total: agents.filter((agent) => agent.phase === "active").length,
-    lastActivity: lastEvent ?? agents[0]?.activity ?? "Waiting for agents",
+    lastActivity: lastEvent ?? agents[0]?.activity ?? "No active AI agents detected",
   };
 }
 
