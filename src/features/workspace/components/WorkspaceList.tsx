@@ -1,10 +1,11 @@
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { Check, Copy, Folder, FolderOpen, Palette, Play, Plus, Trash2 } from "lucide-react";
+import { Check, Copy, Folder, FolderOpen, Palette, Play, Plus, Puzzle, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { StatusIndicator } from "@/features/terminal/components/StatusIndicator";
 import { terminateTerminals } from "@/features/terminal/terminalBridge";
+import { SkillManagerModal } from "@/features/skills/components/SkillManagerModal";
 import { cn } from "@/lib/utils";
 import { useCortexStore, type SessionStatus, type Workspace } from "@/stores/cortexStore";
 
@@ -25,6 +26,7 @@ type ContextMenuState = {
 
 export function WorkspaceList() {
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
+  const [skillsWorkspace, setSkillsWorkspace] = useState<Workspace | null>(null);
   const {
     workspaces,
     activeWorkspaceId,
@@ -251,6 +253,14 @@ export function WorkspaceList() {
             }}
           />
           <ContextMenuButton
+            icon={<Puzzle className="h-4 w-4" />}
+            label="Project skills..."
+            onClick={() => {
+              setSkillsWorkspace(contextWorkspace);
+              setContextMenu(null);
+            }}
+          />
+          <ContextMenuButton
             disabled={!contextWorkspace.defaultWorkingDirectory}
             icon={<Trash2 className="h-4 w-4" />}
             label="Clear default terminal path"
@@ -290,6 +300,11 @@ export function WorkspaceList() {
           />
         </div>
       )}
+      <SkillManagerModal
+        open={Boolean(skillsWorkspace)}
+        workspace={skillsWorkspace}
+        onClose={() => setSkillsWorkspace(null)}
+      />
     </div>
   );
 }

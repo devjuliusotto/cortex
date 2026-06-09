@@ -9,6 +9,7 @@ use pty::{
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
+use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -64,6 +65,18 @@ struct PtyErrorEvent {
 struct ValidatedWorkingDirectory {
     cwd: Option<String>,
     warning: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ProjectSkillInfo {
+    name: String,
+    description: Option<String>,
+    source: String,
+    installed_path: Option<String>,
+    compatible_agents: Vec<String>,
+    compatibility_note: String,
+    private_to_project: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -565,6 +578,323 @@ fn workspace_path(path: String) -> Result<PathBuf, String> {
     let path = PathBuf::from(trimmed);
     path.canonicalize()
         .map_err(|_| format!("Workspace path was not found: {trimmed}"))
+}
+
+fn parse_skill_frontmatter(skill_file: &Path) -> (String, Option<String>) {
+    let raw = fs::read_to_string(skill_file).unwrap_or_default();
+    let mut name = skill_file
+        .parent()
+        .and_then(Path::file_name)
+        .and_then(|value| value.to_str())
+        .unwrap_or("skill")
+        .to_string();
+    let mut description = None;
+    let mut in_frontmatter = false;
+
+    for line in raw.lines() {
+        let trimmed = line.trim();
+        if trimmed == "---" {
+            if in_frontmatter {
+                break;
+            }
+            in_frontmatter = true;
+            continue;
+        }
+        if !in_frontmatter {
+            continue;
+        }
+        if let Some(value) = trimmed.strip_prefix("name:") {
+            name = value.trim().trim_matches(['\'', '"']).to_string();
+        } else if let Some(value) = trimmed.strip_prefix("description:") {
+            description = Some(value.trim().trim_matches(['\'', '"']).to_string());
+        }
+    }
+
+    (name, description.filter(|value| !value.is_empty()))
+}
+
+fn has_path(root: &Path, candidates: &[&str]) -> bool {
+    candidates.iter().any(|candidate| root.join(candidate).exists())
+}
+
+fn detect_skill_compatibility(skill_root: &Path) -> (Vec<String>, String) {
+    let mut agents = vec!["Codex".to_string(), "Claude Code".to_string()];
+    let mut specific = Vec::new();
+    let skill_text = fs::read_to_string(skill_root.join("SKILL.md"))
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+
+    if has_path(skill_root, &[".cursor", ".cursor/rules"]) {
+        agents.push("Cursor".to_string());
+        specific.push("Cursor configuration");
+    }
+    if has_path(
+        skill_root,
+        &[".github/copilot-instructions.md", ".github/instructions"],
+    ) {
+        agents.push("GitHub Copilot".to_string());
+        specific.push("Copilot instructions");
+    }
+    if has_path(skill_root, &["GEMINI.md", ".gemini"]) {
+        agents.push("Gemini CLI".to_string());
+        specific.push("Gemini configuration");
+    }
+
+    let claude_specific = has_path(
+        skill_root,
+        &[
+            "CLAUDE.md",
+            ".claude",
+            ".claude-plugin",
+            "commands",
+            "hooks/hooks.json",
+        ],
+    ) || skill_text.contains("claude code")
+        || skill_text.contains(".claude/");
+    let note = if claude_specific {
+        agents[0] = "Codex (SKILL.md only)".to_string();
+        "Contains Claude-specific files. The SKILL.md workflow is available to Codex, but hooks, commands, agents, or plugin metadata may require adaptation."
+            .to_string()
+    } else if specific.is_empty() {
+        "Uses the Agent Skills SKILL.md format. Detected as compatible with Codex and Claude Code; other clients may also support the open format."
+            .to_string()
+    } else {
+        format!(
+            "Uses SKILL.md and also includes detected integration files for {}.",
+            specific.join(" and ")
+        )
+    };
+
+    (agents, note)
+}
+
+fn find_skill_files(root: &Path, depth: usize, found: &mut Vec<PathBuf>) -> Result<(), String> {
+    if depth > 5 || found.len() > 20 {
+        return Ok(());
+    }
+    for entry in fs::read_dir(root).map_err(|error| error.to_string())? {
+        let entry = entry.map_err(|error| error.to_string())?;
+        let path = entry.path();
+        let name = entry.file_name();
+        if name == ".git" || name == "node_modules" || name == "target" {
+            continue;
+        }
+        if path.is_file() && name == "SKILL.md" {
+            found.push(path);
+        } else if path.is_dir() {
+            find_skill_files(&path, depth + 1, found)?;
+        }
+    }
+    Ok(())
+}
+
+fn inspect_skill_directory(skill_root: &Path, source: String) -> Result<ProjectSkillInfo, String> {
+    let skill_file = skill_root.join("SKILL.md");
+    if !skill_file.is_file() {
+        return Err("The selected source does not contain a SKILL.md file.".to_string());
+    }
+    let (name, description) = parse_skill_frontmatter(&skill_file);
+    let (compatible_agents, compatibility_note) = detect_skill_compatibility(skill_root);
+    Ok(ProjectSkillInfo {
+        name,
+        description,
+        source,
+        installed_path: None,
+        compatible_agents,
+        compatibility_note,
+        private_to_project: true,
+    })
+}
+
+fn parse_github_skill_url(url: &str) -> Result<(String, Option<String>, Option<String>), String> {
+    let trimmed = url.trim().trim_end_matches('/');
+    let without_scheme = trimmed
+        .strip_prefix("https://github.com/")
+        .or_else(|| trimmed.strip_prefix("http://github.com/"))
+        .ok_or_else(|| "Use a public GitHub HTTPS URL.".to_string())?;
+    let parts: Vec<&str> = without_scheme.split('/').collect();
+    if parts.len() < 2 || parts[0].is_empty() || parts[1].is_empty() {
+        return Err("The GitHub URL must include an owner and repository.".to_string());
+    }
+    let repo_name = parts[1].trim_end_matches(".git");
+    let clone_url = format!("https://github.com/{}/{}.git", parts[0], repo_name);
+    if parts.get(2) == Some(&"tree") && parts.len() >= 4 {
+        return Ok((
+            clone_url,
+            Some(parts[3].to_string()),
+            (parts.len() > 4).then(|| parts[4..].join("/")),
+        ));
+    }
+    Ok((clone_url, None, None))
+}
+
+fn clone_github_skill(url: &str) -> Result<(PathBuf, PathBuf), String> {
+    let (clone_url, branch, subpath) = parse_github_skill_url(url)?;
+    let temp_root = env::temp_dir().join(format!("cortex-skill-{}", uuid::Uuid::new_v4()));
+    let mut args = vec!["clone".to_string(), "--depth".to_string(), "1".to_string()];
+    if let Some(branch) = branch {
+        args.extend(["--branch".to_string(), branch]);
+    }
+    args.extend([clone_url, temp_root.to_string_lossy().to_string()]);
+    run_git_internal(&env::temp_dir(), &args, Duration::from_secs(120))?;
+
+    if let Some(subpath) = subpath {
+        let relative = Path::new(&subpath);
+        if relative.components().any(|component| {
+            matches!(
+                component,
+                std::path::Component::ParentDir
+                    | std::path::Component::RootDir
+                    | std::path::Component::Prefix(_)
+            )
+        }) {
+            let _ = fs::remove_dir_all(&temp_root);
+            return Err("The GitHub skill folder path is invalid.".to_string());
+        }
+        let requested = temp_root.join(relative);
+        if requested.join("SKILL.md").is_file() {
+            return Ok((temp_root, requested));
+        }
+    }
+    if temp_root.join("SKILL.md").is_file() {
+        return Ok((temp_root.clone(), temp_root));
+    }
+
+    let mut skill_files = Vec::new();
+    find_skill_files(&temp_root, 0, &mut skill_files)?;
+    match skill_files.as_slice() {
+        [skill_file] => Ok((
+            temp_root,
+            skill_file.parent().unwrap_or(Path::new(".")).to_path_buf(),
+        )),
+        [] => Err("No SKILL.md file was found in this repository.".to_string()),
+        _ => Err("This repository contains multiple skills. Use the GitHub URL of a specific skill folder (/tree/branch/path).".to_string()),
+    }
+}
+
+fn sanitize_skill_name(name: &str) -> String {
+    let sanitized = name
+        .trim()
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() || character == '-' || character == '_' {
+                character.to_ascii_lowercase()
+            } else {
+                '-'
+            }
+        })
+        .collect::<String>();
+    sanitized.trim_matches('-').to_string()
+}
+
+fn copy_skill_directory(source: &Path, destination: &Path) -> Result<(), String> {
+    fs::create_dir_all(destination).map_err(|error| error.to_string())?;
+    for entry in fs::read_dir(source).map_err(|error| error.to_string())? {
+        let entry = entry.map_err(|error| error.to_string())?;
+        let path = entry.path();
+        if entry.file_name() == ".git" {
+            continue;
+        }
+        if entry.file_type().map_err(|error| error.to_string())?.is_symlink() {
+            continue;
+        }
+        let target = destination.join(entry.file_name());
+        if path.is_dir() {
+            copy_skill_directory(&path, &target)?;
+        } else {
+            fs::copy(&path, &target).map_err(|error| error.to_string())?;
+        }
+    }
+    Ok(())
+}
+
+fn add_private_skill_exclude(project: &Path, folder_name: &str) -> Result<(), String> {
+    let git_dir = project.join(".git");
+    if !git_dir.is_dir() {
+        return Ok(());
+    }
+    let info_dir = git_dir.join("info");
+    fs::create_dir_all(&info_dir).map_err(|error| error.to_string())?;
+    let exclude_path = info_dir.join("exclude");
+    let rule = format!("/.agents/skills/{folder_name}/");
+    let current = fs::read_to_string(&exclude_path).unwrap_or_default();
+    if !current.lines().any(|line| line.trim() == rule) {
+        let separator = if current.is_empty() || current.ends_with('\n') { "" } else { "\n" };
+        fs::write(exclude_path, format!("{current}{separator}{rule}\n"))
+            .map_err(|error| error.to_string())?;
+    }
+    Ok(())
+}
+
+fn install_skill_directory(
+    project: &Path,
+    skill_root: &Path,
+    source: String,
+) -> Result<ProjectSkillInfo, String> {
+    let mut info = inspect_skill_directory(skill_root, source)?;
+    let folder_name = sanitize_skill_name(&info.name);
+    if folder_name.is_empty() {
+        return Err("The skill name in SKILL.md is invalid.".to_string());
+    }
+    let destination = project.join(".agents").join("skills").join(&folder_name);
+    if destination.exists() {
+        return Err(format!("A project skill named '{folder_name}' is already installed."));
+    }
+    copy_skill_directory(skill_root, &destination)?;
+    add_private_skill_exclude(project, &folder_name)?;
+    info.installed_path = Some(destination.to_string_lossy().to_string());
+    Ok(info)
+}
+
+#[tauri::command]
+fn inspect_github_skill(url: String) -> Result<ProjectSkillInfo, String> {
+    let (temp_root, skill_root) = clone_github_skill(&url)?;
+    let result = inspect_skill_directory(&skill_root, url);
+    let _ = fs::remove_dir_all(temp_root);
+    result
+}
+
+#[tauri::command]
+fn inspect_local_skill(path: String) -> Result<ProjectSkillInfo, String> {
+    let skill_root = workspace_path(path.clone())?;
+    inspect_skill_directory(&skill_root, path)
+}
+
+#[tauri::command]
+fn install_github_skill(project_path: String, url: String) -> Result<ProjectSkillInfo, String> {
+    let project = workspace_path(project_path)?;
+    let (temp_root, skill_root) = clone_github_skill(&url)?;
+    let result = install_skill_directory(&project, &skill_root, url);
+    let _ = fs::remove_dir_all(temp_root);
+    result
+}
+
+#[tauri::command]
+fn install_local_skill(project_path: String, source_path: String) -> Result<ProjectSkillInfo, String> {
+    let project = workspace_path(project_path)?;
+    let skill_root = workspace_path(source_path.clone())?;
+    install_skill_directory(&project, &skill_root, source_path)
+}
+
+#[tauri::command]
+fn list_project_skills(project_path: String) -> Result<Vec<ProjectSkillInfo>, String> {
+    let project = workspace_path(project_path)?;
+    let skills_root = project.join(".agents").join("skills");
+    if !skills_root.is_dir() {
+        return Ok(Vec::new());
+    }
+    let mut skills = Vec::new();
+    for entry in fs::read_dir(&skills_root).map_err(|error| error.to_string())? {
+        let entry = entry.map_err(|error| error.to_string())?;
+        if !entry.path().is_dir() || !entry.path().join("SKILL.md").is_file() {
+            continue;
+        }
+        let mut info = inspect_skill_directory(&entry.path(), "Local project skill".to_string())?;
+        info.installed_path = Some(entry.path().to_string_lossy().to_string());
+        skills.push(info);
+    }
+    skills.sort_by(|first, second| first.name.cmp(&second.name));
+    Ok(skills)
 }
 
 fn run_git_internal(cwd: &Path, args: &[String], timeout: Duration) -> Result<String, String> {
@@ -1326,7 +1656,10 @@ fn spawn_terminal(
 
 #[cfg(test)]
 mod tests {
-    use super::{windows_path_to_wsl_path, wsl_mount_path_to_windows_path};
+    use super::{
+        parse_github_skill_url, sanitize_skill_name, windows_path_to_wsl_path,
+        wsl_mount_path_to_windows_path,
+    };
 
     #[test]
     fn converts_windows_paths_to_wsl_paths() {
@@ -1351,6 +1684,25 @@ mod tests {
             Some(r"C:\Users\Name\OneDrive - Org\Projects\Test".into())
         );
         assert_eq!(wsl_mount_path_to_windows_path("/home/name/project"), None);
+    }
+
+    #[test]
+    fn parses_github_skill_folder_urls() {
+        assert_eq!(
+            parse_github_skill_url("https://github.com/openai/skills/tree/main/skills/example")
+                .unwrap(),
+            (
+                "https://github.com/openai/skills.git".into(),
+                Some("main".into()),
+                Some("skills/example".into()),
+            )
+        );
+    }
+
+    #[test]
+    fn sanitizes_skill_folder_names() {
+        assert_eq!(sanitize_skill_name("My Useful Skill"), "my-useful-skill");
+        assert_eq!(sanitize_skill_name(" review_skill "), "review_skill");
     }
 }
 
@@ -1402,6 +1754,11 @@ pub fn run() {
             read_clipboard_text,
             write_clipboard_text,
             validate_working_directory,
+            inspect_github_skill,
+            inspect_local_skill,
+            install_github_skill,
+            install_local_skill,
+            list_project_skills,
             git_detect_repo,
             git_init_repo,
             git_set_origin,
