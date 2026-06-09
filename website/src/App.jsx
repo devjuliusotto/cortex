@@ -422,6 +422,73 @@ function HomeValue() {
   );
 }
 
+const officeAgents = [
+  { id: "code", label: "Coding", detail: "editing the feature", status: "active" },
+  { id: "test", label: "Testing", detail: "42 checks passing", status: "success" },
+  { id: "review", label: "Reviewing", detail: "reading the diff", status: "active" },
+  { id: "wait", label: "Waiting", detail: "needs your input", status: "waiting" },
+];
+
+function PixelAgent({ agent, index }) {
+  return (
+    <div className={`pixelDesk ${agent.status}`} style={{ "--agent-delay": `${index * -0.7}s` }}>
+      <div className="pixelMonitor"><span /></div>
+      <div className="pixelPerson" aria-hidden="true">
+        <i className="pixelHead" />
+        <i className="pixelBody" />
+      </div>
+      <div className="pixelDeskTop" />
+      <div className="pixelChair" />
+      <div className="pixelAgentLabel">
+        <span className="pixelStatus" />
+        <div><strong>{agent.label}</strong><small>{agent.detail}</small></div>
+      </div>
+    </div>
+  );
+}
+
+function OfficeViewShowcase() {
+  return (
+    <section className="officeViewSection" id="office-view">
+      <div className="officeViewIntro">
+        <div>
+          <span className="sectionEyebrow">New · Office View</span>
+          <h2>See your agents at work.</h2>
+        </div>
+        <div className="officeViewCopy">
+          <p>
+            Office View turns parallel AI work into a living pixel workspace. Each agent gets a
+            visible place, activity state, and task, so you can understand the team at a glance.
+          </p>
+          <a className="officeTextLink" href="#office-details">Explore the view <span>↘</span></a>
+        </div>
+      </div>
+
+      <div className="officeViewStage" aria-label="Pixel office showing four AI agents at work">
+        <div className="officeGrid" aria-hidden="true" />
+        <div className="officeWindow" aria-hidden="true">
+          <span /><span /><span /><span /><span />
+        </div>
+        <div className="officeSign" aria-hidden="true"><img src="/cortex-logo.svg" alt="" /> agent floor</div>
+        <div className="pixelOffice">
+          {officeAgents.map((agent, index) => <PixelAgent agent={agent} index={index} key={agent.id} />)}
+        </div>
+        <div className="officeLegend" aria-hidden="true">
+          <span><i className="legendActive" /> working</span>
+          <span><i className="legendSuccess" /> complete</span>
+          <span><i className="legendWaiting" /> waiting</span>
+        </div>
+      </div>
+
+      <div className="officeDetails" id="office-details">
+        <article><span>01</span><h3>Parallel work, made visible</h3><p>Follow multiple agents without opening every terminal or guessing which task is still running.</p></article>
+        <article><span>02</span><h3>Status without interruption</h3><p>Spot active, completed, and waiting agents while keeping your own focus on the project.</p></article>
+        <article><span>03</span><h3>A view, not extra AI usage</h3><p>The pixels visualize agent activity. Usage comes from the agents doing work, not from the animation.</p></article>
+      </div>
+    </section>
+  );
+}
+
 function ProductPreview({ view }) {
   const activeId = view === "commands" ? "workspace" : view;
 
@@ -1146,6 +1213,7 @@ export function App() {
                 </button>
               </div>
             </section>
+            <OfficeViewShowcase />
           </>
         )}
 
