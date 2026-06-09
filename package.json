@@ -40,5 +40,5 @@
     "tauri:dev": "tauri dev"
   },
   "type": "module",
-  "version": "0.1.27"
+  "version": "v0.1.28"
 }
