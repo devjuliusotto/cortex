@@ -1,6 +1,6 @@
 [package]
 name = "cortex"
-version = "v0.1.28"
+version = "0.1.29"
 description = "Windows-first local terminal manager"
 authors = ["Cortex contributors"]
 edition = "2021"
