@@ -172,6 +172,25 @@ struct GitReleaseOptions {
     push_tag: bool,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct OfficeWorkspacePath {
+    workspace_id: String,
+    path: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ClaudeTranscriptSnapshot {
+    workspace_id: String,
+    session_id: String,
+    path: String,
+    modified_at: u64,
+    lines: Vec<String>,
+    is_subagent: bool,
+    parent_session_id: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct GitWatchEvent {
@@ -1029,6 +1048,143 @@ fn git_status_counts(files: &[GitFileChange]) -> (usize, usize, usize) {
     (staged_count, modified_count, untracked_count)
 }
 
+fn claude_project_dir_name(path: &str) -> String {
+    path.chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() || character == '-' {
+                character
+            } else {
+                '-'
+            }
+        })
+        .collect()
+}
+
+fn transcript_tail(path: &Path) -> Option<Vec<String>> {
+    const MAX_BYTES: usize = 256 * 1024;
+    const MAX_LINES: usize = 300;
+
+    let bytes = fs::read(path).ok()?;
+    let start = bytes.len().saturating_sub(MAX_BYTES);
+    let content = String::from_utf8_lossy(&bytes[start..]);
+    let mut lines = content.lines().map(ToString::to_string).collect::<Vec<_>>();
+    if start > 0 && !lines.is_empty() {
+        lines.remove(0);
+    }
+    if lines.len() > MAX_LINES {
+        lines.drain(..lines.len() - MAX_LINES);
+    }
+    Some(lines)
+}
+
+fn transcript_snapshot(
+    workspace_id: &str,
+    path: &Path,
+    is_subagent: bool,
+    parent_session_id: Option<String>,
+) -> Option<ClaudeTranscriptSnapshot> {
+    let metadata = fs::metadata(path).ok()?;
+    if !metadata.is_file() || metadata.len() == 0 {
+        return None;
+    }
+
+    let modified_at = metadata
+        .modified()
+        .ok()?
+        .duration_since(UNIX_EPOCH)
+        .ok()?
+        .as_millis() as u64;
+
+    Some(ClaudeTranscriptSnapshot {
+        workspace_id: workspace_id.to_string(),
+        session_id: path.file_stem()?.to_string_lossy().to_string(),
+        path: path.to_string_lossy().to_string(),
+        modified_at,
+        lines: transcript_tail(path)?,
+        is_subagent,
+        parent_session_id,
+    })
+}
+
+#[tauri::command]
+fn office_read_claude_transcripts(
+    workspace_paths: Vec<OfficeWorkspacePath>,
+) -> Result<Vec<ClaudeTranscriptSnapshot>, String> {
+    let home = home_dir().ok_or_else(|| "Home directory is unavailable".to_string())?;
+    let projects_root = PathBuf::from(home).join(".claude").join("projects");
+    if !projects_root.is_dir() {
+        return Ok(Vec::new());
+    }
+
+    let canonical_root = projects_root
+        .canonicalize()
+        .map_err(|error| error.to_string())?;
+    let project_entries = fs::read_dir(&projects_root)
+        .map_err(|error| error.to_string())?
+        .filter_map(Result::ok)
+        .collect::<Vec<_>>();
+    let mut snapshots = Vec::new();
+
+    for workspace in workspace_paths {
+        let expected = claude_project_dir_name(workspace.path.trim());
+        let Some(project_dir) = project_entries
+            .iter()
+            .find(|entry| {
+                entry
+                    .file_name()
+                    .to_string_lossy()
+                    .eq_ignore_ascii_case(&expected)
+            })
+            .and_then(|entry| entry.path().canonicalize().ok())
+            .filter(|path| path.starts_with(&canonical_root))
+        else {
+            continue;
+        };
+
+        let Ok(entries) = fs::read_dir(&project_dir) else {
+            continue;
+        };
+        for entry in entries.filter_map(Result::ok) {
+            let path = entry.path();
+            if path.extension().and_then(|value| value.to_str()) == Some("jsonl") {
+                if let Some(snapshot) =
+                    transcript_snapshot(&workspace.workspace_id, &path, false, None)
+                {
+                    snapshots.push(snapshot);
+                }
+                continue;
+            }
+            if !path.is_dir() {
+                continue;
+            }
+
+            let parent_session_id = path
+                .file_name()
+                .map(|value| value.to_string_lossy().to_string());
+            let Ok(subagents) = fs::read_dir(path.join("subagents")) else {
+                continue;
+            };
+            for subagent in subagents.filter_map(Result::ok) {
+                let subagent_path = subagent.path();
+                if subagent_path.extension().and_then(|value| value.to_str()) == Some("jsonl") {
+                    if let Some(snapshot) = transcript_snapshot(
+                        &workspace.workspace_id,
+                        &subagent_path,
+                        true,
+                        parent_session_id.clone(),
+                    ) {
+                        snapshots.push(snapshot);
+                    }
+                }
+            }
+        }
+    }
+
+    snapshots.sort_by(|first, second| second.modified_at.cmp(&first.modified_at));
+    snapshots.truncate(40);
+    Ok(snapshots)
+}
+
 fn git_watch_should_ignore(path: &Path) -> bool {
     path.components().any(|component| {
         let value = component.as_os_str().to_string_lossy();
@@ -1750,6 +1906,7 @@ pub fn run() {
             pty_backend_status,
             load_persisted_state,
             save_persisted_state,
+            office_read_claude_transcripts,
             open_external_url,
             read_clipboard_text,
             write_clipboard_text,

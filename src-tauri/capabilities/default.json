@@ -2,9 +2,10 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Default desktop permissions for Cortex",
-  "windows": ["main"],
+  "windows": ["main", "office-*"],
   "permissions": [
     "core:default",
+    "core:webview:allow-create-webview-window",
     "dialog:allow-open",
     "process:allow-restart",
     "updater:default",

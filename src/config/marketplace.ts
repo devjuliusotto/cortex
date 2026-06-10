@@ -5,6 +5,9 @@ export const GITHUB_REPOSITORY = {
 
 export const GITHUB_ISSUE_URL = `https://github.com/${GITHUB_REPOSITORY.owner}/${GITHUB_REPOSITORY.name}/issues/new`;
 
+// TODO: Replace this build-time flag when Marketplace add-on enable/disable state exists.
+export const OFFICE_VIEW_ADDON_ENABLED = true;
+
 export type FeedbackType = "bug" | "feature" | "template" | "feedback";
 
 export const FEEDBACK_TYPES: Record<

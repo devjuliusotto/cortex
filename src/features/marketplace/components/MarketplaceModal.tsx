@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import {
   AlertTriangle,
+  Building2,
   Bug,
   CheckSquare,
   ExternalLink,
@@ -17,6 +18,7 @@ import {
   FEEDBACK_TYPES,
   GITHUB_ISSUE_URL,
   GITHUB_REPOSITORY,
+  OFFICE_VIEW_ADDON_ENABLED,
   type FeedbackType,
 } from "@/config/marketplace";
 import {
@@ -270,6 +272,11 @@ function AddOnsTab() {
         remote code, run third-party plugins, or include paid marketplace logic.
       </p>
       <div className="mt-5 grid gap-3 md:grid-cols-2">
+        <InfoCard
+          icon={<Building2 className="h-4 w-4 text-cortex-green" />}
+          title={`Office View · ${OFFICE_VIEW_ADDON_ENABLED ? "Enabled" : "Disabled"}`}
+          text="Built-in lightweight PixiJS visualization available from the workspace view switcher and command palette."
+        />
         <InfoCard
           icon={<Puzzle className="h-4 w-4 text-primary" />}
           title="No plugin runtime"
