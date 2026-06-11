@@ -1,4 +1,87 @@
-import type { SessionStatus } from "@/stores/cortexStore";
+import type { CommandHistoryEntry } from "@/features/terminal/commandHistory";
+import type { SessionStatus, TerminalSession, Workspace } from "@/stores/cortexStore";
+
+export type AgentEvent =
+  | { type: "task.started" }
+  | { type: "task.completed" }
+  | { type: "tool.started"; tool: string }
+  | { type: "tool.finished"; tool: string }
+  | { type: "approval.requested" }
+  | { type: "input.requested" }
+  | { type: "message.generated" }
+  | { type: "idle" };
+
+export type AgentActivity =
+  | "coding"
+  | "researching"
+  | "reviewing"
+  | "waiting_input"
+  | "waiting_approval"
+  | "completed"
+  | "idle";
+
+export type AgentLocation = "desk" | "library" | "meeting" | "buildlab" | "lounge";
+export type AgentEventSource = "structured" | "heuristic";
+export type AgentConfidenceLevel = "confirmed" | "inferred" | "unknown";
+export type OfficeScope = "currentWorkspace" | "allWorkspaces";
+export type OfficeAgentProvider = "claude" | "codex" | "gpt" | "gemini" | "cursor" | "aider" | "cline" | "unknown";
+
+export interface AgentState {
+  activity: AgentActivity;
+  location: AgentLocation;
+  confidence: number;
+  currentGoal?: string;
+}
+
+export type AgentDescriptor = {
+  id: string;
+  provider: OfficeAgentProvider;
+  name: string;
+  role: string;
+  terminalId?: string;
+  workspaceId: string;
+  workspaceName: string;
+  workspaceShortName: string;
+  parentAgentId?: string;
+  isSubagent: boolean;
+};
+
+export type AgentEventEnvelope = {
+  id: string;
+  timestamp: number;
+  source: AgentEventSource;
+  confidence: number;
+  agent: AgentDescriptor;
+  event: AgentEvent;
+  activity?: AgentActivity;
+  location?: AgentLocation;
+  currentGoal?: string;
+  detail?: string;
+  toolName?: string;
+};
+
+export type AgentSnapshot = AgentDescriptor & AgentState & {
+  source: AgentEventSource;
+  lastEvent: AgentEvent;
+  lastEventAt: number;
+  stateChangedAt: number;
+  detail?: string;
+  toolName?: string;
+};
+
+export type OfficeAdapterInput = {
+  scope: OfficeScope;
+  currentWorkspaceId: string | null;
+  workspaces: Workspace[];
+  sessions: TerminalSession[];
+  commandHistory: CommandHistoryEntry[];
+};
+
+export type OfficeActivityAdapter = {
+  id: string;
+  source: AgentEventSource;
+  detectEvents(input: OfficeAdapterInput): AgentEventEnvelope[] | Promise<AgentEventEnvelope[]>;
+};
 
 export type OfficeSignal = "active" | "idle" | "success" | "warning";
 export type OfficeAgentPhase = "active" | "exiting";
@@ -16,7 +99,6 @@ export type OfficeZoneId =
   | "entrance";
 export type OfficeZone = OfficeZoneId;
 export type OfficeActivityCategory = "coding" | "research" | "build" | "test" | "git" | "error" | "success" | "idle";
-
 export type OfficeEventType = "spawn" | "activity" | "move" | "build" | "test" | "git" | "error" | "success" | "meeting" | "idle" | "stop";
 
 export type OfficeEvent = {
@@ -32,42 +114,6 @@ export type OfficeEvent = {
 };
 
 export type OfficePoint = { x: number; y: number };
-export type OfficeScope = "currentWorkspace" | "allWorkspaces";
-export type OfficeAgentProvider = "claude" | "codex" | "gpt" | "gemini" | "cursor" | "aider" | "cline" | "unknown";
-export type OfficeAiAgentStatus = "idle" | "thinking" | "researching" | "coding" | "testing" | "building" | "debugging" | "git" | "waiting" | "success" | "error" | "stopped";
-
-export type OfficeAiAgent = {
-  id: string;
-  provider: OfficeAgentProvider;
-  name: string;
-  role: string;
-  terminalId?: string;
-  workspaceId?: string;
-  workspaceName: string;
-  workspaceShortName: string;
-  parentAgentId?: string;
-  isSubagent: boolean;
-  status: OfficeAiAgentStatus;
-  activity: string;
-  toolName?: string;
-  zone: OfficeZoneId;
-  confidence: number;
-  lastSeenAt: number;
-};
-
-export type OfficeAdapterInput = {
-  scope: OfficeScope;
-  currentWorkspaceId: string | null;
-  workspaces: import("@/stores/cortexStore").Workspace[];
-  sessions: import("@/stores/cortexStore").TerminalSession[];
-  commandHistory: import("@/features/terminal/commandHistory").CommandHistoryEntry[];
-};
-
-export type OfficeActivityAdapter = {
-  id: string;
-  detectAgents(input: OfficeAdapterInput): OfficeAiAgent[] | Promise<OfficeAiAgent[]>;
-};
-
 export type OfficeAgentIdentity = {
   name: string;
   role: string;
@@ -75,16 +121,14 @@ export type OfficeAgentIdentity = {
   accessory: "spark" | "brackets" | "note" | "lens" | "terminal";
 };
 
-export type OfficeAgentModel = OfficeAiAgent & {
-  workspaceId: string;
-  terminalId?: string;
+export type OfficeAgentModel = AgentSnapshot & {
   terminalName: string;
   profileLabel: string;
   sessionStatus: SessionStatus;
+  confidenceLevel: AgentConfidenceLevel;
   signal: OfficeSignal;
   phase: OfficeAgentPhase;
   pose: OfficeAgentPose;
-  activity: string;
   category: OfficeActivityCategory;
   zone: OfficeZoneId;
   target: OfficePoint;
@@ -92,23 +136,6 @@ export type OfficeAgentModel = OfficeAiAgent & {
   meetingLabel?: string;
 };
 
-export type OfficeSummary = {
-  active: number;
-  errors: number;
-  buildsTests: number;
-  total: number;
-  lastActivity: string;
-};
-
-export type OfficeKanbanCard = {
-  id: string;
-  title: string;
-  column: "progress" | "done";
-  warning: boolean;
-};
-
-export type OfficeGitSummary = {
-  branch?: string;
-  changedFiles?: number;
-  lastActivity: string;
-};
+export type OfficeSummary = { active: number; errors: number; buildsTests: number; total: number; lastActivity: string };
+export type OfficeKanbanCard = { id: string; title: string; column: "progress" | "done"; warning: boolean };
+export type OfficeGitSummary = { branch?: string; changedFiles?: number; lastActivity: string };

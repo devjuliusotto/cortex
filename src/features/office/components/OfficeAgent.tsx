@@ -50,7 +50,7 @@ export function OfficeAgent({ agent, showWorkspaceLabel, onSelect, onOpen }: { a
   const drawWorker = useCallback((g: Graphics) => {
     const signal = colors[agent.signal];
     const shirt = agent.zone === "debugCorner" ? 0x783a4c : agent.zone === "researchLibrary" ? 0x5e527e : agent.zone === "buildLab" ? 0x8a6238 : agent.zone === "gitBoard" ? 0x3d6d54 : agent.identity.color;
-    const armLift = agent.status === "waiting" ? -13 : agent.pose === "reading" ? -8 : agent.pose === "observing" ? -3 : 0;
+    const armLift = agent.activity === "waiting_input" || agent.activity === "waiting_approval" ? -13 : agent.pose === "reading" ? -8 : agent.pose === "observing" ? -3 : 0;
     g.clear();
     g.ellipse(0, 27, 25, 8).fill({ color: 0x11131b, alpha: 0.3 });
     g.rect(-18, -13, 36, 35).fill(shirt);
@@ -76,7 +76,7 @@ export function OfficeAgent({ agent, showWorkspaceLabel, onSelect, onOpen }: { a
     if (agent.identity.accessory === "spark") g.star(-22, -43, 4, 6, 3).fill(0xb994f4).stroke({ color: 0x272033, width: 2 });
     if (agent.identity.accessory === "brackets") { g.moveTo(-27, -47).lineTo(-32, -42).lineTo(-27, -37).stroke({ color: 0x9de8e3, width: 2 }); g.moveTo(-18, -47).lineTo(-13, -42).lineTo(-18, -37).stroke({ color: 0x9de8e3, width: 2 }); }
     if (agent.identity.accessory === "lens") g.circle(-22, -43, 6).stroke({ color: 0x9bb7ed, width: 2 });
-  }, [agent.identity.accessory, agent.identity.color, agent.pose, agent.signal, agent.status, agent.zone]);
+  }, [agent.activity, agent.identity.accessory, agent.identity.color, agent.pose, agent.signal, agent.zone]);
 
   const drawBubble = useCallback((g: Graphics) => {
     const y = agent.zone === "codingDesks" ? -160 : -86;
@@ -88,10 +88,11 @@ export function OfficeAgent({ agent, showWorkspaceLabel, onSelect, onOpen }: { a
   return (
     <pixiContainer ref={ref} eventMode="static" cursor="pointer" onPointerTap={(event: FederatedPointerEvent) => event.detail >= 2 && agent.terminalId ? onOpen() : onSelect(agent.id)}>
       <pixiGraphics draw={drawBubble} />
-      <pixiText text={agent.phase === "exiting" ? "Wrapping up..." : agent.meetingLabel ?? agent.activity} x={0} y={agent.zone === "codingDesks" ? -152 : -78} anchor={0.5} style={{ fill: 0xdde3ef, fontFamily: "monospace", fontSize: 9 }} />
+      <pixiText text={agent.phase === "exiting" ? "Wrapping up..." : agent.meetingLabel ?? agent.currentGoal ?? agent.detail ?? agent.activity} x={0} y={agent.zone === "codingDesks" ? -152 : -78} anchor={0.5} style={{ fill: 0xdde3ef, fontFamily: "monospace", fontSize: 9 }} />
       <pixiGraphics ref={workerRef} draw={drawWorker} />
       <pixiText text={showWorkspaceLabel ? `${agent.terminalName} · ${agent.workspaceShortName}` : agent.terminalName} x={0} y={44} anchor={0.5} style={{ fill: 0xf3f4f8, fontFamily: "monospace", fontSize: showWorkspaceLabel ? 8 : 10, fontWeight: "bold" }} />
       <pixiText text={agent.identity.role} x={0} y={57} anchor={0.5} style={{ fill: 0xaeb6c8, fontFamily: "monospace", fontSize: 7 }} />
+      <pixiText text={`${agent.confidenceLevel} · ${Math.round(agent.confidence * 100)}%`} x={0} y={68} anchor={0.5} style={{ fill: agent.confidenceLevel === "unknown" ? 0x8991a5 : 0x8fd8c8, fontFamily: "monospace", fontSize: 7 }} />
     </pixiContainer>
   );
 }
