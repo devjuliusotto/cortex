@@ -1060,6 +1060,33 @@ fn claude_project_dir_name(path: &str) -> String {
         .collect()
 }
 
+#[tauri::command]
+fn open_project_in_vscode(path: String) -> Result<(), String> {
+    let project = workspace_path(path)?;
+
+    #[cfg(windows)]
+    {
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        let mut command = Command::new("cmd.exe");
+        command
+            .args(["/C", "code", project.to_string_lossy().as_ref()])
+            .creation_flags(CREATE_NO_WINDOW);
+        command.spawn().map_err(|error| {
+            format!("Could not open VS Code. Confirm that the 'code' command is installed: {error}")
+        })?;
+        return Ok(());
+    }
+
+    #[cfg(not(windows))]
+    {
+        Command::new("code")
+            .arg(project)
+            .spawn()
+            .map_err(|error| format!("Could not open VS Code: {error}"))?;
+        Ok(())
+    }
+}
+
 fn transcript_tail(path: &Path) -> Option<Vec<String>> {
     const MAX_BYTES: usize = 256 * 1024;
     const MAX_LINES: usize = 300;
@@ -1908,6 +1935,7 @@ pub fn run() {
             save_persisted_state,
             office_read_claude_transcripts,
             open_external_url,
+            open_project_in_vscode,
             read_clipboard_text,
             write_clipboard_text,
             validate_working_directory,

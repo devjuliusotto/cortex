@@ -1,6 +1,7 @@
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
-import { Building2, ClipboardList, ExternalLink, FolderPlus, HardDrive, Plus, Search, ShieldCheck, TerminalSquare } from "lucide-react";
+import { invoke } from "@tauri-apps/api/core";
+import { Building2, ClipboardList, Code2, ExternalLink, FolderPlus, HardDrive, Plus, Search, ShieldCheck, TerminalSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CortexLogo } from "@/components/CortexLogo";
 import { OFFICE_VIEW_ADDON_ENABLED } from "@/config/marketplace";
@@ -92,6 +93,13 @@ export function AppShell() {
 
     void writeTerminal(activeTerminal.id, commandForShell(command.command)).then(() => {
       focusTerminal(activeTerminal.id);
+    });
+  };
+
+  const openProjectInVsCode = () => {
+    if (!activeWorkspace?.defaultWorkingDirectory) return;
+    void invoke("open_project_in_vscode", { path: activeWorkspace.defaultWorkingDirectory }).catch((error) => {
+      console.warn("Could not open project in VS Code", error);
     });
   };
 
@@ -346,6 +354,17 @@ export function AppShell() {
             <Button size="sm" variant="outline" onClick={createWorkspace}>
               <FolderPlus className="mr-2 h-4 w-4" />
               Workspace
+            </Button>
+            <Button
+              className="hidden gap-2 lg:inline-flex"
+              disabled={!activeWorkspace?.defaultWorkingDirectory}
+              onClick={openProjectInVsCode}
+              size="sm"
+              title={activeWorkspace?.defaultWorkingDirectory ? "Abrir projeto no VS Code" : "Defina a pasta do workspace primeiro"}
+              variant="outline"
+            >
+              <Code2 className="h-4 w-4" />
+              VS Code
             </Button>
             {!officeViewEnabled && !officeDeepLink && <label
               className="flex h-9 items-center gap-2 rounded-md border border-border bg-secondary px-3 text-xs text-muted-foreground"

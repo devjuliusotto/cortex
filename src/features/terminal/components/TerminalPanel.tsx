@@ -76,20 +76,9 @@ function looksLikeApprovalPrompt(text: string) {
   return /[?:]\s*$|\[[yn]\]|y\/n|yes\/no|allow|approve|proceed|continue|autorizar|permitir|aprovar|continuar/.test(clean);
 }
 
-async function requestTerminalAttention(title: string, body: string) {
+function requestTerminalAttention() {
   if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
-    void getCurrentWindow().requestUserAttention(UserAttentionType.Informational).catch(() => undefined);
-  }
-
-  if (!("Notification" in window)) {
-    return;
-  }
-
-  if (Notification.permission === "default") {
-    await Notification.requestPermission().catch(() => "denied");
-  }
-  if (Notification.permission === "granted") {
-    new Notification(title, { body });
+    void getCurrentWindow().requestUserAttention(UserAttentionType.Critical).catch(() => undefined);
   }
 }
 
@@ -663,7 +652,6 @@ function TerminalPane({
     status: "idle" | "loading" | "connected" | "exited" | "error";
     error: string | null;
   }>({ status: "idle", error: null });
-  const [approvalPrompt, setApprovalPrompt] = useState<string | null>(null);
   const approvalPromptBufferRef = useRef("");
   const lastApprovalPromptAtRef = useRef(0);
   const {
@@ -727,9 +715,8 @@ function TerminalPane({
           Date.now() - lastApprovalPromptAtRef.current > approvalPromptCooldownMs
         ) {
           lastApprovalPromptAtRef.current = Date.now();
-          const message = "Terminal aguardando autorização";
-          setApprovalPrompt(message);
-          void requestTerminalAttention("Cortex", `${session.name}: ${message}`);
+          setSessionStatus(session.id, "waiting");
+          requestTerminalAttention();
         }
       },
       onStatus: (status, error) => {
@@ -775,8 +762,8 @@ function TerminalPane({
     });
 
     const dataDisposable = terminal.onData((data) => {
-      setApprovalPrompt(null);
       approvalPromptBufferRef.current = "";
+      setSessionStatus(session.id, "running");
       recorder.accept(data);
       void writeTerminal(session.id, data);
     });
@@ -929,31 +916,6 @@ function TerminalPane({
       </div>
       <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden bg-[#0b0d10]">
         <div ref={terminalRef} className="h-full min-h-0 min-w-0 overflow-hidden" />
-        {approvalPrompt && (
-          <div className="absolute right-4 top-4 max-w-[min(30rem,calc(100%-2rem))] rounded-md border border-cortex-amber/50 bg-card/95 p-4 shadow-2xl">
-            <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-              <AlertCircle className="h-4 w-4 text-cortex-amber" />
-              {approvalPrompt}
-            </div>
-            <p className="mt-2 text-xs leading-5 text-muted-foreground">
-              Codex, Claude ou outro CLI parece estar pedindo uma confirmação neste terminal.
-            </p>
-            <div className="mt-3 flex gap-2">
-              <Button
-                size="sm"
-                onClick={() => {
-                  setApprovalPrompt(null);
-                  focusTerminal(session.id);
-                }}
-              >
-                Focar terminal
-              </Button>
-              <Button size="sm" variant="ghost" onClick={() => setApprovalPrompt(null)}>
-                Dispensar
-              </Button>
-            </div>
-          </div>
-        )}
         {connectionState.status === "loading" && (
           <TerminalOverlay icon={<Loader2 className="h-4 w-4 animate-spin text-primary" />} message="Starting terminal" />
         )}

@@ -10,6 +10,7 @@ import {
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { CortexLogo } from "@/components/CortexLogo";
+import { AgentUsageBar } from "@/features/agents/AgentUsageBar";
 import { WorkspaceList } from "@/features/workspace/components/WorkspaceList";
 import { cn } from "@/lib/utils";
 
@@ -70,6 +71,7 @@ export function Sidebar({
       )}
 
       <div className="border-t border-border p-3">
+        <AgentUsageBar collapsed={collapsed} />
         {officeAvailable && <button
           className={cn(
             "mb-1 flex h-10 w-full items-center gap-3 rounded-md px-3 text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground",
