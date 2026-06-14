@@ -197,6 +197,20 @@ struct GitWatchEvent {
     root: String,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AppDataInfo {
+    directory: String,
+    state_file: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SkillDirectoryInfo {
+    path: String,
+    exists: bool,
+}
+
 fn create_pty_state(app: AppHandle) -> PtyState {
     let backend = PlatformPtyBackend::new(move |session_id, output| match output {
         PtyOutput::Data(data) => {
@@ -343,6 +357,127 @@ fn save_persisted_state(app: AppHandle, state: Value) -> Result<(), String> {
     let state = normalize_persisted_state(state);
     let raw = serde_json::to_string_pretty(&state).map_err(|error| error.to_string())?;
     fs::write(path, raw).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn get_app_data_info(app: AppHandle) -> Result<AppDataInfo, String> {
+    let state_file = app_state_path(&app)?;
+    let directory = state_file
+        .parent()
+        .ok_or_else(|| "App data path has no parent directory".to_string())?;
+    Ok(AppDataInfo {
+        directory: directory.to_string_lossy().into_owned(),
+        state_file: state_file.to_string_lossy().into_owned(),
+    })
+}
+
+#[tauri::command]
+fn open_app_data_dir(app: AppHandle) -> Result<(), String> {
+    let state_file = app_state_path(&app)?;
+    let directory = state_file
+        .parent()
+        .ok_or_else(|| "App data path has no parent directory".to_string())?;
+    fs::create_dir_all(directory).map_err(|error| error.to_string())?;
+
+    #[cfg(windows)]
+    std::process::Command::new("explorer.exe")
+        .arg(directory)
+        .spawn()
+        .map_err(|error| error.to_string())?;
+    #[cfg(target_os = "macos")]
+    std::process::Command::new("open")
+        .arg(directory)
+        .spawn()
+        .map_err(|error| error.to_string())?;
+    #[cfg(all(unix, not(target_os = "macos")))]
+    std::process::Command::new("xdg-open")
+        .arg(directory)
+        .spawn()
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn export_persisted_state(path: String, state: Value) -> Result<(), String> {
+    let raw = serde_json::to_string_pretty(&normalize_persisted_state(state))
+        .map_err(|error| error.to_string())?;
+    fs::write(path, raw).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn import_persisted_state(path: String) -> Result<Value, String> {
+    let raw = fs::read_to_string(path).map_err(|error| error.to_string())?;
+    let state = serde_json::from_str::<Value>(&raw).map_err(|error| error.to_string())?;
+    if !state.is_object() {
+        return Err("The selected file is not a Cortex configuration object".into());
+    }
+    Ok(normalize_persisted_state(state))
+}
+
+#[tauri::command]
+fn detect_agent_command(command: String) -> Result<bool, String> {
+    let command = command.trim();
+    if command.is_empty()
+        || !command
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '_' | '.'))
+    {
+        return Err("Invalid agent command".into());
+    }
+
+    let status = if cfg!(windows) {
+        std::process::Command::new("where.exe").arg(command).status()
+    } else {
+        std::process::Command::new("which").arg(command).status()
+    }
+    .map_err(|error| error.to_string())?;
+    Ok(status.success())
+}
+
+fn resolve_skill_directory(path: &str, workspace_path: Option<&str>) -> Result<PathBuf, String> {
+    match path {
+        "~/.gemini/skills/" => home_dir().map(PathBuf::from).map(|root| root.join(".gemini").join("skills")),
+        "~/.agents/skills/" => home_dir().map(PathBuf::from).map(|root| root.join(".agents").join("skills")),
+        ".gemini/skills/" => workspace_path.map(PathBuf::from).map(|root| root.join(".gemini").join("skills")),
+        ".agents/skills/" => workspace_path.map(PathBuf::from).map(|root| root.join(".agents").join("skills")),
+        _ => None,
+    }
+    .ok_or_else(|| "Skill directory is not available".to_string())
+}
+
+#[tauri::command]
+fn get_skill_directory_info(path: String, workspace_path: Option<String>) -> Result<SkillDirectoryInfo, String> {
+    let resolved = resolve_skill_directory(&path, workspace_path.as_deref())?;
+    Ok(SkillDirectoryInfo {
+        exists: resolved.is_dir(),
+        path: resolved.to_string_lossy().into_owned(),
+    })
+}
+
+#[tauri::command]
+fn create_skill_directory(path: String, workspace_path: Option<String>) -> Result<SkillDirectoryInfo, String> {
+    let resolved = resolve_skill_directory(&path, workspace_path.as_deref())?;
+    fs::create_dir_all(&resolved).map_err(|error| error.to_string())?;
+    Ok(SkillDirectoryInfo {
+        exists: true,
+        path: resolved.to_string_lossy().into_owned(),
+    })
+}
+
+#[tauri::command]
+fn open_skill_directory(path: String, workspace_path: Option<String>) -> Result<(), String> {
+    let resolved = resolve_skill_directory(&path, workspace_path.as_deref())?;
+    if !resolved.is_dir() {
+        return Err("Create the skill directory before opening it".into());
+    }
+
+    #[cfg(windows)]
+    std::process::Command::new("explorer.exe").arg(&resolved).spawn().map_err(|error| error.to_string())?;
+    #[cfg(target_os = "macos")]
+    std::process::Command::new("open").arg(&resolved).spawn().map_err(|error| error.to_string())?;
+    #[cfg(all(unix, not(target_os = "macos")))]
+    std::process::Command::new("xdg-open").arg(&resolved).spawn().map_err(|error| error.to_string())?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -1933,7 +2068,18 @@ pub fn run() {
             pty_backend_status,
             load_persisted_state,
             save_persisted_state,
+<<<<<<< HEAD
             office_read_claude_transcripts,
+=======
+            get_app_data_info,
+            open_app_data_dir,
+            export_persisted_state,
+            import_persisted_state,
+            detect_agent_command,
+            get_skill_directory_info,
+            create_skill_directory,
+            open_skill_directory,
+>>>>>>> 9fb1c27 (add my-agents)
             open_external_url,
             open_project_in_vscode,
             read_clipboard_text,

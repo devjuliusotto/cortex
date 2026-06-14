@@ -115,6 +115,17 @@ export type UpdateCheckMode = "automatic" | "manual";
 
 export type CortexSettings = {
   updateCheckMode: UpdateCheckMode;
+<<<<<<< HEAD
+=======
+  showWorkspaceMetadata: boolean;
+  browserPaneEnabled: boolean;
+  customCommandsEnabled: boolean;
+  commandPaletteEnabled: boolean;
+  officeViewEnabled: boolean;
+  autoStartTerminals: boolean;
+  terminalHistoryEnabled: boolean;
+  globalCommands: CustomCommand[];
+>>>>>>> 9fb1c27 (add my-agents)
 };
 
 export type CortexPersistedState = {
@@ -138,6 +149,7 @@ type CortexState = CortexPersistedState & {
   createWorkspace: () => void;
   duplicateWorkspace: (workspaceId: string) => void;
   renameWorkspace: (workspaceId: string, name: string) => void;
+  reorderWorkspaces: (draggedWorkspaceId: string, targetWorkspaceId: string) => void;
   setWorkspaceDefaultWorkingDirectory: (workspaceId: string, path: string) => void;
   setWorkspaceAutoStartTerminalsOnOpen: (workspaceId: string, enabled: boolean) => void;
   setWorkspaceColor: (workspaceId: string, color: string | undefined) => void;
@@ -161,9 +173,35 @@ type CortexState = CortexPersistedState & {
   deleteSavedCommand: (commandId: string) => void;
   deleteWorkspace: (workspaceId: string) => void;
   setActiveWorkspace: (workspaceId: string) => void;
-  createSession: (workspaceId: string, profileId?: TerminalProfileId) => void;
+  createSession: (workspaceId: string, profileId?: TerminalProfileId) => string;
   duplicateSession: (sessionId: string) => void;
   renameSession: (sessionId: string, name: string) => void;
+<<<<<<< HEAD
+=======
+  createBrowserTab: (workspaceId: string, url?: string) => void;
+  updateBrowserTab: (browserTabId: string, patch: Partial<Pick<BrowserTab, "title" | "url">>) => void;
+  deleteBrowserTab: (browserTabId: string) => void;
+  createWorkspaceCommand: (workspaceId: string, command: CustomCommandDraft) => void;
+  updateWorkspaceCommand: (workspaceId: string, commandId: string, command: CustomCommandDraft) => void;
+  deleteWorkspaceCommand: (workspaceId: string, commandId: string) => void;
+  createGlobalCommand: (command: CustomCommandDraft) => void;
+  updateGlobalCommand: (commandId: string, command: CustomCommandDraft) => void;
+  deleteGlobalCommand: (commandId: string) => void;
+  setFeatureFlag: (
+    key:
+      | "showWorkspaceMetadata"
+      | "browserPaneEnabled"
+      | "customCommandsEnabled"
+      | "commandPaletteEnabled"
+      | "officeViewEnabled"
+      | "autoStartTerminals"
+      | "terminalHistoryEnabled",
+    enabled: boolean,
+  ) => void;
+  clearAllTerminalHistory: () => void;
+  resetSettings: () => void;
+  importPersistedState: (state: CortexPersistedState) => void;
+>>>>>>> 9fb1c27 (add my-agents)
   addCommandHistoryEntry: (entry: CommandHistoryDraft) => void;
   deleteCommandHistoryEntry: (entryId: string) => void;
   clearCommandHistory: (workspaceId: string) => void;
@@ -231,6 +269,17 @@ const emptyState: CortexPersistedState = {
   layouts: [],
   settings: {
     updateCheckMode: "automatic",
+<<<<<<< HEAD
+=======
+    showWorkspaceMetadata: true,
+    browserPaneEnabled: false,
+    customCommandsEnabled: true,
+    commandPaletteEnabled: true,
+    officeViewEnabled: true,
+    autoStartTerminals: true,
+    terminalHistoryEnabled: false,
+    globalCommands: [],
+>>>>>>> 9fb1c27 (add my-agents)
   },
   activeWorkspaceId: null,
   windowState: null,
@@ -889,7 +938,9 @@ function persisted(state: CortexState): CortexPersistedState {
     sessions: state.sessions.map((session) => ({
       ...session,
       status: "inactive",
-      terminalHistory: trimTerminalHistory(session.terminalHistory),
+      terminalHistory: state.settings.terminalHistoryEnabled
+        ? trimTerminalHistory(session.terminalHistory)
+        : "",
     })),
     commandHistory: trimCommandHistoryByWorkspace(state.commandHistory),
     savedCommands: state.savedCommands,
@@ -940,7 +991,9 @@ function normalizeLoadedState(state: CortexPersistedState): CortexPersistedState
       ...session,
       cwd: session.cwd?.trim() || undefined,
       status: "inactive",
-      terminalHistory: trimTerminalHistory(session.terminalHistory ?? ""),
+      terminalHistory: loadedSettings.terminalHistoryEnabled
+        ? trimTerminalHistory(session.terminalHistory ?? "")
+        : "",
     })),
     commandHistory: trimCommandHistoryByWorkspace(
       (state.commandHistory ?? [])
@@ -1382,13 +1435,14 @@ export const useCortexStore = create<CortexState>((set) => ({
       return next;
     }),
 
-  createSession: (workspaceId, profileId = "powershell") =>
+  createSession: (workspaceId, profileId = "powershell") => {
+    const sessionId = createId("session");
     set((state) => {
       const timestamp = now();
       const workspace = state.workspaces.find((item) => item.id === workspaceId);
       const cwd = workspace?.defaultWorkingDirectory?.trim() || undefined;
       const session: TerminalSession = {
-        id: createId("session"),
+        id: sessionId,
         workspaceId,
         name: sessionName(state.sessions, workspaceId),
         profileId,
@@ -1434,7 +1488,9 @@ export const useCortexStore = create<CortexState>((set) => ({
       };
       saveState(next);
       return next;
-    }),
+    });
+    return sessionId;
+  },
 
   duplicateSession: (sessionId) =>
     set((state) => {
@@ -1493,6 +1549,265 @@ export const useCortexStore = create<CortexState>((set) => ({
       return next;
     }),
 
+<<<<<<< HEAD
+=======
+  createBrowserTab: (workspaceId, url = "http://localhost:1420") =>
+    set((state) => {
+      const timestamp = now();
+      const cleanUrl = url.trim() || "http://localhost:1420";
+      const browserTab: BrowserTab = {
+        id: createId("browser"),
+        workspaceId,
+        title: cleanUrl.replace(/^https?:\/\//, ""),
+        url: cleanUrl,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      };
+      const layouts = state.layouts.some((layout) => layout.workspaceId === workspaceId)
+        ? state.layouts.map((layout) =>
+            layout.workspaceId === workspaceId
+              ? {
+                  ...layout,
+                  activeItemId: browserTab.id,
+                  tabOrder: [...layout.tabOrder, browserTab.id],
+                  paneTree: addTabToPaneTree(layout.paneTree, layout.activePaneId, browserTab.id),
+                }
+              : layout,
+          )
+        : [
+            ...state.layouts,
+            (() => {
+              const paneTree = createLeaf([browserTab.id], browserTab.id);
+              return {
+                workspaceId,
+                activeSessionId: null,
+                activeItemId: browserTab.id,
+                tabOrder: [browserTab.id],
+                splitPanePreview: true,
+                paneTree,
+                activePaneId: paneTree.id,
+              };
+            })(),
+          ];
+
+      const next = {
+        ...state,
+        browserTabs: [...state.browserTabs, browserTab],
+        layouts,
+      };
+      saveState(next);
+      return next;
+    }),
+
+  updateBrowserTab: (browserTabId, patch) =>
+    set((state) => {
+      const next = {
+        ...state,
+        browserTabs: state.browserTabs.map((tab) =>
+          tab.id === browserTabId
+            ? {
+                ...tab,
+                title: patch.title?.trim() || tab.title,
+                url: patch.url?.trim() || tab.url,
+                updatedAt: now(),
+              }
+            : tab,
+        ),
+      };
+      saveState(next);
+      return next;
+    }),
+
+  deleteBrowserTab: (browserTabId) =>
+    set((state) => {
+      const browserTab = state.browserTabs.find((item) => item.id === browserTabId);
+      const next = {
+        ...state,
+        browserTabs: state.browserTabs.filter((item) => item.id !== browserTabId),
+        layouts: state.layouts.map((layout) => {
+          if (layout.workspaceId !== browserTab?.workspaceId) {
+            return layout;
+          }
+
+          const tabOrder = layout.tabOrder.filter((id) => id !== browserTabId);
+          const paneTree = removeTabFromPaneTree(layout.paneTree, browserTabId);
+          return syncLayoutActiveFields({ ...layout, tabOrder, paneTree }, state.sessions);
+        }),
+      };
+      saveState(next);
+      return next;
+    }),
+
+  createWorkspaceCommand: (workspaceId, command) =>
+    set((state) => {
+      const timestamp = now();
+      const normalized = normalizeCustomCommand(command, timestamp);
+      if (!normalized) {
+        return state;
+      }
+      const next = {
+        ...state,
+        workspaces: state.workspaces.map((workspace) =>
+          workspace.id === workspaceId
+            ? {
+                ...workspace,
+                commands: [...(workspace.commands ?? []), normalized],
+                updatedAt: timestamp,
+              }
+            : workspace,
+        ),
+      };
+      saveState(next);
+      return next;
+    }),
+
+  updateWorkspaceCommand: (workspaceId, commandId, command) =>
+    set((state) => {
+      const next = {
+        ...state,
+        workspaces: state.workspaces.map((workspace) => {
+          if (workspace.id !== workspaceId) {
+            return workspace;
+          }
+          const commands = (workspace.commands ?? []).map((existing) =>
+            existing.id === commandId ? patchCustomCommand(existing, command) ?? existing : existing,
+          );
+          return { ...workspace, commands, updatedAt: now() };
+        }),
+      };
+      saveState(next);
+      return next;
+    }),
+
+  deleteWorkspaceCommand: (workspaceId, commandId) =>
+    set((state) => {
+      const next = {
+        ...state,
+        workspaces: state.workspaces.map((workspace) =>
+          workspace.id === workspaceId
+            ? {
+                ...workspace,
+                commands: (workspace.commands ?? []).filter((command) => command.id !== commandId),
+                updatedAt: now(),
+              }
+            : workspace,
+        ),
+      };
+      saveState(next);
+      return next;
+    }),
+
+  createGlobalCommand: (command) =>
+    set((state) => {
+      const normalized = normalizeCustomCommand(command);
+      if (!normalized) {
+        return state;
+      }
+      const next = {
+        ...state,
+        settings: {
+          ...state.settings,
+          globalCommands: [...state.settings.globalCommands, normalized],
+        },
+      };
+      saveState(next);
+      return next;
+    }),
+
+  updateGlobalCommand: (commandId, command) =>
+    set((state) => {
+      const next = {
+        ...state,
+        settings: {
+          ...state.settings,
+          globalCommands: state.settings.globalCommands.map((existing) =>
+            existing.id === commandId ? patchCustomCommand(existing, command) ?? existing : existing,
+          ),
+        },
+      };
+      saveState(next);
+      return next;
+    }),
+
+  deleteGlobalCommand: (commandId) =>
+    set((state) => {
+      const next = {
+        ...state,
+        settings: {
+          ...state.settings,
+          globalCommands: state.settings.globalCommands.filter((command) => command.id !== commandId),
+        },
+      };
+      saveState(next);
+      return next;
+    }),
+
+  setFeatureFlag: (key, enabled) =>
+    set((state) => {
+      const next = {
+        ...state,
+        sessions:
+          key === "terminalHistoryEnabled" && !enabled
+            ? state.sessions.map((session) => ({ ...session, terminalHistory: "" }))
+            : state.sessions,
+        settings: {
+          ...state.settings,
+          [key]: enabled,
+        },
+      };
+      saveState(next);
+      return next;
+    }),
+
+  reorderWorkspaces: (draggedWorkspaceId, targetWorkspaceId) =>
+    set((state) => {
+      if (draggedWorkspaceId === targetWorkspaceId) {
+        return state;
+      }
+      const draggedIndex = state.workspaces.findIndex((workspace) => workspace.id === draggedWorkspaceId);
+      const targetIndex = state.workspaces.findIndex((workspace) => workspace.id === targetWorkspaceId);
+      if (draggedIndex < 0 || targetIndex < 0) {
+        return state;
+      }
+      const workspaces = [...state.workspaces];
+      const [draggedWorkspace] = workspaces.splice(draggedIndex, 1);
+      workspaces.splice(targetIndex, 0, draggedWorkspace);
+      const next = { ...state, workspaces };
+      saveState(next);
+      return next;
+    }),
+
+  clearAllTerminalHistory: () =>
+    set((state) => {
+      const next = {
+        ...state,
+        commandHistory: [],
+        sessions: state.sessions.map((session) => ({ ...session, terminalHistory: "" })),
+      };
+      saveState(next);
+      return next;
+    }),
+
+  resetSettings: () =>
+    set((state) => {
+      const next = {
+        ...state,
+        sessions: state.sessions.map((session) => ({ ...session, terminalHistory: "" })),
+        settings: { ...emptyState.settings },
+      };
+      saveState(next);
+      return next;
+    }),
+
+  importPersistedState: (importedState) =>
+    set((state) => {
+      const normalized = normalizeLoadedState(importedState);
+      const next = { ...state, ...normalized, profiles, hydrated: true };
+      saveState(next);
+      return next;
+    }),
+
+>>>>>>> 9fb1c27 (add my-agents)
   addCommandHistoryEntry: (entry) =>
     set((state) => {
       const command = normalizeCommandForHistory(entry.command);
@@ -1547,7 +1862,7 @@ export const useCortexStore = create<CortexState>((set) => ({
 
   appendTerminalHistory: (sessionId, output) =>
     set((state) => {
-      if (!output) {
+      if (!output || !state.settings.terminalHistoryEnabled) {
         return state;
       }
 

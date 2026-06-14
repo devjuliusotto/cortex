@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { inspectAgentOutput } from "@/features/agents/agentInsightsStore";
 import { useCortexStore, type TerminalProfileId } from "@/stores/cortexStore";
 
 type PtySessionId = string;
@@ -43,6 +44,11 @@ const processesByAppSession = new Map<string, TerminalProcess>();
 const appSessionByPtySession = new Map<PtySessionId, string>();
 const subscribers = new Map<string, Set<SessionSubscriber>>();
 const terminalFocusHandlers = new Map<string, () => void>();
+<<<<<<< HEAD
+=======
+const pendingCommands = new Map<string, string>();
+const pendingHistoryByAppSession = new Map<string, string>();
+>>>>>>> 9fb1c27 (add my-agents)
 let eventListeners: Promise<UnlistenFn[]> | null = null;
 
 export function subscribeTerminalSession(
@@ -109,6 +115,14 @@ export async function ensureTerminalSession(
     processesByAppSession.set(appSessionId, process);
     appSessionByPtySession.set(ptySessionId, appSessionId);
     notifyStatus(appSessionId, "connected", workingDirectory.warning);
+    const pendingCommand = pendingCommands.get(appSessionId);
+    if (pendingCommand) {
+      pendingCommands.delete(appSessionId);
+      await invoke("write_terminal", {
+        sessionId: ptySessionId,
+        data: commandForShell(pendingCommand, true),
+      });
+    }
     return ptySessionId;
   } catch (error) {
     const message = String(error);
@@ -144,6 +158,18 @@ export async function writeTerminal(appSessionId: string, data: string) {
   });
 }
 
+<<<<<<< HEAD
+=======
+export function queueVisibleTerminalCommand(appSessionId: string, command: string) {
+  pendingCommands.set(appSessionId, command);
+}
+
+export function commandForShell(command: string, runImmediately: boolean) {
+  const normalized = command.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  return runImmediately ? `${normalized}\r` : normalized.replace(/\n/g, "\r");
+}
+
+>>>>>>> 9fb1c27 (add my-agents)
 export function registerTerminalFocus(appSessionId: string, focus: () => void) {
   terminalFocusHandlers.set(appSessionId, focus);
   return () => {
@@ -247,3 +273,55 @@ function notifyStatus(appSessionId: string, status: TerminalStatus, error: strin
     subscriber.onStatus?.(status, error);
   }
 }
+<<<<<<< HEAD
+=======
+
+function trimReplayBuffer(buffer: string) {
+  if (buffer.length <= MAX_REPLAY_BUFFER_BYTES) {
+    return buffer;
+  }
+
+  return buffer.slice(buffer.length - MAX_REPLAY_BUFFER_BYTES);
+}
+
+function queueTerminalHistory(appSessionId: string, data: string) {
+  inspectAgentOutput(appSessionId, data);
+  if (!useCortexStore.getState().settings.terminalHistoryEnabled) {
+    return;
+  }
+  pendingHistoryByAppSession.set(
+    appSessionId,
+    `${pendingHistoryByAppSession.get(appSessionId) ?? ""}${data}`,
+  );
+
+  if (historyFlushTimer) {
+    return;
+  }
+
+  historyFlushTimer = setTimeout(() => {
+    flushTerminalHistory();
+  }, HISTORY_FLUSH_INTERVAL_MS);
+}
+
+function flushTerminalHistory(appSessionId?: string) {
+  if (!appSessionId && historyFlushTimer) {
+    clearTimeout(historyFlushTimer);
+    historyFlushTimer = null;
+  }
+
+  const state = useCortexStore.getState();
+  const sessionIds = appSessionId
+    ? [appSessionId]
+    : Array.from(pendingHistoryByAppSession.keys());
+
+  for (const sessionId of sessionIds) {
+    const output = pendingHistoryByAppSession.get(sessionId);
+    if (!output) {
+      continue;
+    }
+
+    pendingHistoryByAppSession.delete(sessionId);
+    state.appendTerminalHistory(sessionId, output);
+  }
+}
+>>>>>>> 9fb1c27 (add my-agents)

@@ -24,7 +24,12 @@ import {
   Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+<<<<<<< HEAD
 import { GitMapPanel } from "@/features/git/GitMapPanel";
+=======
+import { markAgentInput, useAgentInsight } from "@/features/agents/agentInsightsStore";
+import { markItemActivity, setItemLoading, useItemActivity } from "@/features/activity/activityStore";
+>>>>>>> 9fb1c27 (add my-agents)
 import { createCommandRecorder } from "@/features/terminal/commandHistory";
 import {
   ensureTerminalSession,
@@ -636,6 +641,90 @@ function PaneLeaf({ node, workspaceId }: { node: Extract<PaneNode, { type: "leaf
   );
 }
 
+<<<<<<< HEAD
+=======
+type PaneTabEntry = {
+  id: string;
+  label: string;
+  kind: "terminal" | "note" | "command-history" | "browser";
+};
+
+function TabButton({
+  entry,
+  isActive,
+  onClick,
+  onClose,
+  onDrop,
+  onRename,
+}: {
+  entry: PaneTabEntry;
+  isActive: boolean;
+  onClick: () => void;
+  onClose: (event: ReactMouseEvent<HTMLSpanElement>) => void;
+  onDrop: (event: DragEvent<HTMLButtonElement>) => void;
+  onRename: () => void;
+}) {
+  const active = useItemActivity(entry.id);
+  const agentInsight = useAgentInsight(entry.kind === "terminal" ? entry.id : null);
+
+  return (
+    <button
+      className={cn(
+        "flex h-7 min-w-28 items-center gap-2 rounded-md px-2 text-left text-xs text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground",
+        isActive && "bg-secondary text-foreground shadow-glow",
+      )}
+      draggable
+      onClick={onClick}
+      onDoubleClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onRename();
+      }}
+      onDragOver={(event) => event.preventDefault()}
+      onDragStart={(event) => {
+        event.dataTransfer.setData("application/x-cortex-tab", entry.id);
+        event.dataTransfer.effectAllowed = "move";
+      }}
+      onDrop={onDrop}
+      title="Double-click to rename"
+      type="button"
+    >
+      {entry.kind === "terminal" ? (
+        <TerminalSquare className="h-3.5 w-3.5 text-primary" />
+      ) : entry.kind === "command-history" ? (
+        <History className="h-3.5 w-3.5 text-primary" />
+      ) : entry.kind === "browser" ? (
+        <Globe className="h-3.5 w-3.5 text-primary" />
+      ) : (
+        <FileText className="h-3.5 w-3.5 text-primary" />
+      )}
+      {active && <ActivityDot />}
+      {agentInsight?.waitingForAuthorization && (
+        <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-cortex-amber" title="Waiting for authorization" />
+      )}
+      <span className="truncate">{entry.label}</span>
+      <span
+        className="ml-1 rounded px-1 text-muted-foreground hover:bg-background hover:text-foreground"
+        onClick={onClose}
+        role="button"
+        title="Close tab"
+      >
+        x
+      </span>
+    </button>
+  );
+}
+
+function ActivityDot() {
+  return (
+    <span className="relative flex h-2 w-2 shrink-0">
+      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary/60 opacity-60" />
+      <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
+    </span>
+  );
+}
+
+>>>>>>> 9fb1c27 (add my-agents)
 function TerminalPane({
   paneId,
   session,
@@ -646,6 +735,7 @@ function TerminalPane({
   workspaceId: string;
 }) {
   const terminalRef = useRef<HTMLDivElement | null>(null);
+  const agentInsight = useAgentInsight(session.id);
   const [terminalStartToken, setTerminalStartToken] = useState(0);
   const [terminalClearToken, setTerminalClearToken] = useState(0);
   const [connectionState, setConnectionState] = useState<{
@@ -762,8 +852,12 @@ function TerminalPane({
     });
 
     const dataDisposable = terminal.onData((data) => {
+<<<<<<< HEAD
       approvalPromptBufferRef.current = "";
       setSessionStatus(session.id, "running");
+=======
+      markAgentInput(session.id);
+>>>>>>> 9fb1c27 (add my-agents)
       recorder.accept(data);
       void writeTerminal(session.id, data);
     });
@@ -893,6 +987,8 @@ function TerminalPane({
           <span className="ml-2 text-xs font-normal text-muted-foreground">{activeProfile?.name}</span>
         </button>
         <div className="flex shrink-0 items-center gap-2">
+          {agentInsight?.waitingForAuthorization && <span className="flex max-w-64 items-center gap-1.5 truncate rounded-md border border-cortex-amber/35 bg-cortex-amber/10 px-2 py-1 text-[11px] text-cortex-amber" title={agentInsight.waitingMessage}><AlertCircle className="h-3.5 w-3.5 shrink-0" />Aguardando autorização</span>}
+          {agentInsight?.usage.totalTokens !== undefined && <span className="rounded-md border border-border bg-secondary px-2 py-1 text-[11px] text-muted-foreground">{new Intl.NumberFormat().format(agentInsight.usage.totalTokens)} tokens</span>}
           <select
             className="h-7 rounded-md border border-border bg-secondary px-2 text-xs text-foreground outline-none focus:ring-1 focus:ring-ring"
             onChange={(event) =>
@@ -932,7 +1028,9 @@ function TerminalPane({
               Shell paused
             </div>
             <p className="mt-2 text-xs leading-5 text-muted-foreground">
-              Previous output is restored. Start a new shell to continue.
+              {useCortexStore.getState().settings.terminalHistoryEnabled
+                ? "Previous output is restored. Start a new shell to continue."
+                : "Start a new shell to continue. Terminal output is not persisted."}
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
               <Button size="sm" onClick={startNewShell}>
