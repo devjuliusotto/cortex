@@ -1,6 +1,5 @@
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
-<<<<<<< HEAD
 import { invoke } from "@tauri-apps/api/core";
 import { Building2, ClipboardList, Code2, ExternalLink, FolderPlus, HardDrive, Plus, Search, ShieldCheck, TerminalSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -8,22 +7,12 @@ import { CortexLogo } from "@/components/CortexLogo";
 import { OFFICE_VIEW_ADDON_ENABLED } from "@/config/marketplace";
 import { CommandPalette } from "@/features/command-palette/components/CommandPalette";
 import { SavedCommandsModal } from "@/features/commands/components/SavedCommandsModal";
-=======
-import { FolderPlus, Plus } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { CortexLogo } from "@/components/CortexLogo";
->>>>>>> 9fb1c27 (add my-agents)
+import { MyAgentsPage } from "@/features/my-agents/MyAgentsPage";
 import { MarketplaceModal } from "@/features/marketplace/components/MarketplaceModal";
 import { createOfficeWindowChannel, openOfficeWindow, publishOfficeSnapshot, requestOfficeSnapshot, requestTerminalFocus, type OfficeWindowSnapshot } from "@/features/office/officeWindow";
 import { SettingsModal } from "@/features/settings/components/SettingsModal";
 import { TerminalPanel } from "@/features/terminal/components/TerminalPanel";
-<<<<<<< HEAD
 import { focusTerminal, terminateTerminals, writeTerminal } from "@/features/terminal/terminalBridge";
-=======
-import { OfficeView } from "@/features/agents/components/OfficeView";
-import { MyAgentsPage } from "@/features/my-agents/MyAgentsPage";
-import { terminateTerminals } from "@/features/terminal/terminalBridge";
->>>>>>> 9fb1c27 (add my-agents)
 import { Sidebar } from "@/layouts/Sidebar";
 import { useCortexStore } from "@/stores/cortexStore";
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
@@ -57,11 +46,8 @@ export function AppShell() {
   const autoStartedWorkspaceIds = useRef(new Set<string>());
   const autoUpdateChecked = useRef(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-<<<<<<< HEAD
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [savedCommandsOpen, setSavedCommandsOpen] = useState(false);
-=======
->>>>>>> 9fb1c27 (add my-agents)
   const [marketplaceOpen, setMarketplaceOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [activeView, setActiveView] = useState<"workspace" | "office" | "my-agents">("workspace");
@@ -226,11 +212,7 @@ export function AppShell() {
   }, [hydrated, officeWindowMode, settings.updateCheckMode]);
 
   useEffect(() => {
-<<<<<<< HEAD
-    if (officeWindowMode || !activeWorkspace?.autoStartTerminalsOnOpen) {
-=======
-    if (!settings.autoStartTerminals || !activeWorkspace?.autoStartTerminalsOnOpen) {
->>>>>>> 9fb1c27 (add my-agents)
+    if (officeWindowMode || !settings.autoStartTerminals || !activeWorkspace?.autoStartTerminalsOnOpen) {
       return;
     }
     if (autoStartedWorkspaceIds.current.has(activeWorkspace.id)) {
@@ -248,11 +230,7 @@ export function AppShell() {
         appendTerminalHistory(session.id, "\r\n--- New shell started ---\r\n");
         setSessionStatus(session.id, "running");
       });
-<<<<<<< HEAD
-  }, [activeWorkspace, appendTerminalHistory, officeWindowMode, sessions, setSessionStatus]);
-=======
-  }, [activeWorkspace, appendTerminalHistory, sessions, setSessionStatus, settings.autoStartTerminals]);
->>>>>>> 9fb1c27 (add my-agents)
+  }, [activeWorkspace, appendTerminalHistory, officeWindowMode, sessions, setSessionStatus, settings.autoStartTerminals]);
 
   useEffect(() => {
     const handleBeforeUnload = () => {
@@ -268,7 +246,6 @@ export function AppShell() {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-<<<<<<< HEAD
       const target = event.target as HTMLElement | null;
       const isTyping =
         target?.tagName === "INPUT" ||
@@ -277,15 +254,16 @@ export function AppShell() {
         target?.isContentEditable;
       const paletteShortcut = (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k";
 
+      if ((event.ctrlKey || event.metaKey) && event.key === ",") {
+        event.preventDefault();
+        setSettingsOpen(true);
+        return;
+      }
+
       if (event.key === "Escape" && officeViewEnabled && !officeWindowMode && !commandPaletteOpen) {
         event.preventDefault();
         setWorkspaceView(false);
         return;
-=======
-      if (event.ctrlKey && event.key === ",") {
-        event.preventDefault();
-        setSettingsOpen(true);
->>>>>>> 9fb1c27 (add my-agents)
       }
 
       if (!paletteShortcut) {
@@ -300,35 +278,35 @@ export function AppShell() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-<<<<<<< HEAD
   }, [commandPaletteOpen, officeViewEnabled, officeWindowMode, setWorkspaceView]);
 
   if (officeWindowMode) {
     return <div className="flex h-full overflow-hidden bg-background text-foreground"><Suspense fallback={<div className="grid flex-1 place-items-center text-sm text-muted-foreground">Loading Office View…</div>}><OfficeView externalWindow onClose={() => undefined} onTerminalSelect={(terminalId) => requestTerminalFocus(officeChannelRef.current, terminalId)} /></Suspense></div>;
   }
-=======
-  }, []);
->>>>>>> 9fb1c27 (add my-agents)
 
   return (
     <div className="flex h-full overflow-hidden bg-background text-foreground">
       <Sidebar
+        activeView={activeView}
         collapsed={sidebarCollapsed}
-<<<<<<< HEAD
         officeActive={officeViewEnabled}
         officeAvailable={OFFICE_VIEW_ADDON_ENABLED}
-        onOfficeOpen={toggleOfficeView}
+        onOfficeOpen={() => {
+          setActiveView("workspace");
+          toggleOfficeView();
+        }}
         onMarketplaceOpen={() => setMarketplaceOpen(true)}
+        onMyAgentsOpen={() => {
+          setWorkspaceView(false);
+          setActiveView("my-agents");
+        }}
         onSavedCommandsOpen={() => setSavedCommandsOpen(true)}
-=======
-        activeView={activeView}
-        onMarketplaceOpen={() => setMarketplaceOpen(true)}
-        onMyAgentsOpen={() => setActiveView("my-agents")}
-        onOfficeOpen={() => setActiveView("office")}
->>>>>>> 9fb1c27 (add my-agents)
         onSettingsOpen={() => setSettingsOpen(true)}
         onToggle={() => setSidebarCollapsed((value) => !value)}
-        onWorkspaceOpen={() => setActiveView("workspace")}
+        onWorkspaceOpen={() => {
+          setWorkspaceView(false);
+          setActiveView("workspace");
+        }}
       />
       <main className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-card/70 px-4">
@@ -349,7 +327,6 @@ export function AppShell() {
           </div>
 
           <div className="flex items-center gap-2">
-<<<<<<< HEAD
             {OFFICE_VIEW_ADDON_ENABLED && activeWorkspace && (
               <div className="hidden h-9 items-center rounded-md border border-border bg-secondary/70 p-1 sm:flex" aria-label="Workspace view">
                 <button
@@ -393,8 +370,6 @@ export function AppShell() {
                 no telemetry
               </span>
             </div>
-=======
->>>>>>> 9fb1c27 (add my-agents)
             <Button size="sm" variant="outline" onClick={createWorkspace}>
               <FolderPlus className="mr-2 h-4 w-4" />
               Workspace
@@ -404,7 +379,6 @@ export function AppShell() {
               disabled={!activeWorkspace?.defaultWorkingDirectory}
               onClick={openProjectInVsCode}
               size="sm"
-<<<<<<< HEAD
               title={activeWorkspace?.defaultWorkingDirectory ? "Abrir projeto no VS Code" : "Defina a pasta do workspace primeiro"}
               variant="outline"
             >
@@ -439,8 +413,6 @@ export function AppShell() {
             </label>}
             <Button
               size="sm"
-=======
->>>>>>> 9fb1c27 (add my-agents)
               onClick={() => activeWorkspace && createSession(activeWorkspace.id)}
               disabled={!activeWorkspace}
             >
@@ -450,14 +422,19 @@ export function AppShell() {
           </div>
         </header>
 
-<<<<<<< HEAD
-        <div className={officeViewEnabled ? "hidden" : "contents"}>
-          <TerminalPanel workspaceId={activeWorkspaceId} />
-        </div>
-        {officeViewEnabled && (
-          <Suspense fallback={<div className="grid flex-1 place-items-center text-sm text-muted-foreground">Loading Office View…</div>}>
-            <OfficeView onClose={() => setWorkspaceView(false)} onTerminalSelect={openTerminalFromOffice} />
-          </Suspense>
+        {activeView === "my-agents" ? (
+          <MyAgentsPage />
+        ) : (
+          <>
+            <div className={officeViewEnabled ? "hidden" : "contents"}>
+              <TerminalPanel workspaceId={activeWorkspaceId} />
+            </div>
+            {officeViewEnabled && (
+              <Suspense fallback={<div className="grid flex-1 place-items-center text-sm text-muted-foreground">Loading Office View…</div>}>
+                <OfficeView onClose={() => setWorkspaceView(false)} onTerminalSelect={openTerminalFromOffice} />
+              </Suspense>
+            )}
+          </>
         )}
       </main>
       <CommandPalette
@@ -474,16 +451,6 @@ export function AppShell() {
         }}
       />
       <SavedCommandsModal open={savedCommandsOpen} onClose={() => setSavedCommandsOpen(false)} />
-=======
-        {activeView === "my-agents" ? (
-          <MyAgentsPage />
-        ) : activeView === "office" && settings.officeViewEnabled ? (
-          <OfficeView />
-        ) : (
-          <TerminalPanel workspaceId={activeWorkspaceId} />
-        )}
-      </main>
->>>>>>> 9fb1c27 (add my-agents)
       <MarketplaceModal open={marketplaceOpen} onClose={() => setMarketplaceOpen(false)} />
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>

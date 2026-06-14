@@ -44,12 +44,13 @@ const processesByAppSession = new Map<string, TerminalProcess>();
 const appSessionByPtySession = new Map<PtySessionId, string>();
 const subscribers = new Map<string, Set<SessionSubscriber>>();
 const terminalFocusHandlers = new Map<string, () => void>();
-<<<<<<< HEAD
-=======
 const pendingCommands = new Map<string, string>();
 const pendingHistoryByAppSession = new Map<string, string>();
->>>>>>> 9fb1c27 (add my-agents)
 let eventListeners: Promise<UnlistenFn[]> | null = null;
+let historyFlushTimer: ReturnType<typeof setTimeout> | null = null;
+
+const MAX_REPLAY_BUFFER_BYTES = 1_000_000;
+const HISTORY_FLUSH_INTERVAL_MS = 500;
 
 export function subscribeTerminalSession(
   appSessionId: string,
@@ -158,8 +159,6 @@ export async function writeTerminal(appSessionId: string, data: string) {
   });
 }
 
-<<<<<<< HEAD
-=======
 export function queueVisibleTerminalCommand(appSessionId: string, command: string) {
   pendingCommands.set(appSessionId, command);
 }
@@ -168,8 +167,6 @@ export function commandForShell(command: string, runImmediately: boolean) {
   const normalized = command.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
   return runImmediately ? `${normalized}\r` : normalized.replace(/\n/g, "\r");
 }
-
->>>>>>> 9fb1c27 (add my-agents)
 export function registerTerminalFocus(appSessionId: string, focus: () => void) {
   terminalFocusHandlers.set(appSessionId, focus);
   return () => {
@@ -230,9 +227,9 @@ function ensureEventListeners() {
 
       const process = processesByAppSession.get(appSessionId);
       if (process) {
-        process.buffer += event.payload.data;
+        process.buffer = trimReplayBuffer(process.buffer + event.payload.data);
       }
-      useCortexStore.getState().appendTerminalHistory(appSessionId, event.payload.data);
+      queueTerminalHistory(appSessionId, event.payload.data);
 
       for (const subscriber of subscribers.get(appSessionId) ?? []) {
         subscriber.onData(event.payload.data);
@@ -273,9 +270,6 @@ function notifyStatus(appSessionId: string, status: TerminalStatus, error: strin
     subscriber.onStatus?.(status, error);
   }
 }
-<<<<<<< HEAD
-=======
-
 function trimReplayBuffer(buffer: string) {
   if (buffer.length <= MAX_REPLAY_BUFFER_BYTES) {
     return buffer;
@@ -324,4 +318,3 @@ function flushTerminalHistory(appSessionId?: string) {
     state.appendTerminalHistory(sessionId, output);
   }
 }
->>>>>>> 9fb1c27 (add my-agents)

@@ -57,7 +57,6 @@ Requirements:
 - Rust stable through `rustup`.
 - WSL Ubuntu installed if you want the WSL Ubuntu profile.
 
-<<<<<<< HEAD
 Install dependencies and run the Tauri app:
 
 ```powershell
@@ -205,7 +204,3 @@ Maintainer note: replace `YOUR_USERNAME` in this README and `.github/FUNDING.yml
 ## License
 
 Cortex is licensed under GPL-3.0. See `LICENSE`.
-=======
-Every contribution helps keep Cortex independent, local-first and open source.
-
->>>>>>> 1660485 (add my-agents)

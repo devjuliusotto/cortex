@@ -24,12 +24,8 @@ import {
   Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-<<<<<<< HEAD
 import { GitMapPanel } from "@/features/git/GitMapPanel";
-=======
 import { markAgentInput, useAgentInsight } from "@/features/agents/agentInsightsStore";
-import { markItemActivity, setItemLoading, useItemActivity } from "@/features/activity/activityStore";
->>>>>>> 9fb1c27 (add my-agents)
 import { createCommandRecorder } from "@/features/terminal/commandHistory";
 import {
   ensureTerminalSession,
@@ -641,90 +637,6 @@ function PaneLeaf({ node, workspaceId }: { node: Extract<PaneNode, { type: "leaf
   );
 }
 
-<<<<<<< HEAD
-=======
-type PaneTabEntry = {
-  id: string;
-  label: string;
-  kind: "terminal" | "note" | "command-history" | "browser";
-};
-
-function TabButton({
-  entry,
-  isActive,
-  onClick,
-  onClose,
-  onDrop,
-  onRename,
-}: {
-  entry: PaneTabEntry;
-  isActive: boolean;
-  onClick: () => void;
-  onClose: (event: ReactMouseEvent<HTMLSpanElement>) => void;
-  onDrop: (event: DragEvent<HTMLButtonElement>) => void;
-  onRename: () => void;
-}) {
-  const active = useItemActivity(entry.id);
-  const agentInsight = useAgentInsight(entry.kind === "terminal" ? entry.id : null);
-
-  return (
-    <button
-      className={cn(
-        "flex h-7 min-w-28 items-center gap-2 rounded-md px-2 text-left text-xs text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground",
-        isActive && "bg-secondary text-foreground shadow-glow",
-      )}
-      draggable
-      onClick={onClick}
-      onDoubleClick={(event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        onRename();
-      }}
-      onDragOver={(event) => event.preventDefault()}
-      onDragStart={(event) => {
-        event.dataTransfer.setData("application/x-cortex-tab", entry.id);
-        event.dataTransfer.effectAllowed = "move";
-      }}
-      onDrop={onDrop}
-      title="Double-click to rename"
-      type="button"
-    >
-      {entry.kind === "terminal" ? (
-        <TerminalSquare className="h-3.5 w-3.5 text-primary" />
-      ) : entry.kind === "command-history" ? (
-        <History className="h-3.5 w-3.5 text-primary" />
-      ) : entry.kind === "browser" ? (
-        <Globe className="h-3.5 w-3.5 text-primary" />
-      ) : (
-        <FileText className="h-3.5 w-3.5 text-primary" />
-      )}
-      {active && <ActivityDot />}
-      {agentInsight?.waitingForAuthorization && (
-        <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-cortex-amber" title="Waiting for authorization" />
-      )}
-      <span className="truncate">{entry.label}</span>
-      <span
-        className="ml-1 rounded px-1 text-muted-foreground hover:bg-background hover:text-foreground"
-        onClick={onClose}
-        role="button"
-        title="Close tab"
-      >
-        x
-      </span>
-    </button>
-  );
-}
-
-function ActivityDot() {
-  return (
-    <span className="relative flex h-2 w-2 shrink-0">
-      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary/60 opacity-60" />
-      <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
-    </span>
-  );
-}
-
->>>>>>> 9fb1c27 (add my-agents)
 function TerminalPane({
   paneId,
   session,
@@ -852,12 +764,9 @@ function TerminalPane({
     });
 
     const dataDisposable = terminal.onData((data) => {
-<<<<<<< HEAD
       approvalPromptBufferRef.current = "";
       setSessionStatus(session.id, "running");
-=======
       markAgentInput(session.id);
->>>>>>> 9fb1c27 (add my-agents)
       recorder.accept(data);
       void writeTerminal(session.id, data);
     });

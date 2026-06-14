@@ -2068,9 +2068,7 @@ pub fn run() {
             pty_backend_status,
             load_persisted_state,
             save_persisted_state,
-<<<<<<< HEAD
             office_read_claude_transcripts,
-=======
             get_app_data_info,
             open_app_data_dir,
             export_persisted_state,
@@ -2079,7 +2077,6 @@ pub fn run() {
             get_skill_directory_info,
             create_skill_directory,
             open_skill_directory,
->>>>>>> 9fb1c27 (add my-agents)
             open_external_url,
             open_project_in_vscode,
             read_clipboard_text,

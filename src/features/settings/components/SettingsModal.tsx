@@ -10,12 +10,8 @@ import {
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import packageJson from "../../../../package.json";
 import { Button } from "@/components/ui/button";
-<<<<<<< HEAD
-import { useCortexStore } from "@/stores/cortexStore";
-=======
 import { cn } from "@/lib/utils";
 import { useCortexStore, type CortexPersistedState } from "@/stores/cortexStore";
->>>>>>> 9fb1c27 (add my-agents)
 
 type SectionId = "general" | "appearance" | "terminal" | "shortcuts" | "data" | "updates" | "about";
 type UpdateState = "idle" | "checking" | "up-to-date" | "available" | "downloading" | "ready" | "error";
@@ -31,10 +27,6 @@ const sections: Array<{ id: SectionId; label: string; icon: typeof Settings2 }> 
   { id: "about", label: "Sobre", icon: Info },
 ];
 
-<<<<<<< HEAD
-export function SettingsModal({ open, onClose }: SettingsModalProps) {
-  const { settings } = useCortexStore();
-=======
 const shortcuts = [
   ["Ctrl+Shift+`", "Nova aba de terminal"],
   ["Ctrl+\\", "Dividir painel"],
@@ -49,7 +41,6 @@ export function SettingsModal({ open: modalOpen, onClose }: { open: boolean; onC
   const [section, setSection] = useState<SectionId>("general");
   const [query, setQuery] = useState("");
   const [dataInfo, setDataInfo] = useState<AppDataInfo | null>(null);
->>>>>>> 9fb1c27 (add my-agents)
   const [updateState, setUpdateState] = useState<UpdateState>("idle");
   const [update, setUpdate] = useState<Update | null>(null);
   const [message, setMessage] = useState("Verificações automáticas são feitas ao iniciar o Cortex.");
@@ -144,51 +135,6 @@ export function SettingsModal({ open: modalOpen, onClose }: { open: boolean; onC
           <div className="mt-auto rounded-md border border-border bg-card/60 p-3 text-xs leading-5 text-muted-foreground">Preferências são salvas localmente. O Cortex não envia telemetria.</div>
         </aside>
 
-<<<<<<< HEAD
-        <div className="space-y-6 overflow-auto p-5">
-          <section>
-            <h3 className="text-sm font-medium">Updates</h3>
-            <div className="mt-4 rounded-md border border-border bg-background/50 p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 text-sm">
-                    <UpdateStatusIcon state={updateState} />
-                    <span>{updateLabel(updateState)}</span>
-                  </div>
-                  <p className="mt-2 text-xs leading-5 text-muted-foreground">{message}</p>
-                  {downloadProgress && (
-                    <p className="mt-1 text-xs text-muted-foreground">{downloadProgress}</p>
-                  )}
-                </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  {updateState === "available" && (
-                    <Button size="sm" onClick={downloadUpdate}>
-                      <Download className="mr-2 h-4 w-4" />
-                      Download
-                    </Button>
-                  )}
-                  {updateState === "ready" && (
-                    <Button size="sm" onClick={installUpdate}>
-                      Install
-                    </Button>
-                  )}
-                  <Button
-                    disabled={updateState === "checking" || updateState === "downloading"}
-                    onClick={checkForUpdates}
-                    size="sm"
-                    variant="outline"
-                  >
-                    <RefreshCw className="mr-2 h-4 w-4" />
-                    Check for Updates
-                  </Button>
-                </div>
-              </div>
-            </div>
-            <p className="mt-2 text-xs text-muted-foreground">
-              Update checks are {settings.updateCheckMode}. Automatic install still requires a signed GitHub Release.
-            </p>
-          </section>
-=======
         <div className="flex min-w-0 flex-1 flex-col">
           <header className="flex h-14 shrink-0 items-center justify-between border-b border-border px-6">
             <div className="font-medium">{sections.find((item) => item.id === section)?.label}</div>
@@ -230,50 +176,12 @@ export function SettingsModal({ open: modalOpen, onClose }: { open: boolean; onC
 
             {section === "about" && <SettingsPage title="Sobre o Cortex" description="Workspace local para terminais e agentes."><InfoCard icon={<Info className="h-5 w-5 text-primary" />} title={`Cortex v${packageJson.version}`} text="Gerenciador local-first de terminais para Windows, com workspaces, painéis e acompanhamento de agentes. Nenhum token ou histórico é enviado pelo Cortex." /></SettingsPage>}
           </div>
->>>>>>> 9fb1c27 (add my-agents)
         </div>
       </section>
     </div>
   );
 }
 
-<<<<<<< HEAD
-function UpdateStatusIcon({ state }: { state: UpdateState }) {
-  if (state === "checking" || state === "downloading") {
-    return <Loader2 className="h-4 w-4 animate-spin text-primary" />;
-  }
-  if (state === "up-to-date" || state === "ready") {
-    return <CheckCircle2 className="h-4 w-4 text-cortex-green" />;
-  }
-  if (state === "error") {
-    return <AlertCircle className="h-4 w-4 text-cortex-red" />;
-  }
-  return <RefreshCw className="h-4 w-4 text-primary" />;
-}
-
-function updateLabel(state: UpdateState) {
-  const labels: Record<UpdateState, string> = {
-    idle: "Automatic checks",
-    checking: "Checking",
-    "up-to-date": "Up to date",
-    available: "Update available",
-    downloading: "Downloading",
-    ready: "Ready to install",
-    error: "Error",
-  };
-  return labels[state];
-}
-
-function formatBytes(bytes: number) {
-  if (bytes < 1024) {
-    return `${bytes} B`;
-  }
-  if (bytes < 1024 * 1024) {
-    return `${(bytes / 1024).toFixed(1)} KB`;
-  }
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-=======
 function SettingsPage({ title, description, children }: { title: string; description: string; children: ReactNode }) { return <div className="mx-auto max-w-3xl space-y-4"><div className="mb-6"><h2 className="text-xl font-semibold">{title}</h2><p className="mt-1 text-sm text-muted-foreground">{description}</p></div>{children}</div>; }
 function ToggleRow({ checked, label, text, onChange }: { checked: boolean; label: string; text: string; onChange: (value: boolean) => void }) { return <label className="flex items-start justify-between gap-5 rounded-md border border-border bg-background/50 p-4"><span><span className="block text-sm font-medium">{label}</span><span className="mt-1 block text-xs leading-5 text-muted-foreground">{text}</span></span><button aria-checked={checked} className={cn("relative mt-1 h-5 w-9 shrink-0 rounded-full bg-muted transition-colors", checked && "bg-primary")} onClick={() => onChange(!checked)} role="switch" type="button"><span className={cn("absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-background transition-transform", checked && "translate-x-4")} /></button></label>; }
 function InfoCard({ icon, title, text }: { icon: ReactNode; title: string; text: string }) { return <div className="flex gap-3 rounded-md border border-border bg-background/50 p-4">{icon}<div><div className="text-sm font-medium">{title}</div><p className="mt-1 text-xs leading-5 text-muted-foreground">{text}</p></div></div>; }
@@ -282,4 +190,3 @@ function Metric({ label, value }: { label: string; value: string }) { return <di
 function UpdateIcon({ state }: { state: UpdateState }) { if (["checking", "downloading"].includes(state)) return <Loader2 className="h-4 w-4 animate-spin text-primary" />; if (["up-to-date", "ready"].includes(state)) return <CheckCircle2 className="h-4 w-4 text-cortex-green" />; if (state === "error") return <AlertCircle className="h-4 w-4 text-cortex-red" />; return <RefreshCw className="h-4 w-4 text-primary" />; }
 function updateLabel(state: UpdateState) { return ({ idle: "Verificação automática", checking: "Verificando", "up-to-date": "Atualizado", available: "Atualização disponível", downloading: "Baixando", ready: "Pronto para instalar", error: "Erro" } satisfies Record<UpdateState, string>)[state]; }
 function formatBytes(bytes: number) { if (bytes < 1024) return `${bytes} B`; if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`; return `${(bytes / 1024 / 1024).toFixed(1)} MB`; }
->>>>>>> 9fb1c27 (add my-agents)

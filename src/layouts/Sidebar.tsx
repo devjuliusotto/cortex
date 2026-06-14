@@ -4,9 +4,6 @@ import {
   ChevronRight,
   ClipboardList,
   FolderTree,
-  Bot,
-  AlertCircle,
-  Gauge,
   UsersRound,
   Package,
   Settings,
@@ -17,8 +14,6 @@ import { CortexLogo } from "@/components/CortexLogo";
 import { AgentUsageBar } from "@/features/agents/AgentUsageBar";
 import { WorkspaceList } from "@/features/workspace/components/WorkspaceList";
 import { cn } from "@/lib/utils";
-import { useAgentInsights } from "@/features/agents/agentInsightsStore";
-import { useCortexStore } from "@/stores/cortexStore";
 
 type SidebarProps = {
   activeView: "workspace" | "office" | "my-agents";
@@ -29,30 +24,24 @@ type SidebarProps = {
   onSavedCommandsOpen: () => void;
   onMarketplaceOpen: () => void;
   onMyAgentsOpen: () => void;
-  onOfficeOpen: () => void;
   onSettingsOpen: () => void;
   onToggle: () => void;
   onWorkspaceOpen: () => void;
 };
 
-<<<<<<< HEAD
 export function Sidebar({
+  activeView,
   collapsed,
   officeActive,
   officeAvailable,
   onOfficeOpen,
   onMarketplaceOpen,
+  onMyAgentsOpen,
   onSavedCommandsOpen,
   onSettingsOpen,
   onToggle,
+  onWorkspaceOpen,
 }: SidebarProps) {
-=======
-export function Sidebar({ activeView, collapsed, onMarketplaceOpen, onMyAgentsOpen, onOfficeOpen, onSettingsOpen, onToggle, onWorkspaceOpen }: SidebarProps) {
-  const insights = useAgentInsights();
-  const officeViewEnabled = useCortexStore((state) => state.settings.officeViewEnabled);
-  const waitingCount = insights.filter((item) => item.waitingForAuthorization).length;
-  const totalTokens = insights.reduce((sum, item) => sum + (item.usage.totalTokens ?? 0), 0);
->>>>>>> 9fb1c27 (add my-agents)
   return (
     <motion.aside
       animate={{ width: collapsed ? 76 : 288 }}
@@ -90,7 +79,6 @@ export function Sidebar({ activeView, collapsed, onMarketplaceOpen, onMyAgentsOp
       )}
 
       <div className="border-t border-border p-3">
-<<<<<<< HEAD
         <AgentUsageBar collapsed={collapsed} />
         {officeAvailable && <button
           className={cn(
@@ -117,19 +105,10 @@ export function Sidebar({ activeView, collapsed, onMarketplaceOpen, onMyAgentsOp
           <ClipboardList className="h-4 w-4 shrink-0" />
           {!collapsed && <span>Comandos salvos</span>}
         </button>
-=======
         <button className={cn("mb-1 flex h-10 w-full items-center gap-3 rounded-md px-3 text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground", collapsed && "justify-center px-0", activeView === "my-agents" && "bg-secondary text-foreground shadow-glow")} onClick={onMyAgentsOpen} type="button" title="My Agents">
           <UsersRound className="h-4 w-4 shrink-0" />
           {!collapsed && <span>My Agents</span>}
         </button>
-        {officeViewEnabled && (
-          <button className={cn("mb-1 flex min-h-10 w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground", collapsed && "justify-center px-0", activeView === "office" && "bg-secondary text-foreground shadow-glow")} onClick={onOfficeOpen} type="button" title="Office View">
-            <Bot className="h-4 w-4 shrink-0" />
-            {!collapsed && <span className="flex min-w-0 flex-1 items-center justify-between"><span>Office View</span>{waitingCount > 0 && <span className="flex items-center gap-1 rounded bg-cortex-amber/15 px-1.5 py-0.5 text-[10px] text-cortex-amber"><AlertCircle className="h-3 w-3" />{waitingCount}</span>}</span>}
-          </button>
-        )}
-        {!collapsed && insights.length > 0 && <div className="mb-2 rounded-md border border-border bg-background/45 p-2.5"><div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-muted-foreground"><Gauge className="h-3 w-3" />Uso reportado</div><div className="mt-1.5 text-sm font-medium">{totalTokens ? `${new Intl.NumberFormat().format(totalTokens)} tokens` : "Tokens não reportados"}</div><div className="mt-1 truncate text-[10px] text-muted-foreground">{insights.find((item) => item.usage.credits)?.usage.credits ?? "Créditos/quota não reportados"}</div></div>}
->>>>>>> 9fb1c27 (add my-agents)
         <button
           className={cn(
             "mb-1 flex h-10 w-full items-center gap-3 rounded-md px-3 text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground",
