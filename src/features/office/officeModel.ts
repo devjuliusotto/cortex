@@ -38,12 +38,15 @@ function confidenceLevel(confidence: number): AgentConfidenceLevel {
   return "unknown";
 }
 
-function zoneForLocation(location: AgentLocation): OfficeZoneId {
-  if (location === "desk") return "codingDesks";
-  if (location === "library") return "researchLibrary";
-  if (location === "meeting") return "meetingRoom";
-  if (location === "buildlab") return "buildLab";
-  return "lounge";
+function zoneForAgent(agent: AgentSnapshot): OfficeZoneId {
+  const context = `${agent.detail ?? ""} ${agent.toolName ?? ""}`.toLowerCase();
+  if (/debug|error|failed|failure|exception|trace/.test(context)) return "debugCorner";
+  if (agent.location === "buildlab" || /build|compile|test|lint|check/.test(context)) return "buildLab";
+  if (agent.activity === "researching" || agent.location === "library") return "researchLibrary";
+  if (agent.activity === "waiting_approval") return "bossDesk";
+  if (agent.activity === "waiting_input" || agent.location === "meeting") return "meetingRoom";
+  if (agent.activity === "idle" || agent.activity === "completed" || agent.location === "lounge") return "lounge";
+  return "codingDesks";
 }
 
 function categoryFor(activity: AgentActivity, location: AgentLocation): OfficeActivityCategory {
@@ -61,7 +64,8 @@ function signalFor(activity: AgentActivity): OfficeSignal {
   return "active";
 }
 
-function poseFor(activity: AgentActivity, location: AgentLocation): OfficeAgentPose {
+function poseFor(activity: AgentActivity, location: AgentLocation, zone: OfficeZoneId): OfficeAgentPose {
+  if (zone === "debugCorner") return "debugging";
   if (activity === "waiting_input" || activity === "waiting_approval" || location === "meeting") return "meeting";
   if (activity === "researching") return "reading";
   if (activity === "reviewing" || location === "buildlab") return "observing";
@@ -73,7 +77,7 @@ export function createOfficeActors(agentSnapshots: AgentSnapshot[], sessions: Te
   const sessionsById = new Map(sessions.map((session) => [session.id, session]));
   return agentSnapshots.map((agent): OfficeAgentModel => {
     const session = agent.terminalId ? sessionsById.get(agent.terminalId) : undefined;
-    const zone = zoneForLocation(agent.location);
+    const zone = zoneForAgent(agent);
     const category = categoryFor(agent.activity, agent.location);
     return {
       ...agent,
@@ -83,7 +87,7 @@ export function createOfficeActors(agentSnapshots: AgentSnapshot[], sessions: Te
       confidenceLevel: confidenceLevel(agent.confidence),
       signal: signalFor(agent.activity),
       phase: "active",
-      pose: poseFor(agent.activity, agent.location),
+      pose: poseFor(agent.activity, agent.location, zone),
       category,
       zone,
       target: officeTarget(zone, agent.id),

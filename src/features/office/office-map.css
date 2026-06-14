@@ -1,0 +1,295 @@
+.officeViewport {
+  --map-ink: #34343f;
+  --map-wall: #514b50;
+  --map-wall-light: #81736c;
+  --map-cream: #eadbbc;
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 440px;
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  border: 1px solid #3f4655;
+  border-radius: 10px;
+  background:
+    radial-gradient(circle at 45% 0%, rgba(103, 122, 142, 0.32), transparent 48%),
+    linear-gradient(180deg, #303847 0%, #252b37 58%, #202630 100%);
+  box-shadow: inset 0 0 60px rgba(10, 13, 19, 0.28);
+}
+
+.officeViewport.isDragging { cursor: grabbing; }
+
+.officeViewportHint {
+  position: absolute;
+  z-index: 80;
+  right: 12px;
+  bottom: 12px;
+  padding: 6px 9px;
+  border: 1px solid rgba(225, 213, 188, 0.22);
+  border-radius: 5px;
+  color: #c7c4bd;
+  background: rgba(34, 38, 47, 0.82);
+  font: 9px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.08em;
+  pointer-events: none;
+  backdrop-filter: blur(5px);
+}
+
+.officeWorldTransform {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+
+.officeWorld {
+  --floor: #ad8867;
+  position: relative;
+  width: 2520px;
+  height: 920px;
+  overflow: hidden;
+  color: var(--map-ink);
+  image-rendering: pixelated;
+  background:
+    linear-gradient(90deg, transparent 0 95%, rgba(74, 64, 61, 0.08) 95%) 0 0 / 44px 44px,
+    linear-gradient(0deg, transparent 0 95%, rgba(74, 64, 61, 0.08) 95%) 0 0 / 44px 44px,
+    #6d777c;
+  border: 6px solid #454650;
+  box-shadow: 0 16px 0 rgba(24, 27, 34, 0.28);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.officeMapTitle {
+  position: absolute;
+  z-index: 6;
+  left: 50%;
+  top: 18px;
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  transform: translateX(-50%);
+  color: #f3e6ca;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+}
+.officeMapTitle span { font-size: 15px; font-weight: 800; }
+.officeMapTitle small { color: #c8c3b7; font-size: 8px; }
+
+.officeCorridor {
+  position: absolute;
+  z-index: 1;
+  left: 60px;
+  right: 60px;
+  top: 427px;
+  height: 96px;
+  border-top: 5px solid #4a484c;
+  border-bottom: 5px solid #4a484c;
+  background:
+    repeating-linear-gradient(90deg, transparent 0 56px, rgba(75, 78, 82, 0.12) 56px 59px),
+    #c4b89f;
+  box-shadow: inset 0 5px #ded2b8, inset 0 -5px #a99d88;
+}
+.officeCorridor span {
+  position: absolute;
+  left: 50%;
+  top: 42px;
+  color: rgba(70, 67, 68, 0.4);
+  font-size: 9px;
+  letter-spacing: 0.35em;
+  transform: translateX(-50%);
+}
+
+.continueSign {
+  position: absolute;
+  z-index: 12;
+  top: 455px;
+  padding: 7px 10px;
+  border: 3px solid #413d43;
+  color: #f1dfbb;
+  background: #665567;
+  box-shadow: 3px 3px 0 rgba(48, 43, 48, 0.35);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+.continueSign span { color: #ebbd79; font-size: 12px; }
+.continue-left { left: 12px; }
+.continue-right { right: 12px; }
+
+.officeRoom {
+  position: absolute;
+  z-index: 2;
+  box-sizing: border-box;
+  border: 7px solid var(--map-wall);
+  background-color: var(--floor);
+  box-shadow: inset 0 0 0 4px var(--map-wall-light), 7px 8px 0 rgba(47, 45, 48, 0.18);
+}
+.officeRoom::after {
+  content: "";
+  position: absolute;
+  left: 42%;
+  bottom: -8px;
+  width: 74px;
+  height: 12px;
+  border-left: 5px solid #4b484b;
+  border-right: 5px solid #4b484b;
+  background: #c4b89f;
+}
+
+.roomLabel {
+  position: absolute;
+  z-index: 8;
+  left: 18px;
+  top: 16px;
+  padding: 6px 10px 5px;
+  border: 3px solid #403a40;
+  color: #f3dfb8;
+  background: #665567;
+  box-shadow: 3px 3px 0 rgba(65, 55, 59, 0.25);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.roomLibrary { left: 80px; top: 72px; width: 530px; height: 355px; --floor: #b58c67; }
+.roomLounge { left: 646px; top: 72px; width: 430px; height: 355px; --floor: #a9836f; }
+.roomMeeting { left: 1112px; top: 112px; width: 400px; height: 315px; --floor: #a99a7d; }
+.roomMission { left: 1548px; top: 112px; width: 350px; height: 315px; --floor: #8f93a0; }
+.roomDebug { left: 1934px; top: 140px; width: 326px; height: 287px; --floor: #7d6c70; }
+.roomWork { left: 540px; top: 523px; width: 720px; height: 370px; --floor: #b28b65; }
+.roomBuild { left: 1310px; top: 523px; width: 640px; height: 370px; --floor: #90949b; }
+
+.roomLibrary,
+.roomWork {
+  background-image: repeating-linear-gradient(0deg, transparent 0 30px, rgba(80, 58, 46, 0.13) 30px 33px);
+}
+.roomLounge { background-image: radial-gradient(#8e6a61 1px, transparent 1px); background-size: 13px 13px; }
+.roomMeeting,
+.roomMission,
+.roomDebug,
+.roomBuild { background-image: linear-gradient(90deg, rgba(64, 66, 73, 0.09) 1px, transparent 1px), linear-gradient(rgba(64, 66, 73, 0.09) 1px, transparent 1px); background-size: 34px 34px; }
+
+.roomNote {
+  position: absolute;
+  right: 22px;
+  bottom: 18px;
+  color: rgba(66, 53, 48, 0.58);
+  font-size: 8px;
+  letter-spacing: 0.08em;
+}
+
+.pixelFurniture { position: absolute; box-sizing: border-box; }
+.furniture-bookshelves {
+  left: 52px; top: 72px; width: 425px; height: 82px;
+  border: 7px solid #60483d;
+  background:
+    repeating-linear-gradient(90deg, #b95f5a 0 14px, #d2a65e 14px 26px, #668a79 26px 39px, #7185a0 39px 52px, #765968 52px 66px),
+    #7c5c47;
+  box-shadow: inset 0 -9px #76533f, 5px 5px 0 rgba(66, 50, 45, 0.22);
+}
+.furniture-bookshelves::after { content: ""; position: absolute; left: -2px; right: -2px; top: 32px; height: 7px; background: #60483d; }
+.furniture-reading-table { left: 160px; top: 210px; width: 170px; height: 76px; border: 5px solid #654c42; border-radius: 46%; background: #967053; box-shadow: 0 7px #614a41; }
+.furniture-reading-table::before,
+.furniture-reading-table::after { content: ""; position: absolute; top: 21px; width: 34px; height: 38px; border: 4px solid #4d4d55; background: #748084; }
+.furniture-reading-table::before { left: -48px; }
+.furniture-reading-table::after { right: -48px; }
+.furniture-plant-left,
+.furniture-plant-right { width: 34px; height: 28px; bottom: 25px; border: 4px solid #684a3e; background: #a2674d; }
+.furniture-plant-left { left: 32px; }.furniture-plant-right { right: 32px; }
+.furniture-plant-left::before,
+.furniture-plant-right::before { content: ""; position: absolute; left: -7px; bottom: 18px; width: 40px; height: 48px; background: radial-gradient(circle at 30% 65%, #57785f 0 9px, transparent 10px), radial-gradient(circle at 70% 65%, #688b68 0 10px, transparent 11px), radial-gradient(circle at 50% 28%, #4f7058 0 11px, transparent 12px); }
+
+.furniture-sofa { left: 62px; top: 88px; width: 225px; height: 75px; border: 6px solid #4d5963; border-radius: 9px; background: #718797; box-shadow: inset 0 -16px #5f7483, 5px 6px rgba(62, 51, 55, 0.2); }
+.furniture-sofa::after { content: ""; position: absolute; left: 104px; top: 0; bottom: 12px; border-left: 4px solid #5b6e7b; }
+.furniture-armchair { left: 302px; top: 168px; width: 72px; height: 72px; border: 6px solid #5d5360; border-radius: 12px; background: #8f7481; box-shadow: inset 0 -14px #765f6b; }
+.furniture-coffee-table { left: 105px; top: 196px; width: 150px; height: 66px; border: 5px solid #634b40; border-radius: 45%; background: #967257; box-shadow: 0 7px #624a40; }
+.furniture-coffee-machine { left: 316px; top: 72px; width: 60px; height: 82px; border: 5px solid #434750; background: #737984; box-shadow: inset 0 -18px #555b64; }
+.furniture-coffee-machine::after { content: "☕"; position: absolute; left: 15px; top: 14px; font-size: 22px; }
+.furniture-vending-machine { right: 18px; bottom: 24px; width: 48px; height: 78px; border: 5px solid #47515b; background: linear-gradient(#6c91a0 0 45%, #53616b 45%); }
+
+.furniture-whiteboard { left: 90px; top: 52px; width: 220px; height: 64px; border: 5px solid #6b6864; background: #e8e4d8; box-shadow: 0 5px #7b746b; }
+.furniture-whiteboard::after { content: "PLAN  →  SHIP"; position: absolute; left: 38px; top: 20px; color: #75807c; font-size: 11px; letter-spacing: .1em; }
+.furniture-meeting-table { left: 73px; top: 152px; width: 250px; height: 94px; border: 6px solid #605047; border-radius: 45%; background: #8e725e; box-shadow: 0 8px #5f5049; }
+.furniture-meeting-table::before { content: ""; position: absolute; left: 38px; right: 38px; top: -32px; height: 22px; background: repeating-linear-gradient(90deg, #5d6670 0 35px, transparent 35px 58px); }
+.furniture-meeting-table::after { content: ""; position: absolute; left: 38px; right: 38px; bottom: -32px; height: 22px; background: repeating-linear-gradient(90deg, #5d6670 0 35px, transparent 35px 58px); }
+
+.bossStation { position: absolute; inset: 52px 22px 18px; border: 0; color: inherit; background: transparent; cursor: pointer; }
+.bossStation:hover .bossMonitor { filter: brightness(1.15); transform: translateX(-50%) translateY(-2px); }
+.bossMonitor { position: absolute; left: 50%; top: 16px; display: grid; place-items: center; width: 142px; height: 72px; border: 6px solid #3d4652; color: #9ee2d2; background: #26323c; box-shadow: inset 0 0 0 4px #18252d; transform: translateX(-50%); transition: 120ms ease; font: 700 22px/1 ui-monospace, monospace; }
+.bossMonitor small { color: #91a7aa; font-size: 8px; letter-spacing: .15em; }
+.bossDesk { position: absolute; left: 42px; right: 42px; top: 104px; height: 55px; border: 6px solid #584a45; background: #8b6a58; box-shadow: 0 8px #574842; }
+.bossChair { position: absolute; left: 50%; top: 176px; width: 70px; height: 54px; border: 6px solid #414b59; border-radius: 10px; background: #637183; transform: translateX(-50%); }
+.bossLabel { position: absolute; left: 50%; bottom: 3px; color: #e8e0cc; font-size: 8px; letter-spacing: .12em; transform: translateX(-50%); white-space: nowrap; }
+
+.furniture-debug-monitors { left: 38px; right: 38px; top: 83px; height: 105px; border: 6px solid #403b43; background: repeating-linear-gradient(90deg, #291f28 0 92px, #4f4650 92px 99px); box-shadow: inset 0 0 0 5px #221a21, 0 8px #574951; }
+.furniture-debug-monitors::after { content: "> trace\A> inspect\A> retry"; white-space: pre; position: absolute; left: 17px; top: 14px; color: #e5848d; font: 10px/2 ui-monospace, monospace; }
+.debugReadout { position: absolute; right: 26px; bottom: 20px; padding: 5px 8px; color: #f0a0a6; background: #4c3540; border: 3px solid #593f49; font-size: 9px; }
+
+.workDeskGrid { position: absolute; left: 56px; right: 56px; top: 70px; bottom: 28px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 34px 70px; }
+.workDesk { position: relative; min-height: 110px; }
+.deskTop { position: absolute; left: 10px; right: 10px; top: 32px; height: 58px; border: 5px solid #634b41; background: #957052; box-shadow: 0 8px #614a41; }
+.deskMonitor { position: absolute; z-index: 2; left: 50%; top: 0; width: 84px; height: 53px; border: 5px solid #414955; background: #283843; transform: translateX(-50%); box-shadow: inset 0 0 0 4px #1e2931; }
+.deskMonitor span { position: absolute; left: 10px; top: 13px; width: 42px; height: 4px; background: #77c8bd; box-shadow: 0 10px #4b7777; }
+.deskChair { position: absolute; left: 50%; top: 102px; width: 52px; height: 42px; border: 5px solid #444d58; border-radius: 7px; background: #687785; transform: translateX(-50%); }
+.deskMug { position: absolute; right: 28px; top: 13px; width: 16px; height: 18px; border: 3px solid #e1d3b7; background: #eee2c8; }
+.deskPlant { position: absolute; left: 23px; top: 14px; width: 17px; height: 17px; border: 3px solid #754e40; background: #a66e50; }
+.deskPlant::before { content: ""; position: absolute; left: -6px; top: -16px; width: 24px; height: 18px; background: #5e8065; clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+.workDesk .statusDot { right: 17px; top: 39px; }
+.deskNumber { position: absolute; left: 21px; top: 48px; color: rgba(65, 49, 44, .55); font-size: 9px; }
+
+.buildPanels { position: absolute; left: 40px; top: 78px; display: flex; gap: 18px; }
+.statusPanel { position: relative; width: 155px; height: 88px; padding: 14px; border: 6px solid #4b5058; color: #bbc2c2; background: #343a43; box-shadow: inset 0 0 0 3px #282d34, 0 7px #65686c; }
+.statusPanel span { display: block; font-size: 9px; letter-spacing: .12em; }
+.statusPanel strong { display: block; margin-top: 13px; max-width: 105px; overflow: hidden; color: #d0d5cf; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.statusPanel i { position: absolute; right: 12px; top: 13px; width: 10px; height: 10px; border: 2px solid #293039; border-radius: 50%; background: #7b8283; }
+.statusPanel.isActive i { background: #71c694; box-shadow: 0 0 8px #71c694; }
+.furniture-servers { left: 55px; right: 55px; bottom: 30px; height: 98px; border: 6px solid #484e57; background: repeating-linear-gradient(0deg, #353b44 0 19px, #555d66 19px 24px); box-shadow: 0 8px #65686c; }
+.furniture-servers::after { content: "•  •  •     •  •     •  •  •"; position: absolute; left: 20px; top: 7px; color: #7ed0a0; font-size: 19px; letter-spacing: 1.25em; }
+
+.statusDot { position: absolute; z-index: 5; width: 13px; height: 13px; border: 3px solid #343740; border-radius: 50%; background: #8b9299; }
+.officeWorld .status-active { background: #62c9bd; }.officeWorld .status-idle { background: #9b9ca0; }.officeWorld .status-success { background: #72c88f; }.officeWorld .status-warning { background: #e47780; box-shadow: 0 0 8px rgba(228, 119, 128, .55); }
+
+.agentSprite {
+  position: absolute;
+  z-index: 30;
+  width: 90px;
+  height: 90px;
+  padding: 0;
+  border: 0;
+  color: #34343f;
+  background: transparent;
+  transform: translate(-50%, -50%);
+  transition-property: left, top, opacity;
+  transition-timing-function: linear;
+  cursor: pointer;
+}
+.agentSprite:hover { z-index: 45; filter: brightness(1.05); }
+.agentSprite .statusDot { right: 18px; top: 16px; }
+.agentShadow { position: absolute; left: 27px; top: 61px; width: 38px; height: 13px; border-radius: 50%; background: rgba(42, 42, 47, .25); }
+.agentBody { position: absolute; left: 31px; top: 28px; width: 30px; height: 40px; }
+.agentHair { position: absolute; z-index: 4; left: 4px; top: 0; width: 22px; height: 12px; background: #4b3d42; box-shadow: -3px 4px #4b3d42, 3px 4px #4b3d42; }
+.agentFace { position: absolute; z-index: 3; left: 5px; top: 8px; width: 20px; height: 15px; background: #d9aa84; box-shadow: 4px 5px 0 -2px #493d40, 13px 5px 0 -2px #493d40; }
+.agentShirt { position: absolute; z-index: 2; left: 2px; top: 21px; width: 26px; height: 18px; background: var(--agent-color); box-shadow: -5px 3px var(--agent-color), 5px 3px var(--agent-color); }
+.agentLegs { position: absolute; left: 5px; top: 37px; width: 8px; height: 10px; background: #49515e; box-shadow: 12px 0 #49515e; }
+.agentBubble { position: absolute; left: 50%; bottom: 78px; min-width: 92px; max-width: 180px; padding: 6px 8px; border: 3px solid #4a4650; color: #514b4d; background: #f1e6cd; box-shadow: 3px 3px 0 rgba(55, 51, 55, .18); transform: translateX(-50%); font-size: 8px; white-space: nowrap; }
+.agentBubble::after { content: ""; position: absolute; left: 50%; bottom: -8px; width: 10px; height: 10px; border-right: 3px solid #4a4650; border-bottom: 3px solid #4a4650; background: #f1e6cd; transform: translateX(-50%) rotate(45deg); }
+.agentName { position: absolute; left: 50%; top: 77px; max-width: 130px; padding: 2px 5px; overflow: hidden; color: #f5ead4; background: rgba(62, 59, 64, .78); transform: translateX(-50%); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.agentSprite.isMoving .agentBody { animation: agentWalk .34s steps(2, end) infinite; }
+.agentSprite.isMoving .agentBubble { color: #67584d; background: #f5dcae; }
+.agentSprite.facing-left .agentBody { transform: scaleX(-1); }
+.agentSprite.facing-up .agentFace { box-shadow: none; }
+.agentSprite.signal-warning .agentBubble { border-color: #a85160; }
+
+@keyframes agentWalk {
+  0% { margin-top: 0; rotate: -2deg; }
+  50% { margin-top: -4px; rotate: 2deg; }
+  100% { margin-top: 0; rotate: -2deg; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agentSprite { transition-duration: 0ms !important; }
+  .agentSprite.isMoving .agentBody { animation: none; }
+}

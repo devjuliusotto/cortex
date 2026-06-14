@@ -1,15 +1,15 @@
 import type { OfficePoint, OfficeZone } from "./officeTypes";
 
-export const OFFICE_SCENE_WIDTH = 1280;
-export const OFFICE_SCENE_HEIGHT = 760;
+export const OFFICE_SCENE_WIDTH = 2520;
+export const OFFICE_SCENE_HEIGHT = 920;
 export const AGENT_EXIT_DELAY_MS = 4200;
+export const OFFICE_CORRIDOR_Y = 474;
 
-// Adjust these values together to resize or reposition the compact research corner.
 export const RESEARCH_LIBRARY_LAYOUT = {
-  bookshelf: { x: 66, y: 246, width: 174, height: 184 },
+  bookshelf: { x: 120, y: 130, width: 430, height: 110 },
   shelfCount: 3,
   booksPerShelf: 6,
-  label: { x: 153, y: 226 },
+  label: { x: 330, y: 104 },
 } as const;
 
 export type OfficeAnchor = {
@@ -32,27 +32,27 @@ const anchor = (id: string, x: number, y: number, workX = x, workY = y): OfficeA
   zIndexHint: Math.round(workY),
 });
 
+// These anchors are shared by live agents, replay, and the DOM map renderer.
 export const OFFICE_ZONE_ANCHORS: Record<OfficeZone, OfficeAnchor[]> = {
-  bossDesk: [anchor("bossDesk", 640, 222, 640, 258)],
+  bossDesk: [anchor("missionControl", 1715, 220, 1715, 292)],
   codingDesks: [
-    anchor("codingDesk1", 431, 455, 431, 548),
-    anchor("codingDesk2", 571, 455, 571, 548),
-    anchor("codingDesk3", 711, 455, 711, 548),
-    anchor("codingDesk4", 851, 455, 851, 548),
+    anchor("codingDesk1", 730, 650, 730, 742),
+    anchor("codingDesk2", 1068, 650, 1068, 742),
+    anchor("codingDesk3", 730, 790, 730, 866),
+    anchor("codingDesk4", 1068, 790, 1068, 866),
   ],
-  // Research agents stay beside the shelf, clear of its furniture footprint.
   researchLibrary: [
-    anchor("research1", 270, 292, 278, 302),
-    anchor("research2", 270, 350, 282, 362),
-    anchor("research3", 270, 408, 278, 420),
+    anchor("research1", 250, 280, 250, 326),
+    anchor("research2", 430, 280, 430, 326),
+    anchor("research3", 525, 350, 525, 364),
   ],
-  buildLab: [anchor("build1", 1024, 348, 946, 350), anchor("build2", 1140, 392, 946, 410)],
-  testBoard: [anchor("test1", 1015, 548, 930, 548), anchor("test2", 1120, 548, 1230, 548)],
-  debugCorner: [anchor("debug1", 820, 625, 744, 652), anchor("debug2", 935, 625, 1004, 652)],
-  gitBoard: [anchor("git1", 350, 620, 286, 650), anchor("git2", 485, 620, 570, 650)],
-  lounge: [anchor("lounge1", 130, 620, 130, 690), anchor("lounge2", 235, 620, 235, 690)],
-  meetingRoom: [anchor("meeting1", 620, 625), anchor("meeting2", 690, 625), anchor("meeting3", 655, 670)],
-  entrance: [anchor("entrance1", 633, 710), anchor("entrance2", 674, 710)],
+  buildLab: [anchor("build1", 1480, 690, 1480, 744), anchor("build2", 1700, 690, 1700, 744)],
+  testBoard: [anchor("test1", 1840, 690, 1840, 744), anchor("test2", 1840, 810, 1840, 842)],
+  debugCorner: [anchor("debug1", 2110, 222, 2110, 300), anchor("debug2", 2210, 222, 2210, 300)],
+  gitBoard: [anchor("git1", 1580, 820, 1580, 842), anchor("git2", 1740, 820, 1740, 842)],
+  lounge: [anchor("lounge1", 760, 280, 760, 342), anchor("lounge2", 950, 280, 950, 342)],
+  meetingRoom: [anchor("meeting1", 1210, 250), anchor("meeting2", 1320, 250), anchor("meeting3", 1425, 250)],
+  entrance: [anchor("entrance1", 110, OFFICE_CORRIDOR_Y), anchor("entrance2", 150, OFFICE_CORRIDOR_Y)],
 };
 
 export const BOSS_POSITION = OFFICE_ZONE_ANCHORS.bossDesk[0].agentWorkPoint;
@@ -64,4 +64,14 @@ export function officeTarget(zone: OfficeZone, id: string): OfficePoint {
   const point = anchors[hash % anchors.length].agentWorkPoint;
   const jitter = zone === "entrance" || zone === "bossDesk" || zone === "codingDesks" ? 0 : (hash % 9) - 4;
   return { x: point.x + jitter, y: point.y + Math.round(jitter / 3) };
+}
+
+export function officeRoute(from: OfficePoint, to: OfficePoint): OfficePoint[] {
+  const nearCorridor = (point: OfficePoint) => Math.abs(point.y - OFFICE_CORRIDOR_Y) < 36;
+  if (nearCorridor(from) && nearCorridor(to)) return [to];
+  const route: OfficePoint[] = [];
+  if (!nearCorridor(from)) route.push({ x: from.x, y: OFFICE_CORRIDOR_Y });
+  route.push({ x: to.x, y: OFFICE_CORRIDOR_Y });
+  if (!nearCorridor(to)) route.push(to);
+  return route;
 }
