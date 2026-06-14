@@ -1,5 +1,5 @@
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { Check, Copy, ExternalLink, Folder, FolderOpen, Palette, Play, Plus, Puzzle, RefreshCw, Trash2 } from "lucide-react";
+import { Check, Copy, Folder, FolderOpen, GripVertical, Palette, Play, Plus, Puzzle, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -24,7 +24,7 @@ type ContextMenuState = {
   y: number;
 } | null;
 
-export function WorkspaceList({ onWorkspaceOpen }: { onWorkspaceOpen?: () => void }) {
+export function WorkspaceList({ onWorkspaceOpen }: { onWorkspaceOpen?: (workspaceId: string) => void }) {
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
   const [skillsWorkspace, setSkillsWorkspace] = useState<Workspace | null>(null);
   const [draggedWorkspaceId, setDraggedWorkspaceId] = useState<string | null>(null);
@@ -130,11 +130,41 @@ export function WorkspaceList({ onWorkspaceOpen }: { onWorkspaceOpen?: () => voi
             return (
               <div
                 className={cn(
-                  "group rounded-md border border-transparent px-2 py-2 transition-colors",
+                  "group relative rounded-md border border-transparent px-2 py-2 transition-colors",
                   active && "border-primary/20 bg-secondary shadow-glow",
                   !active && "hover:bg-secondary/70",
+                  draggedWorkspaceId === workspace.id && "opacity-45",
+                  dropTargetId === workspace.id && draggedWorkspaceId !== workspace.id && "border-primary/60 bg-primary/10",
                 )}
+                draggable
                 key={workspace.id}
+                onDragEnd={() => {
+                  setDraggedWorkspaceId(null);
+                  setDropTargetId(null);
+                }}
+                onDragEnter={() => {
+                  if (draggedWorkspaceId && draggedWorkspaceId !== workspace.id) {
+                    setDropTargetId(workspace.id);
+                  }
+                }}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = "move";
+                }}
+                onDragStart={(event) => {
+                  setDraggedWorkspaceId(workspace.id);
+                  event.dataTransfer.effectAllowed = "move";
+                  event.dataTransfer.setData("text/plain", workspace.id);
+                }}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  const draggedId = draggedWorkspaceId ?? event.dataTransfer.getData("text/plain");
+                  if (draggedId && draggedId !== workspace.id) {
+                    reorderWorkspaces(draggedId, workspace.id);
+                  }
+                  setDraggedWorkspaceId(null);
+                  setDropTargetId(null);
+                }}
                 onContextMenu={(event) => {
                   event.preventDefault();
                   event.stopPropagation();
@@ -147,7 +177,10 @@ export function WorkspaceList({ onWorkspaceOpen }: { onWorkspaceOpen?: () => voi
               >
                 <button
                   className="flex min-w-0 w-full items-center gap-[var(--cortex-workspace-item-gap)] text-left"
-                  onClick={() => setActiveWorkspace(workspace.id)}
+                  onClick={() => {
+                    setActiveWorkspace(workspace.id);
+                    onWorkspaceOpen?.(workspace.id);
+                  }}
                   type="button"
                   title={
                     workspace.defaultWorkingDirectory
@@ -155,6 +188,10 @@ export function WorkspaceList({ onWorkspaceOpen }: { onWorkspaceOpen?: () => voi
                       : workspace.name
                   }
                 >
+                  <GripVertical
+                    aria-hidden="true"
+                    className="h-4 w-4 shrink-0 cursor-grab text-muted-foreground/60 active:cursor-grabbing"
+                  />
                   <span className="relative grid h-5 w-5 shrink-0 place-items-center">
                     <Folder
                       className={cn(
@@ -207,6 +244,7 @@ export function WorkspaceList({ onWorkspaceOpen }: { onWorkspaceOpen?: () => voi
             label="Open / Select workspace"
             onClick={() => {
               setActiveWorkspace(contextWorkspace.id);
+              onWorkspaceOpen?.(contextWorkspace.id);
               setContextMenu(null);
             }}
           />

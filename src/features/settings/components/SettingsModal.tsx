@@ -28,12 +28,12 @@ const sections: Array<{ id: SectionId; label: string; icon: typeof Settings2 }> 
 ];
 
 const shortcuts = [
-  ["Ctrl+Shift+`", "Nova aba de terminal"],
-  ["Ctrl+\\", "Dividir painel"],
-  ["Ctrl+W", "Fechar aba ativa"],
-  ["Ctrl+Tab / Ctrl+Shift+Tab", "Alternar entre abas"],
+  ["Ctrl+K", "Abrir ou fechar a Command Palette"],
   ["Ctrl+,", "Abrir configurações"],
-  ["Ctrl+1 … Ctrl+9", "Alternar foco entre painéis"],
+  ["Escape", "Fechar painéis, menus e voltar da Office View"],
+  ["Ctrl+C", "Copiar seleção do terminal ou enviar interrupção"],
+  ["Ctrl+V", "Colar no terminal ativo"],
+  ["Duplo clique", "Abrir o terminal de um agente na Office View"],
 ] as const;
 
 export function SettingsModal({ open: modalOpen, onClose }: { open: boolean; onClose: () => void }) {
@@ -142,8 +142,9 @@ export function SettingsModal({ open: modalOpen, onClose }: { open: boolean; onC
           </header>
           <div className="min-h-0 flex-1 overflow-y-auto p-6">
             {section === "general" && <SettingsPage title="Geral" description="Recursos principais e navegação do Cortex.">
-              <ToggleRow checked={store.settings.officeViewEnabled} label="Office View" text="Exibe a visão de agentes e o atalho no canto inferior esquerdo." onChange={(value) => store.setFeatureFlag("officeViewEnabled", value)} />
+              <ToggleRow checked={store.settings.officeViewEnabled} label="Office View" text="Ativa o painel global de agentes de todos os projetos." onChange={(value) => store.setFeatureFlag("officeViewEnabled", value)} />
               <ToggleRow checked={store.settings.showWorkspaceMetadata} label="Metadados do workspace" text="Branch Git, alterações, portas e contagens locais na sidebar." onChange={(value) => store.setFeatureFlag("showWorkspaceMetadata", value)} />
+              <div className="rounded-md border border-border bg-background/50 p-4"><div className="text-sm font-medium">Verificação de atualizações</div><p className="mt-1 text-xs leading-5 text-muted-foreground">Escolha se o Cortex deve procurar novas versões ao iniciar.</p><div className="mt-3 flex gap-2"><ChoiceButton active={store.settings.updateCheckMode === "automatic"} label="Automática" onClick={() => store.setUpdateCheckMode("automatic")} /><ChoiceButton active={store.settings.updateCheckMode === "manual"} label="Manual" onClick={() => store.setUpdateCheckMode("manual")} /></div></div>
             </SettingsPage>}
 
             {section === "appearance" && <SettingsPage title="Aparência" description="Opções visuais coerentes com o tema atual.">
@@ -157,10 +158,10 @@ export function SettingsModal({ open: modalOpen, onClose }: { open: boolean; onC
               <InfoCard icon={<TerminalSquare className="h-5 w-5 text-primary" />} title="Histórico de comandos" text="A lista de comandos digitados é separada da saída completa do terminal e pode ser limpa em Dados e privacidade." />
             </SettingsPage>}
 
-            {section === "shortcuts" && <SettingsPage title="Atalhos" description="Mapa pesquisável inspirado no fluxo de desenvolvedores do VS Code.">
+            {section === "shortcuts" && <SettingsPage title="Atalhos" description="Comandos de teclado e gestos disponíveis nesta versão do Cortex.">
               <label className="relative block"><Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" /><input autoFocus className="h-10 w-full rounded-md border border-border bg-background pl-10 pr-3 text-sm outline-none focus:ring-1 focus:ring-ring" onChange={(event) => setQuery(event.target.value)} placeholder="Pesquisar atalhos" value={query} /></label>
               <div className="overflow-hidden rounded-md border border-border">{filteredShortcuts.map(([keys, description]) => <div className="grid grid-cols-[220px_1fr] gap-4 border-b border-border px-4 py-3 text-sm last:border-0" key={keys}><div><kbd className="rounded border border-border bg-secondary px-2 py-1 font-mono text-xs">{keys}</kbd></div><div className="text-muted-foreground">{description}</div></div>)}</div>
-              <p className="text-xs text-muted-foreground">A lista usa uma estrutura de dados independente, pronta para receber bindings personalizados no futuro.</p>
+              <InfoCard icon={<Keyboard className="h-5 w-5 text-primary" />} title="Atalhos personalizados" text="A edição de bindings ainda não está disponível. Esta lista mostra apenas comandos que funcionam hoje, sem atalhos prometidos mas não implementados." />
             </SettingsPage>}
 
             {section === "data" && <SettingsPage title="Dados e privacidade" description="Controle do estado local do Cortex.">
@@ -185,6 +186,7 @@ export function SettingsModal({ open: modalOpen, onClose }: { open: boolean; onC
 function SettingsPage({ title, description, children }: { title: string; description: string; children: ReactNode }) { return <div className="mx-auto max-w-3xl space-y-4"><div className="mb-6"><h2 className="text-xl font-semibold">{title}</h2><p className="mt-1 text-sm text-muted-foreground">{description}</p></div>{children}</div>; }
 function ToggleRow({ checked, label, text, onChange }: { checked: boolean; label: string; text: string; onChange: (value: boolean) => void }) { return <label className="flex items-start justify-between gap-5 rounded-md border border-border bg-background/50 p-4"><span><span className="block text-sm font-medium">{label}</span><span className="mt-1 block text-xs leading-5 text-muted-foreground">{text}</span></span><button aria-checked={checked} className={cn("relative mt-1 h-5 w-9 shrink-0 rounded-full bg-muted transition-colors", checked && "bg-primary")} onClick={() => onChange(!checked)} role="switch" type="button"><span className={cn("absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-background transition-transform", checked && "translate-x-4")} /></button></label>; }
 function InfoCard({ icon, title, text }: { icon: ReactNode; title: string; text: string }) { return <div className="flex gap-3 rounded-md border border-border bg-background/50 p-4">{icon}<div><div className="text-sm font-medium">{title}</div><p className="mt-1 text-xs leading-5 text-muted-foreground">{text}</p></div></div>; }
+function ChoiceButton({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) { return <button className={cn("rounded-md border border-border px-3 py-2 text-xs text-muted-foreground transition-colors hover:text-foreground", active && "border-primary/40 bg-primary/10 text-primary")} onClick={onClick} type="button">{label}</button>; }
 function DangerAction({ icon, title, text, action, onClick }: { icon: ReactNode; title: string; text: string; action: string; onClick: () => void }) { return <div className="flex items-center justify-between gap-4 rounded-md border border-cortex-red/25 bg-cortex-red/5 p-4"><div><div className="text-sm font-medium">{title}</div><p className="mt-1 text-xs text-muted-foreground">{text}</p></div><Button size="sm" variant="outline" className="text-cortex-red" onClick={onClick}>{icon}<span className="ml-2">{action}</span></Button></div>; }
 function Metric({ label, value }: { label: string; value: string }) { return <div className="rounded-md border border-border bg-background/50 p-4"><div className="text-xs text-muted-foreground">{label}</div><div className="mt-2 text-lg font-semibold">{value}</div></div>; }
 function UpdateIcon({ state }: { state: UpdateState }) { if (["checking", "downloading"].includes(state)) return <Loader2 className="h-4 w-4 animate-spin text-primary" />; if (["up-to-date", "ready"].includes(state)) return <CheckCircle2 className="h-4 w-4 text-cortex-green" />; if (state === "error") return <AlertCircle className="h-4 w-4 text-cortex-red" />; return <RefreshCw className="h-4 w-4 text-primary" />; }

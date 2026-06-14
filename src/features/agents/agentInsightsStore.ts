@@ -6,6 +6,7 @@ export type AgentUsage = {
   totalTokens?: number;
   credits?: string;
   contextRemaining?: string;
+  remainingPercent?: number;
 };
 
 export type AgentInsight = {
@@ -94,12 +95,35 @@ function detectUsage(output: string): AgentUsage {
   const total = lastNumber(output, /(?:total|tokens?\s+used)\s*(?:tokens?)?\s*[:=]\s*([\d,.]+)/gi);
   const credits = lastText(output, /(?:credits?|quota|balance)\s*(?:remaining|left)?\s*[:=]\s*([^\n]+)/gi);
   const contextRemaining = lastText(output, /(?:context|tokens?)\s+(?:remaining|left)\s*[:=]\s*([^\n]+)/gi);
+  const remainingPercent = lastPercent(output, [
+    /(?:context|tokens?|quota|usage)\s*(?:remaining|left|available)?\s*[:=]?\s*(\d{1,3}(?:[.,]\d+)?)\s*%/gi,
+    /(\d{1,3}(?:[.,]\d+)?)\s*%\s*(?:context|tokens?|quota|usage)?\s*(?:remaining|left|available)/gi,
+  ]);
+  const usedPercent = lastPercent(output, [
+    /(?:context|tokens?|quota|usage)\s*(?:used|consumed)\s*[:=]?\s*(\d{1,3}(?:[.,]\d+)?)\s*%/gi,
+    /(\d{1,3}(?:[.,]\d+)?)\s*%\s*(?:context|tokens?|quota|usage)?\s*(?:used|consumed)/gi,
+  ]);
   if (input !== undefined) usage.inputTokens = input;
   if (outputTokens !== undefined) usage.outputTokens = outputTokens;
   if (total !== undefined) usage.totalTokens = total;
   if (credits) usage.credits = credits.trim().slice(0, 80);
   if (contextRemaining) usage.contextRemaining = contextRemaining.trim().slice(0, 80);
+  if (remainingPercent !== undefined) usage.remainingPercent = remainingPercent;
+  else if (usedPercent !== undefined) usage.remainingPercent = Math.max(0, 100 - usedPercent);
   return usage;
+}
+
+function lastPercent(output: string, patterns: RegExp[]) {
+  let latest: { index: number; value: number } | undefined;
+  for (const pattern of patterns) {
+    for (const match of output.matchAll(pattern)) {
+      const value = Number(match[1].replace(",", "."));
+      if (Number.isFinite(value) && (!latest || (match.index ?? 0) > latest.index)) {
+        latest = { index: match.index ?? 0, value: Math.max(0, Math.min(100, Math.round(value))) };
+      }
+    }
+  }
+  return latest?.value;
 }
 
 function lastNumber(output: string, pattern: RegExp) {

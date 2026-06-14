@@ -26,6 +26,7 @@ import {
   WORKSPACE_TEMPLATES_MARKETPLACE_ENABLED,
 } from "@/features/marketplace/templates";
 import { cn } from "@/lib/utils";
+import { useCortexStore } from "@/stores/cortexStore";
 
 type MarketplaceModalProps = {
   open: boolean;
@@ -264,6 +265,8 @@ function TemplatesTab() {
 }
 
 function AddOnsTab() {
+  const officeEnabled = useCortexStore((state) => state.settings.officeViewEnabled);
+  const setFeatureFlag = useCortexStore((state) => state.setFeatureFlag);
   return (
     <div className="max-w-3xl">
       <h3 className="text-base font-semibold">Add-ons</h3>
@@ -272,11 +275,7 @@ function AddOnsTab() {
         remote code, run third-party plugins, or include paid marketplace logic.
       </p>
       <div className="mt-5 grid gap-3 md:grid-cols-2">
-        <InfoCard
-          icon={<Building2 className="h-4 w-4 text-cortex-green" />}
-          title={`Office View · ${OFFICE_VIEW_ADDON_ENABLED ? "Enabled" : "Disabled"}`}
-          text="Built-in lightweight PixiJS visualization available from the workspace view switcher and command palette."
-        />
+        <div className="rounded-md border border-border bg-card/55 p-4"><div className="mb-2 flex items-center gap-2 text-sm font-medium"><Building2 className={cn("h-4 w-4", officeEnabled ? "text-cortex-green" : "text-muted-foreground")} />Office View · {OFFICE_VIEW_ADDON_ENABLED && officeEnabled ? "Enabled" : "Disabled"}</div><p className="text-xs leading-5 text-muted-foreground">Built-in visualization for agents across all projects. Disabling it removes Office controls and closes the active Office view.</p><Button className="mt-4" size="sm" variant={officeEnabled ? "outline" : "default"} disabled={!OFFICE_VIEW_ADDON_ENABLED} onClick={() => setFeatureFlag("officeViewEnabled", !officeEnabled)}>{officeEnabled ? "Disable add-on" : "Enable add-on"}</Button></div>
         <InfoCard
           icon={<Puzzle className="h-4 w-4 text-primary" />}
           title="No plugin runtime"

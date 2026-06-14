@@ -2,6 +2,7 @@ import { useTick } from "@pixi/react";
 import { useCallback, useEffect, useRef } from "react";
 import type { Container, FederatedPointerEvent, Graphics } from "pixi.js";
 import { ENTRANCE_POSITION } from "../officeLayout";
+import { officeAgentCaption } from "../officeAgentCaption";
 import type { OfficeAgentModel, OfficeSignal } from "../officeTypes";
 
 const colors: Record<OfficeSignal, number> = { active: 0x63d9d4, idle: 0x8991a5, success: 0x68d398, warning: 0xed667d };
@@ -88,7 +89,7 @@ export function OfficeAgent({ agent, showWorkspaceLabel, onSelect, onOpen }: { a
   return (
     <pixiContainer ref={ref} eventMode="static" cursor="pointer" onPointerTap={(event: FederatedPointerEvent) => event.detail >= 2 && agent.terminalId ? onOpen() : onSelect(agent.id)}>
       <pixiGraphics draw={drawBubble} />
-      <pixiText text={agent.phase === "exiting" ? "Wrapping up..." : agent.meetingLabel ?? agent.currentGoal ?? agent.detail ?? agent.activity} x={0} y={agent.zone === "codingDesks" ? -152 : -78} anchor={0.5} style={{ fill: 0xdde3ef, fontFamily: "monospace", fontSize: 9 }} />
+      <pixiText text={officeAgentCaption(agent)} x={0} y={agent.zone === "codingDesks" ? -152 : -78} anchor={0.5} style={{ fill: 0xdde3ef, fontFamily: "monospace", fontSize: 9 }} />
       <pixiGraphics ref={workerRef} draw={drawWorker} />
       <pixiText text={showWorkspaceLabel ? `${agent.terminalName} · ${agent.workspaceShortName}` : agent.terminalName} x={0} y={44} anchor={0.5} style={{ fill: 0xf3f4f8, fontFamily: "monospace", fontSize: showWorkspaceLabel ? 8 : 10, fontWeight: "bold" }} />
       <pixiText text={agent.identity.role} x={0} y={57} anchor={0.5} style={{ fill: 0xaeb6c8, fontFamily: "monospace", fontSize: 7 }} />

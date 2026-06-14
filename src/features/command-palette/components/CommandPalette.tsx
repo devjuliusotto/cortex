@@ -1,11 +1,9 @@
 import {
   Building2,
-  ClipboardList,
   FileText,
   GitBranch,
   History,
   Layers3,
-  Play,
   Plus,
   Search,
   Sparkles,
@@ -17,7 +15,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { focusTerminal, writeTerminal } from "@/features/terminal/terminalBridge";
 import { cn } from "@/lib/utils";
-import { useCortexStore, type SavedCommand, type TerminalSession } from "@/stores/cortexStore";
+import { useCortexStore, type TerminalSession } from "@/stores/cortexStore";
 
 type CommandPaletteProps = {
   open: boolean;
@@ -27,7 +25,6 @@ type CommandPaletteProps = {
   onOfficeOpen: () => void;
   onOfficeToggle: () => void;
   onTerminalViewOpen: () => void;
-  onSavedCommandsOpen: () => void;
 };
 
 type PaletteAction = {
@@ -40,34 +37,6 @@ type PaletteAction = {
   disabled?: boolean;
   run: () => void;
 };
-
-const workflowTemplates: Array<
-  Pick<SavedCommand, "title" | "description" | "command" | "category" | "privateLocal">
-> = [
-  {
-    title: "Git Auto Commit",
-    description: "Stage changes, ask for a commit message, commit, and push main.",
-    command:
-      '& { git status; git add .; $changes = git diff --cached --name-only; if (-not $changes) { Write-Host "No changes to commit."; return }; $msg = Read-Host "Commit message"; git commit -m $msg; if ($LASTEXITCODE -ne 0) { return }; git push origin main }',
-    category: "Private / Git",
-    privateLocal: true,
-  },
-  {
-    title: "Release Version",
-    description: "Bump npm/Tauri/Cargo versions, build, commit, push, tag, and push the tag.",
-    command:
-      '& { $version = Read-Host "New version, example 0.1.10"; npm version $version --no-git-tag-version; if ($LASTEXITCODE -ne 0) { return }; $tauriConfig = "src-tauri/tauri.conf.json"; (Get-Content $tauriConfig -Raw) -replace \'"version":\\s*"[^"]+"\', (\'"version": "\' + $version + \'"\') | Set-Content $tauriConfig; $cargoToml = "src-tauri/Cargo.toml"; if (Test-Path $cargoToml) { (Get-Content $cargoToml -Raw) -replace \'(?m)^version\\s*=\\s*"[^"]+"\', (\'version = "\' + $version + \'"\') | Set-Content $cargoToml }; npm run build; if ($LASTEXITCODE -ne 0) { return }; cargo check --manifest-path .\\src-tauri\\Cargo.toml; if ($LASTEXITCODE -ne 0) { return }; git add .; git commit -m "Release v$version"; if ($LASTEXITCODE -ne 0) { return }; git push origin main; if ($LASTEXITCODE -ne 0) { return }; git tag "v$version"; git push origin "v$version" }',
-    category: "Private / Release",
-    privateLocal: true,
-  },
-  {
-    title: "Run Dev Server",
-    description: "Start the local Vite development server.",
-    command: "npm run dev -- --host 127.0.0.1",
-    category: "Private / Dev",
-    privateLocal: true,
-  },
-];
 
 function commandForShell(command: string, runImmediately: boolean) {
   const normalized = command.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
@@ -106,17 +75,14 @@ export function CommandPalette({
   onOfficeOpen,
   onOfficeToggle,
   onTerminalViewOpen,
-  onSavedCommandsOpen,
 }: CommandPaletteProps) {
   const {
     activeWorkspaceId,
     commandHistory,
     createMarketingModeDemo,
-    createSavedCommand,
     createSession,
     createTemplateInstance,
     layouts,
-    savedCommands,
     sessions,
     setActiveItem,
     templateInstances,
@@ -158,17 +124,6 @@ export function CommandPalette({
       title,
       content: kind === "note" ? "# Notes\n\n" : "",
     });
-  };
-
-  const installWorkflowTemplates = () => {
-    for (const template of workflowTemplates) {
-      const exists = savedCommands.some(
-        (command) => command.title === template.title && command.command === template.command,
-      );
-      if (!exists) {
-        createSavedCommand(template);
-      }
-    }
   };
 
   const actions = useMemo<PaletteAction[]>(() => {
@@ -248,15 +203,6 @@ export function CommandPalette({
         run: () => ensureTemplate("note", "workspace-note", "Notes"),
       },
       {
-        id: "workflows:install",
-        title: "Instalar workflows essenciais",
-        subtitle: "Git Auto Commit, Release Version e Dev Server",
-        section: "Workflows",
-        keywords: "templates workflows comandos salvos release git dev",
-        icon: <Sparkles className="h-4 w-4 text-cortex-amber" />,
-        run: installWorkflowTemplates,
-      },
-      {
         id: "marketing:demo",
         title: "Create Marketing Mode",
         subtitle: "Generate demo workspaces for screenshots",
@@ -264,15 +210,6 @@ export function CommandPalette({
         keywords: "marketing demo screenshots landing page fake terminal git notes history",
         icon: <Sparkles className="h-4 w-4 text-cortex-amber" />,
         run: createMarketingModeDemo,
-      },
-      {
-        id: "commands:manage",
-        title: "Gerenciar comandos salvos",
-        subtitle: "Criar, editar, importar e executar",
-        section: "Workflows",
-        keywords: "saved commands comandos salvos biblioteca",
-        icon: <ClipboardList className="h-4 w-4 text-primary" />,
-        run: onSavedCommandsOpen,
       },
     ];
 
@@ -301,20 +238,6 @@ export function CommandPalette({
         })),
     ];
 
-    const savedCommandActions = savedCommands
-      .slice()
-      .sort((first, second) => second.updatedAt.localeCompare(first.updatedAt))
-      .map<PaletteAction>((command) => ({
-        id: `saved-command:${command.id}`,
-        title: command.title,
-        subtitle: command.category ? `${command.category} · Run saved command` : "Run saved command",
-        section: "Comandos Salvos",
-        keywords: `${command.description ?? ""} ${command.command}`,
-        icon: <Play className="h-4 w-4 text-cortex-green" />,
-        disabled: !activeTerminal,
-        run: () => sendCommand(command.command, true),
-      }));
-
     const recentCommandActions = commandHistory
       .filter((entry) => entry.workspaceId === activeWorkspaceId)
       .slice()
@@ -334,7 +257,6 @@ export function CommandPalette({
     return [
       ...baseActions,
       ...workspaceItemActions,
-      ...savedCommandActions,
       ...recentCommandActions,
     ];
   }, [
@@ -346,11 +268,9 @@ export function CommandPalette({
     createSession,
     officeAvailable,
     officeViewEnabled,
-    onSavedCommandsOpen,
     onOfficeOpen,
     onOfficeToggle,
     onTerminalViewOpen,
-    savedCommands,
     sessions,
     setActiveItem,
     templateInstances,

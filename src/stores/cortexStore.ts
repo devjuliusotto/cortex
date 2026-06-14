@@ -41,17 +41,6 @@ export type CommandSnippet = {
   updatedAt: string;
 };
 
-export type SavedCommand = {
-  id: string;
-  title: string;
-  description?: string;
-  command: string;
-  category?: string;
-  privateLocal?: boolean;
-  createdAt: string;
-  updatedAt: string;
-};
-
 export type TerminalSession = {
   id: string;
   workspaceId: string;
@@ -127,7 +116,6 @@ export type CortexPersistedState = {
   workspaces: Workspace[];
   sessions: TerminalSession[];
   commandHistory: CommandHistoryEntry[];
-  savedCommands: SavedCommand[];
   templateInstances: TemplateInstance[];
   layouts: WorkspaceLayout[];
   settings: CortexSettings;
@@ -157,14 +145,6 @@ type CortexState = CortexPersistedState & {
     snippet: Pick<CommandSnippet, "name" | "command" | "description" | "profileId">,
   ) => void;
   deleteSnippet: (workspaceId: string, snippetId: string) => void;
-  createSavedCommand: (
-    command: Pick<SavedCommand, "title" | "description" | "command" | "category" | "privateLocal">,
-  ) => void;
-  updateSavedCommand: (
-    commandId: string,
-    command: Pick<SavedCommand, "title" | "description" | "command" | "category" | "privateLocal">,
-  ) => void;
-  deleteSavedCommand: (commandId: string) => void;
   deleteWorkspace: (workspaceId: string) => void;
   setActiveWorkspace: (workspaceId: string) => void;
   createSession: (workspaceId: string, profileId?: TerminalProfileId) => string;
@@ -179,6 +159,7 @@ type CortexState = CortexPersistedState & {
       | "terminalHistoryEnabled",
     enabled: boolean,
   ) => void;
+  setUpdateCheckMode: (mode: UpdateCheckMode) => void;
   clearAllTerminalHistory: () => void;
   resetSettings: () => void;
   importPersistedState: (state: CortexPersistedState) => void;
@@ -244,7 +225,6 @@ const emptyState: CortexPersistedState = {
   workspaces: [],
   sessions: [],
   commandHistory: [],
-  savedCommands: [],
   templateInstances: [],
   layouts: [],
   settings: {
@@ -917,7 +897,6 @@ function persisted(state: CortexState): CortexPersistedState {
         : "",
     })),
     commandHistory: trimCommandHistoryByWorkspace(state.commandHistory),
-    savedCommands: state.savedCommands,
     templateInstances: state.templateInstances,
     layouts: state.layouts,
     settings: state.settings,
@@ -979,14 +958,6 @@ function normalizeLoadedState(state: CortexPersistedState): CortexPersistedState
         }))
         .filter((entry) => entry.command),
     ),
-    savedCommands: (state.savedCommands ?? []).map((command) => ({
-      ...command,
-      title: command.title.trim(),
-      description: command.description?.trim() || undefined,
-      command: command.command.trim(),
-      category: command.category?.trim() || undefined,
-      privateLocal: command.privateLocal === true,
-    })).filter((command) => command.title && command.command),
     templateInstances: state.templateInstances ?? [],
     layouts: (state.layouts ?? []).map((layout) => {
       const paneTree = normalizePaneTree(layout);
@@ -1276,74 +1247,6 @@ export const useCortexStore = create<CortexState>((set) => ({
       return next;
     }),
 
-  createSavedCommand: (command) =>
-    set((state) => {
-      const cleanTitle = command.title.trim();
-      const cleanCommand = command.command.trim();
-      if (!cleanTitle || !cleanCommand) {
-        return state;
-      }
-
-      const timestamp = now();
-      const next = {
-        ...state,
-        savedCommands: [
-          ...state.savedCommands,
-          {
-            id: createId("saved-command"),
-            title: cleanTitle,
-            description: command.description?.trim() || undefined,
-            command: cleanCommand,
-            category: command.category?.trim() || undefined,
-            privateLocal: command.privateLocal === true,
-            createdAt: timestamp,
-            updatedAt: timestamp,
-          },
-        ],
-      };
-      saveState(next);
-      return next;
-    }),
-
-  updateSavedCommand: (commandId, command) =>
-    set((state) => {
-      const cleanTitle = command.title.trim();
-      const cleanCommand = command.command.trim();
-      if (!cleanTitle || !cleanCommand) {
-        return state;
-      }
-
-      const timestamp = now();
-      const next = {
-        ...state,
-        savedCommands: state.savedCommands.map((item) =>
-          item.id === commandId
-            ? {
-                ...item,
-                title: cleanTitle,
-                description: command.description?.trim() || undefined,
-                command: cleanCommand,
-                category: command.category?.trim() || undefined,
-                privateLocal: command.privateLocal === true,
-                updatedAt: timestamp,
-              }
-            : item,
-        ),
-      };
-      saveState(next);
-      return next;
-    }),
-
-  deleteSavedCommand: (commandId) =>
-    set((state) => {
-      const next = {
-        ...state,
-        savedCommands: state.savedCommands.filter((command) => command.id !== commandId),
-      };
-      saveState(next);
-      return next;
-    }),
-
   renameWorkspace: (workspaceId, name) =>
     set((state) => {
       const cleanName = name.trim();
@@ -1586,6 +1489,13 @@ export const useCortexStore = create<CortexState>((set) => ({
     set((state) => {
       const normalized = normalizeLoadedState(importedState);
       const next = { ...state, ...normalized, profiles, hydrated: true };
+      saveState(next);
+      return next;
+    }),
+
+  setUpdateCheckMode: (mode) =>
+    set((state) => {
+      const next = { ...state, settings: { ...state.settings, updateCheckMode: mode } };
       saveState(next);
       return next;
     }),

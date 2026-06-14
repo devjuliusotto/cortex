@@ -1,4 +1,5 @@
 import { Bot, Gauge } from "lucide-react";
+import { useAgentInsights } from "@/features/agents/agentInsightsStore";
 import { cn } from "@/lib/utils";
 import { useCortexStore, type TerminalSession } from "@/stores/cortexStore";
 
@@ -7,6 +8,7 @@ type AgentProvider = "Codex" | "Claude" | "Gemini" | "Agente IA";
 type AgentUsage = {
   provider: AgentProvider;
   remainingPercent: number | null;
+  totalTokens?: number;
 };
 
 function plainText(text: string) {
@@ -85,11 +87,25 @@ export function AgentUsageBar({ collapsed }: { collapsed: boolean }) {
   const activeWorkspaceId = useCortexStore((state) => state.activeWorkspaceId);
   const allSessions = useCortexStore((state) => state.sessions);
   const sessions = allSessions.filter((session) => session.workspaceId === activeWorkspaceId);
-  const usage = usageFromSessions(sessions);
+  const sessionIds = new Set(sessions.map((session) => session.id));
+  const liveInsight = useAgentInsights()
+    .filter((insight) => sessionIds.has(insight.sessionId))
+    .sort((first, second) => second.updatedAt - first.updatedAt)
+    .find((insight) => insight.provider || Object.keys(insight.usage).length > 0);
+  const historyUsage = usageFromSessions(sessions);
+  const usage: AgentUsage | null = liveInsight
+    ? {
+        provider: liveInsight.provider === "Agent" ? "Agente IA" : liveInsight.provider ?? historyUsage?.provider ?? "Agente IA",
+        remainingPercent: liveInsight.usage.remainingPercent ?? historyUsage?.remainingPercent ?? null,
+        totalTokens: liveInsight.usage.totalTokens,
+      }
+    : historyUsage;
   const remaining = usage?.remainingPercent ?? null;
   const title = usage
     ? remaining === null
-      ? `${usage.provider}: o CLI não informou créditos ou contexto no terminal`
+      ? usage.totalTokens !== undefined
+        ? `${usage.provider}: ${new Intl.NumberFormat().format(usage.totalTokens)} tokens reportados pelo CLI`
+        : `${usage.provider}: o CLI não informou créditos ou contexto no terminal`
       : `${usage.provider}: ${remaining}% disponível, lido localmente do terminal`
     : "Nenhum agente de IA detectado neste workspace";
 
@@ -109,7 +125,7 @@ export function AgentUsageBar({ collapsed }: { collapsed: boolean }) {
           <span className="truncate">{usage?.provider ?? "Agente IA"}</span>
         </span>
         <span className="shrink-0 text-muted-foreground">
-          {remaining === null ? "sem dados" : `${remaining}% livre`}
+          {remaining !== null ? `${remaining}% livre` : usage?.totalTokens !== undefined ? `${formatTokens(usage.totalTokens)} tokens` : "sem dados"}
         </span>
       </div>
       <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-background">
@@ -119,8 +135,12 @@ export function AgentUsageBar({ collapsed }: { collapsed: boolean }) {
         />
       </div>
       <p className="mt-1.5 truncate text-[10px] text-muted-foreground">
-        {usage ? (remaining === null ? "Não informado pelo CLI" : "Leitura local, sem consulta extra") : "Nenhum agente detectado"}
+        {usage ? (remaining === null && usage.totalTokens === undefined ? "Aguardando métricas do CLI" : "Leitura local em tempo real") : "Nenhum agente detectado"}
       </p>
     </div>
   );
+}
+
+function formatTokens(value: number) {
+  return value >= 1_000 ? `${(value / 1_000).toFixed(value >= 10_000 ? 0 : 1)}k` : String(value);
 }

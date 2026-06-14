@@ -2,7 +2,6 @@ import {
   Building2,
   ChevronLeft,
   ChevronRight,
-  ClipboardList,
   FolderTree,
   UsersRound,
   Package,
@@ -21,12 +20,11 @@ type SidebarProps = {
   officeActive: boolean;
   officeAvailable: boolean;
   onOfficeOpen: () => void;
-  onSavedCommandsOpen: () => void;
   onMarketplaceOpen: () => void;
   onMyAgentsOpen: () => void;
   onSettingsOpen: () => void;
   onToggle: () => void;
-  onWorkspaceOpen: () => void;
+  onWorkspaceOpen: (workspaceId?: string) => void;
 };
 
 export function Sidebar({
@@ -37,7 +35,6 @@ export function Sidebar({
   onOfficeOpen,
   onMarketplaceOpen,
   onMyAgentsOpen,
-  onSavedCommandsOpen,
   onSettingsOpen,
   onToggle,
   onWorkspaceOpen,
@@ -67,7 +64,7 @@ export function Sidebar({
         <nav className="flex-1 p-3">
           <button
             className="flex h-10 w-full items-center justify-center rounded-md bg-secondary text-foreground shadow-glow"
-            onClick={onWorkspaceOpen}
+            onClick={() => onWorkspaceOpen()}
             type="button"
             title="Workspaces"
           >
@@ -93,18 +90,6 @@ export function Sidebar({
           <Building2 className="h-4 w-4 shrink-0" />
           {!collapsed && <span>{officeActive ? "Terminal View" : "Office View"}</span>}
         </button>}
-        <button
-          className={cn(
-            "mb-1 flex h-10 w-full items-center gap-3 rounded-md px-3 text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground",
-            collapsed && "justify-center px-0",
-          )}
-          onClick={onSavedCommandsOpen}
-          type="button"
-          title="Comandos salvos"
-        >
-          <ClipboardList className="h-4 w-4 shrink-0" />
-          {!collapsed && <span>Comandos salvos</span>}
-        </button>
         <button className={cn("mb-1 flex h-10 w-full items-center gap-3 rounded-md px-3 text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground", collapsed && "justify-center px-0", activeView === "my-agents" && "bg-secondary text-foreground shadow-glow")} onClick={onMyAgentsOpen} type="button" title="My Agents">
           <UsersRound className="h-4 w-4 shrink-0" />
           {!collapsed && <span>My Agents</span>}

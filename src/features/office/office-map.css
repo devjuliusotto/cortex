@@ -21,6 +21,26 @@
 
 .officeViewport.isDragging { cursor: grabbing; }
 
+.officeViewportToolbar {
+  position: absolute;
+  z-index: 90;
+  left: 12px;
+  top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 4px;
+  border: 1px solid rgba(225, 213, 188, 0.2);
+  border-radius: 7px;
+  background: rgba(24, 29, 38, 0.88);
+  box-shadow: 0 8px 24px rgba(8, 11, 17, 0.24);
+  backdrop-filter: blur(8px);
+}
+.officeViewportToolbar button { display: grid; width: 28px; height: 28px; place-items: center; border: 0; border-radius: 4px; color: #d5d7dc; background: transparent; cursor: pointer; }
+.officeViewportToolbar button:hover { color: #fff; background: rgba(255, 255, 255, 0.1); }
+.officeViewportToolbar button svg { width: 14px; height: 14px; }
+.officeViewportToolbar span { min-width: 42px; color: #bfc4ce; font: 9px/1 ui-monospace, monospace; text-align: center; }
+
 .officeViewportHint {
   position: absolute;
   z-index: 80;

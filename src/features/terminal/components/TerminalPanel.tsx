@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { DragEvent, ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { getCurrentWindow, UserAttentionType } from "@tauri-apps/api/window";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal, type ILink, type ILinkProvider } from "@xterm/xterm";
 import { motion } from "framer-motion";
@@ -25,7 +24,8 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { GitMapPanel } from "@/features/git/GitMapPanel";
-import { markAgentInput, useAgentInsight } from "@/features/agents/agentInsightsStore";
+import { clearPendingAgentAttention, requestAgentAttention } from "@/features/agents/agentAttention";
+import { markAgentInput, useAgentInsight, useAgentInsights } from "@/features/agents/agentInsightsStore";
 import { createCommandRecorder } from "@/features/terminal/commandHistory";
 import {
   ensureTerminalSession,
@@ -75,12 +75,6 @@ function looksLikeApprovalPrompt(text: string) {
   }
 
   return /[?:]\s*$|\[[yn]\]|y\/n|yes\/no|allow|approve|proceed|continue|autorizar|permitir|aprovar|continuar/.test(clean);
-}
-
-function requestTerminalAttention() {
-  if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
-    void getCurrentWindow().requestUserAttention(UserAttentionType.Critical).catch(() => undefined);
-  }
 }
 
 function normalizePastedText(text: string) {
@@ -362,6 +356,11 @@ function PaneLeaf({ node, workspaceId }: { node: Extract<PaneNode, { type: "leaf
   const paneTabs = node.tabIds
     .map((tabId) => workspaceItems.find((item) => item.id === tabId))
     .filter(Boolean);
+  const attentionSessionIds = new Set(
+    useAgentInsights()
+      .filter((insight) => insight.waitingForAuthorization)
+      .map((insight) => insight.sessionId),
+  );
 
   const createTerminalInPane = (profileId?: TerminalProfileId) => {
     setActivePane(workspaceId, node.id);
@@ -498,11 +497,13 @@ function PaneLeaf({ node, workspaceId }: { node: Extract<PaneNode, { type: "leaf
               return null;
             }
             const isActive = entry.id === activeTabId;
+            const needsAttention = attentionSessionIds.has(entry.id);
             return (
               <button
                 className={cn(
                   "flex h-7 min-w-28 items-center gap-2 rounded-md px-2 text-left text-xs text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground",
                   isActive && "bg-secondary text-foreground shadow-glow",
+                  needsAttention && "animate-pulse border border-cortex-amber/60 bg-cortex-amber/15 text-cortex-amber shadow-[0_0_18px_rgba(255,203,107,0.18)]",
                 )}
                 draggable
                 key={entry.id}
@@ -538,8 +539,9 @@ function PaneLeaf({ node, workspaceId }: { node: Extract<PaneNode, { type: "leaf
               >
                 {itemIcon(entry.kind)}
                 <span className="truncate">{entry.label}</span>
+                {needsAttention && <AlertCircle className="ml-auto h-3.5 w-3.5 shrink-0 text-cortex-amber" />}
                 <span
-                  className="ml-1 rounded px-1 text-muted-foreground hover:bg-background hover:text-foreground"
+                  className={cn("ml-1 rounded px-1 text-muted-foreground hover:bg-background hover:text-foreground", needsAttention && "ml-0")}
                   onClick={(event) => {
                     event.stopPropagation();
                     closeTab(entry.id);
@@ -718,7 +720,13 @@ function TerminalPane({
         ) {
           lastApprovalPromptAtRef.current = Date.now();
           setSessionStatus(session.id, "waiting");
-          requestTerminalAttention();
+          void requestAgentAttention({
+            workspaceId,
+            paneId,
+            sessionId: session.id,
+            sessionName: session.name,
+            message: nextBuffer.split("\n").filter(Boolean).at(-1),
+          });
         }
       },
       onStatus: (status, error) => {
@@ -767,6 +775,7 @@ function TerminalPane({
       approvalPromptBufferRef.current = "";
       setSessionStatus(session.id, "running");
       markAgentInput(session.id);
+      clearPendingAgentAttention(session.id);
       recorder.accept(data);
       void writeTerminal(session.id, data);
     });

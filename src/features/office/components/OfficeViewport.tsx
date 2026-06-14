@@ -1,3 +1,4 @@
+import { LocateFixed, Minus, Plus } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type PointerEvent, type ReactNode, type WheelEvent } from "react";
 import { OFFICE_SCENE_HEIGHT, OFFICE_SCENE_WIDTH } from "../officeLayout";
 
@@ -11,6 +12,15 @@ export function OfficeViewport({ children }: { children: ReactNode }) {
   const [dragging, setDragging] = useState(false);
   const [zoom, setZoom] = useState(MIN_ZOOM);
   const [pan, setPan] = useState({ x: 28, y: 28 });
+
+  const fitToViewport = useCallback(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    const rect = viewport.getBoundingClientRect();
+    const nextZoom = clamp(Math.min((rect.width - 48) / OFFICE_SCENE_WIDTH, (rect.height - 48) / OFFICE_SCENE_HEIGHT), MIN_ZOOM, 1);
+    setZoom(nextZoom);
+    setPan({ x: Math.round((rect.width - OFFICE_SCENE_WIDTH * nextZoom) / 2), y: Math.round((rect.height - OFFICE_SCENE_HEIGHT * nextZoom) / 2) });
+  }, []);
 
   useEffect(() => {
     const viewport = viewportRef.current;
@@ -73,7 +83,13 @@ export function OfficeViewport({ children }: { children: ReactNode }) {
       onPointerCancel={endDrag}
       onWheel={onWheel}
     >
-      <div className="officeViewportHint">drag to explore · scroll to zoom · {Math.round(zoom * 100)}%</div>
+      <div className="officeViewportToolbar" data-office-interactive>
+        <button onClick={() => setZoom((value) => clamp(value - 0.1, MIN_ZOOM, MAX_ZOOM))} title="Zoom out" type="button"><Minus /></button>
+        <span>{Math.round(zoom * 100)}%</span>
+        <button onClick={() => setZoom((value) => clamp(value + 0.1, MIN_ZOOM, MAX_ZOOM))} title="Zoom in" type="button"><Plus /></button>
+        <button onClick={fitToViewport} title="Fit office to window" type="button"><LocateFixed /></button>
+      </div>
+      <div className="officeViewportHint">Drag to explore · scroll to zoom</div>
       <div
         className="officeWorldTransform"
         style={{ width: OFFICE_SCENE_WIDTH, height: OFFICE_SCENE_HEIGHT, transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})` }}

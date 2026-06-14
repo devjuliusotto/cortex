@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { ENTRANCE_POSITION, officeRoute } from "../officeLayout";
+import { officeAgentCaption } from "../officeAgentCaption";
 import type { OfficeAgentModel, OfficeGitSummary, OfficeKanbanCard, OfficePoint, OfficeSignal, OfficeSummary } from "../officeTypes";
 
 type Props = {
@@ -124,7 +125,7 @@ function ContinueSign({ side }: { side: "left" | "right" }) {
 export function AgentSprite({ agent, showWorkspaceLabel, onSelect, onOpen }: { agent: OfficeAgentModel; showWorkspaceLabel: boolean; onSelect: () => void; onOpen: () => void }) {
   const movement = useAgentMovement(agent);
   const color = `#${agent.identity.color.toString(16).padStart(6, "0")}`;
-  const label = movement.moving ? `going to ${roomName(agent.zone)}` : agent.meetingLabel ?? agent.currentGoal ?? agent.detail ?? agent.activity;
+  const label = officeAgentCaption(agent, movement.moving);
   const style = {
     left: movement.point.x,
     top: movement.point.y,
@@ -184,10 +185,6 @@ function getFacing(from: OfficePoint, to: OfficePoint): Facing {
   const dx = to.x - from.x;
   const dy = to.y - from.y;
   return Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? "left" : "right") : (dy < 0 ? "up" : "down");
-}
-
-function roomName(zone: OfficeAgentModel["zone"]) {
-  return ({ bossDesk: "Mission Control", codingDesks: "Work Area", researchLibrary: "Library", buildLab: "Build / Test", testBoard: "Build / Test", debugCorner: "Debug", gitBoard: "Build / Test", lounge: "Pause Area", meetingRoom: "Meeting", entrance: "Entrance" })[zone];
 }
 
 function shortText(value: string, max: number) {
