@@ -119,6 +119,10 @@ export type OfficeAgentIdentity = {
   role: string;
   color: number;
   accessory: "spark" | "brackets" | "note" | "lens" | "terminal";
+  skinColor: number;
+  hairColor: number;
+  hairStyle: "short" | "side" | "curly" | "long" | "buzz" | "mohawk";
+  pantsColor: number;
 };
 
 export type OfficeAgentModel = AgentSnapshot & {

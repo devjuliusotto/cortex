@@ -3,10 +3,13 @@ import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { GitBranchesTab } from "@/features/git/GitBranchesTab";
+import { GitBlameTab } from "@/features/git/GitBlameTab";
 import { GitChangesTab } from "@/features/git/GitChangesTab";
 import { GitHistoryTab } from "@/features/git/GitHistoryTab";
+import { GitMergeTab } from "@/features/git/GitMergeTab";
 import { GitOverviewTab } from "@/features/git/GitOverviewTab";
 import { GitReleasesTab } from "@/features/git/GitReleasesTab";
+import { GitStashesTab } from "@/features/git/GitStashesTab";
 import { gitService } from "@/features/git/gitService";
 import type {
   GitBranchesSnapshot,
@@ -39,6 +42,9 @@ const tabs: Array<{ id: GitMapTab; label: string }> = [
   { id: "changes", label: "Changes" },
   { id: "history", label: "History" },
   { id: "branches", label: "Branches" },
+  { id: "merge", label: "Merge" },
+  { id: "stashes", label: "Stashes" },
+  { id: "blame", label: "Blame" },
   { id: "releases", label: "Releases" },
 ];
 
@@ -313,6 +319,30 @@ export function GitMapPanel({ paneId, template, workspaceId }: Props) {
               onAction={runAction}
               onRefresh={() => void refresh()}
               repoPath={displayRepoPath}
+            />
+          )}
+          {activeTab === "merge" && (
+            <GitMergeTab
+              actionLoading={actionLoading || Boolean(marketingDemo)}
+              branches={displayBranches}
+              onAction={runAction}
+              onError={setError}
+              repoPath={marketingDemo ? null : repoPath}
+            />
+          )}
+          {activeTab === "stashes" && (
+            <GitStashesTab
+              actionLoading={actionLoading || Boolean(marketingDemo)}
+              onAction={runAction}
+              onError={setError}
+              repoPath={marketingDemo ? null : repoPath}
+            />
+          )}
+          {activeTab === "blame" && (
+            <GitBlameTab
+              actionLoading={actionLoading || Boolean(marketingDemo)}
+              onError={setError}
+              repoPath={marketingDemo ? null : repoPath}
             />
           )}
           {activeTab === "releases" && (

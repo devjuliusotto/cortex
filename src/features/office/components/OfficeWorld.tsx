@@ -131,6 +131,9 @@ export function AgentSprite({ agent, showWorkspaceLabel, onSelect, onOpen }: { a
     top: movement.point.y,
     transitionDuration: `${movement.duration}ms`,
     "--agent-color": color,
+    "--agent-skin": `#${agent.identity.skinColor.toString(16).padStart(6, "0")}`,
+    "--agent-hair": `#${agent.identity.hairColor.toString(16).padStart(6, "0")}`,
+    "--agent-pants": `#${agent.identity.pantsColor.toString(16).padStart(6, "0")}`,
   } as CSSProperties;
 
   return (
@@ -145,7 +148,7 @@ export function AgentSprite({ agent, showWorkspaceLabel, onSelect, onOpen }: { a
     >
       <span className="agentBubble">{shortText(label, 30)}</span>
       <span className="agentShadow" />
-      <span className="agentBody"><i className="agentHair" /><i className="agentFace" /><i className="agentShirt" /><i className="agentLegs" /></span>
+      <span className="agentBody" data-hair={agent.identity.hairStyle}><i className="agentHair" /><i className="agentFace" /><i className="agentShirt" /><i className="agentLegs" /><i className={`agentAccessory accessory-${agent.identity.accessory}`} /></span>
       <StatusDot signal={agent.signal} />
       <span className="agentName">{showWorkspaceLabel ? `${agent.terminalName} · ${agent.workspaceShortName}` : agent.terminalName}</span>
     </button>

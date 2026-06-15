@@ -51,15 +51,21 @@ export function OfficeAgent({ agent, showWorkspaceLabel, onSelect, onOpen }: { a
   const drawWorker = useCallback((g: Graphics) => {
     const signal = colors[agent.signal];
     const shirt = agent.zone === "debugCorner" ? 0x783a4c : agent.zone === "researchLibrary" ? 0x5e527e : agent.zone === "buildLab" ? 0x8a6238 : agent.zone === "gitBoard" ? 0x3d6d54 : agent.identity.color;
+    const { hairColor, hairStyle, pantsColor, skinColor } = agent.identity;
     const armLift = agent.activity === "waiting_input" || agent.activity === "waiting_approval" ? -13 : agent.pose === "reading" ? -8 : agent.pose === "observing" ? -3 : 0;
     g.clear();
     g.ellipse(0, 27, 25, 8).fill({ color: 0x11131b, alpha: 0.3 });
     g.rect(-18, -13, 36, 35).fill(shirt);
-    g.rect(-13, -39, 26, 27).fill(0xdcae88);
-    g.rect(-16, -44, 32, 10).fill(0x303448);
+    g.rect(-13, -39, 26, 27).fill(skinColor);
+    if (hairStyle === "buzz") g.rect(-14, -43, 28, 7).fill(hairColor);
+    else if (hairStyle === "mohawk") g.rect(-6, -51, 12, 14).fill(hairColor);
+    else if (hairStyle === "long") { g.rect(-16, -45, 32, 12).fill(hairColor); g.rect(-17, -36, 6, 20).fill(hairColor); g.rect(11, -36, 6, 20).fill(hairColor); }
+    else if (hairStyle === "curly") { for (const x of [-13, -5, 3, 11]) g.circle(x, -42, 7).fill(hairColor); }
+    else if (hairStyle === "side") { g.rect(-16, -45, 32, 10).fill(hairColor); g.rect(-16, -37, 8, 8).fill(hairColor); }
+    else g.rect(-16, -44, 32, 10).fill(hairColor);
     g.rect(-9, -30, 4, 4).fill(0x1b1d28); g.rect(6, -30, 4, 4).fill(0x1b1d28);
-    g.rect(-25, -8 + armLift, 8, 24).fill(0xdcae88); g.rect(17, -8 + armLift, 8, 22).fill(0xdcae88);
-    g.rect(-15, 21, 11, 17).fill(0x252b3b); g.rect(4, 21, 11, 17).fill(0x252b3b);
+    g.rect(-25, -8 + armLift, 8, 24).fill(skinColor); g.rect(17, -8 + armLift, 8, 22).fill(skinColor);
+    g.rect(-15, 21, 11, 17).fill(pantsColor); g.rect(4, 21, 11, 17).fill(pantsColor);
 
     if (agent.pose === "reading") {
       g.rect(-23, 5, 46, 25).fill(0xddd0a7).stroke({ color: 0x6e5c4e, width: 2 });
@@ -77,7 +83,7 @@ export function OfficeAgent({ agent, showWorkspaceLabel, onSelect, onOpen }: { a
     if (agent.identity.accessory === "spark") g.star(-22, -43, 4, 6, 3).fill(0xb994f4).stroke({ color: 0x272033, width: 2 });
     if (agent.identity.accessory === "brackets") { g.moveTo(-27, -47).lineTo(-32, -42).lineTo(-27, -37).stroke({ color: 0x9de8e3, width: 2 }); g.moveTo(-18, -47).lineTo(-13, -42).lineTo(-18, -37).stroke({ color: 0x9de8e3, width: 2 }); }
     if (agent.identity.accessory === "lens") g.circle(-22, -43, 6).stroke({ color: 0x9bb7ed, width: 2 });
-  }, [agent.activity, agent.identity.accessory, agent.identity.color, agent.pose, agent.signal, agent.zone]);
+  }, [agent.activity, agent.identity, agent.pose, agent.signal, agent.zone]);
 
   const drawBubble = useCallback((g: Graphics) => {
     const y = agent.zone === "codingDesks" ? -160 : -86;

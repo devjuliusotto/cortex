@@ -18,7 +18,16 @@ import type {
 
 export const OFFICE_ACTIVITY_LIMIT = 42;
 
-function identityFor(agent: AgentSnapshot): OfficeAgentIdentity {
+const appearancePalettes = [
+  { skinColor: 0xf1c7a5, hairColor: 0x4b342d, hairStyle: "side", pantsColor: 0x35465f },
+  { skinColor: 0xd9aa84, hairColor: 0x2d2430, hairStyle: "short", pantsColor: 0x4a415f },
+  { skinColor: 0x9b6548, hairColor: 0x211d24, hairStyle: "curly", pantsColor: 0x263b43 },
+  { skinColor: 0x6f432f, hairColor: 0x17151b, hairStyle: "buzz", pantsColor: 0x4a3538 },
+  { skinColor: 0xe6b990, hairColor: 0xb26b3f, hairStyle: "long", pantsColor: 0x34404c },
+  { skinColor: 0xc98c68, hairColor: 0x3d2d24, hairStyle: "mohawk", pantsColor: 0x384a35 },
+] as const;
+
+function identityFor(agent: AgentSnapshot, appearanceIndex: number): OfficeAgentIdentity {
   const providers: Record<AgentSnapshot["provider"], Pick<OfficeAgentIdentity, "color" | "accessory">> = {
     claude: { color: 0xc98264, accessory: "spark" },
     codex: { color: 0x63d9d4, accessory: "brackets" },
@@ -29,7 +38,7 @@ function identityFor(agent: AgentSnapshot): OfficeAgentIdentity {
     cline: { color: 0x68a8c4, accessory: "terminal" },
     unknown: { color: 0x8991a5, accessory: "terminal" },
   };
-  return { name: agent.name, role: agent.role, ...providers[agent.provider] };
+  return { name: agent.name, role: agent.role, ...providers[agent.provider], ...appearancePalettes[appearanceIndex % appearancePalettes.length] };
 }
 
 function confidenceLevel(confidence: number): AgentConfidenceLevel {
@@ -75,6 +84,11 @@ function poseFor(activity: AgentActivity, location: AgentLocation, zone: OfficeZ
 
 export function createOfficeActors(agentSnapshots: AgentSnapshot[], sessions: TerminalSession[]) {
   const sessionsById = new Map(sessions.map((session) => [session.id, session]));
+  const appearanceOrder = new Map(
+    [...agentSnapshots]
+      .sort((left, right) => left.id.localeCompare(right.id))
+      .map((agent, index) => [agent.id, index]),
+  );
   return agentSnapshots.map((agent): OfficeAgentModel => {
     const session = agent.terminalId ? sessionsById.get(agent.terminalId) : undefined;
     const zone = zoneForAgent(agent);
@@ -91,7 +105,7 @@ export function createOfficeActors(agentSnapshots: AgentSnapshot[], sessions: Te
       category,
       zone,
       target: officeTarget(zone, agent.id),
-      identity: identityFor(agent),
+      identity: identityFor(agent, appearanceOrder.get(agent.id) ?? 0),
       meetingLabel:
         agent.activity === "waiting_approval"
           ? "Waiting for approval"

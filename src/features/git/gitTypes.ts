@@ -55,6 +55,43 @@ export type GitBranchesSnapshot = {
   remote: GitBranchInfo[];
 };
 
+export type GitMergePreview = {
+  currentBranch: string;
+  sourceBranch: string;
+  dirty: boolean;
+  canFastForward: boolean;
+  commits: GitCommitInfo[];
+  files: string[];
+};
+
+export type GitStashInfo = {
+  index: number;
+  reference: string;
+  message: string;
+  date: string;
+};
+
+export type GitStashDetails = {
+  stash: GitStashInfo;
+  files: string[];
+  patch: string;
+};
+
+export type GitBlameLine = {
+  lineNumber: number;
+  hash: string;
+  shortHash: string;
+  author: string;
+  authorTime: number;
+  summary: string;
+  content: string;
+};
+
+export type GitBlameSnapshot = {
+  file: string;
+  lines: GitBlameLine[];
+};
+
 export type GitReleaseInfo = {
   isRepo: boolean;
   currentBranch: string | null;
@@ -75,4 +112,4 @@ export type GitReleaseOptions = {
   pushTag: boolean;
 };
 
-export type GitMapTab = "overview" | "changes" | "history" | "branches" | "releases";
+export type GitMapTab = "overview" | "changes" | "history" | "branches" | "merge" | "stashes" | "blame" | "releases";

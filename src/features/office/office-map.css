@@ -68,8 +68,8 @@
 .officeWorld {
   --floor: #ad8867;
   position: relative;
-  width: 2520px;
-  height: 920px;
+  width: 1680px;
+  height: 1200px;
   overflow: hidden;
   color: var(--map-ink);
   image-rendering: pixelated;
@@ -103,7 +103,7 @@
   z-index: 1;
   left: 60px;
   right: 60px;
-  top: 427px;
+  top: 490px;
   height: 96px;
   border-top: 5px solid #4a484c;
   border-bottom: 5px solid #4a484c;
@@ -125,7 +125,7 @@
 .continueSign {
   position: absolute;
   z-index: 12;
-  top: 455px;
+  top: 518px;
   padding: 7px 10px;
   border: 3px solid #413d43;
   color: #f1dfbb;
@@ -174,13 +174,13 @@
   letter-spacing: 0.12em;
 }
 
-.roomLibrary { left: 80px; top: 72px; width: 530px; height: 355px; --floor: #b58c67; }
-.roomLounge { left: 646px; top: 72px; width: 430px; height: 355px; --floor: #a9836f; }
-.roomMeeting { left: 1112px; top: 112px; width: 400px; height: 315px; --floor: #a99a7d; }
-.roomMission { left: 1548px; top: 112px; width: 350px; height: 315px; --floor: #8f93a0; }
-.roomDebug { left: 1934px; top: 140px; width: 326px; height: 287px; --floor: #7d6c70; }
-.roomWork { left: 540px; top: 523px; width: 720px; height: 370px; --floor: #b28b65; }
-.roomBuild { left: 1310px; top: 523px; width: 640px; height: 370px; --floor: #90949b; }
+.roomLibrary { left: 50px; top: 72px; width: 500px; height: 418px; --floor: #b58c67; }
+.roomLounge { left: 585px; top: 72px; width: 430px; height: 418px; --floor: #a9836f; }
+.roomMeeting { left: 1050px; top: 72px; width: 580px; height: 418px; --floor: #a99a7d; }
+.roomWork { left: 50px; top: 590px; width: 710px; height: 550px; --floor: #b28b65; }
+.roomMission { left: 795px; top: 590px; width: 350px; height: 310px; --floor: #8f93a0; }
+.roomDebug { left: 1180px; top: 590px; width: 450px; height: 310px; --floor: #7d6c70; }
+.roomBuild { left: 795px; top: 930px; width: 835px; height: 210px; --floor: #90949b; }
 
 .roomLibrary,
 .roomWork {
@@ -230,9 +230,9 @@
 .furniture-coffee-machine::after { content: "☕"; position: absolute; left: 15px; top: 14px; font-size: 22px; }
 .furniture-vending-machine { right: 18px; bottom: 24px; width: 48px; height: 78px; border: 5px solid #47515b; background: linear-gradient(#6c91a0 0 45%, #53616b 45%); }
 
-.furniture-whiteboard { left: 90px; top: 52px; width: 220px; height: 64px; border: 5px solid #6b6864; background: #e8e4d8; box-shadow: 0 5px #7b746b; }
+.furniture-whiteboard { left: 170px; top: 52px; width: 240px; height: 64px; border: 5px solid #6b6864; background: #e8e4d8; box-shadow: 0 5px #7b746b; }
 .furniture-whiteboard::after { content: "PLAN  →  SHIP"; position: absolute; left: 38px; top: 20px; color: #75807c; font-size: 11px; letter-spacing: .1em; }
-.furniture-meeting-table { left: 73px; top: 152px; width: 250px; height: 94px; border: 6px solid #605047; border-radius: 45%; background: #8e725e; box-shadow: 0 8px #5f5049; }
+.furniture-meeting-table { left: 145px; top: 190px; width: 280px; height: 105px; border: 6px solid #605047; border-radius: 45%; background: #8e725e; box-shadow: 0 8px #5f5049; }
 .furniture-meeting-table::before { content: ""; position: absolute; left: 38px; right: 38px; top: -32px; height: 22px; background: repeating-linear-gradient(90deg, #5d6670 0 35px, transparent 35px 58px); }
 .furniture-meeting-table::after { content: ""; position: absolute; left: 38px; right: 38px; bottom: -32px; height: 22px; background: repeating-linear-gradient(90deg, #5d6670 0 35px, transparent 35px 58px); }
 
@@ -244,11 +244,11 @@
 .bossChair { position: absolute; left: 50%; top: 176px; width: 70px; height: 54px; border: 6px solid #414b59; border-radius: 10px; background: #637183; transform: translateX(-50%); }
 .bossLabel { position: absolute; left: 50%; bottom: 3px; color: #e8e0cc; font-size: 8px; letter-spacing: .12em; transform: translateX(-50%); white-space: nowrap; }
 
-.furniture-debug-monitors { left: 38px; right: 38px; top: 83px; height: 105px; border: 6px solid #403b43; background: repeating-linear-gradient(90deg, #291f28 0 92px, #4f4650 92px 99px); box-shadow: inset 0 0 0 5px #221a21, 0 8px #574951; }
+.furniture-debug-monitors { left: 38px; right: 38px; top: 83px; height: 115px; border: 6px solid #403b43; background: repeating-linear-gradient(90deg, #291f28 0 92px, #4f4650 92px 99px); box-shadow: inset 0 0 0 5px #221a21, 0 8px #574951; }
 .furniture-debug-monitors::after { content: "> trace\A> inspect\A> retry"; white-space: pre; position: absolute; left: 17px; top: 14px; color: #e5848d; font: 10px/2 ui-monospace, monospace; }
 .debugReadout { position: absolute; right: 26px; bottom: 20px; padding: 5px 8px; color: #f0a0a6; background: #4c3540; border: 3px solid #593f49; font-size: 9px; }
 
-.workDeskGrid { position: absolute; left: 56px; right: 56px; top: 70px; bottom: 28px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 34px 70px; }
+.workDeskGrid { position: absolute; left: 56px; right: 56px; top: 86px; bottom: 36px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 86px 70px; }
 .workDesk { position: relative; min-height: 110px; }
 .deskTop { position: absolute; left: 10px; right: 10px; top: 32px; height: 58px; border: 5px solid #634b41; background: #957052; box-shadow: 0 8px #614a41; }
 .deskMonitor { position: absolute; z-index: 2; left: 50%; top: 0; width: 84px; height: 53px; border: 5px solid #414955; background: #283843; transform: translateX(-50%); box-shadow: inset 0 0 0 4px #1e2931; }
@@ -260,13 +260,13 @@
 .workDesk .statusDot { right: 17px; top: 39px; }
 .deskNumber { position: absolute; left: 21px; top: 48px; color: rgba(65, 49, 44, .55); font-size: 9px; }
 
-.buildPanels { position: absolute; left: 40px; top: 78px; display: flex; gap: 18px; }
+.buildPanels { position: absolute; left: 36px; top: 70px; display: flex; gap: 18px; }
 .statusPanel { position: relative; width: 155px; height: 88px; padding: 14px; border: 6px solid #4b5058; color: #bbc2c2; background: #343a43; box-shadow: inset 0 0 0 3px #282d34, 0 7px #65686c; }
 .statusPanel span { display: block; font-size: 9px; letter-spacing: .12em; }
 .statusPanel strong { display: block; margin-top: 13px; max-width: 105px; overflow: hidden; color: #d0d5cf; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .statusPanel i { position: absolute; right: 12px; top: 13px; width: 10px; height: 10px; border: 2px solid #293039; border-radius: 50%; background: #7b8283; }
 .statusPanel.isActive i { background: #71c694; box-shadow: 0 0 8px #71c694; }
-.furniture-servers { left: 55px; right: 55px; bottom: 30px; height: 98px; border: 6px solid #484e57; background: repeating-linear-gradient(0deg, #353b44 0 19px, #555d66 19px 24px); box-shadow: 0 8px #65686c; }
+.furniture-servers { right: 35px; bottom: 22px; width: 210px; height: 100px; border: 6px solid #484e57; background: repeating-linear-gradient(0deg, #353b44 0 19px, #555d66 19px 24px); box-shadow: 0 8px #65686c; }
 .furniture-servers::after { content: "•  •  •     •  •     •  •  •"; position: absolute; left: 20px; top: 7px; color: #7ed0a0; font-size: 19px; letter-spacing: 1.25em; }
 
 .statusDot { position: absolute; z-index: 5; width: 13px; height: 13px; border: 3px solid #343740; border-radius: 50%; background: #8b9299; }
@@ -290,10 +290,22 @@
 .agentSprite .statusDot { right: 18px; top: 16px; }
 .agentShadow { position: absolute; left: 27px; top: 61px; width: 38px; height: 13px; border-radius: 50%; background: rgba(42, 42, 47, .25); }
 .agentBody { position: absolute; left: 31px; top: 28px; width: 30px; height: 40px; }
-.agentHair { position: absolute; z-index: 4; left: 4px; top: 0; width: 22px; height: 12px; background: #4b3d42; box-shadow: -3px 4px #4b3d42, 3px 4px #4b3d42; }
-.agentFace { position: absolute; z-index: 3; left: 5px; top: 8px; width: 20px; height: 15px; background: #d9aa84; box-shadow: 4px 5px 0 -2px #493d40, 13px 5px 0 -2px #493d40; }
+.agentHair { position: absolute; z-index: 4; left: 4px; top: 0; width: 22px; height: 12px; background: var(--agent-hair); box-shadow: -3px 4px var(--agent-hair), 3px 4px var(--agent-hair); }
+.agentBody[data-hair="buzz"] .agentHair { top: 2px; height: 7px; box-shadow: none; }
+.agentBody[data-hair="side"] .agentHair { left: 2px; width: 24px; box-shadow: -2px 5px var(--agent-hair); }
+.agentBody[data-hair="curly"] .agentHair { left: 2px; width: 9px; height: 9px; border-radius: 50%; box-shadow: 7px -2px var(--agent-hair), 14px 0 var(--agent-hair), 2px 6px var(--agent-hair), 12px 6px var(--agent-hair); }
+.agentBody[data-hair="long"] .agentHair { left: 2px; width: 26px; height: 15px; box-shadow: -2px 8px var(--agent-hair), 18px 8px var(--agent-hair); }
+.agentBody[data-hair="mohawk"] .agentHair { left: 10px; top: -6px; width: 10px; height: 17px; box-shadow: none; }
+.agentFace { position: absolute; z-index: 3; left: 5px; top: 8px; width: 20px; height: 15px; background: var(--agent-skin); box-shadow: 4px 5px 0 -2px #493d40, 13px 5px 0 -2px #493d40; }
 .agentShirt { position: absolute; z-index: 2; left: 2px; top: 21px; width: 26px; height: 18px; background: var(--agent-color); box-shadow: -5px 3px var(--agent-color), 5px 3px var(--agent-color); }
-.agentLegs { position: absolute; left: 5px; top: 37px; width: 8px; height: 10px; background: #49515e; box-shadow: 12px 0 #49515e; }
+.agentLegs { position: absolute; left: 5px; top: 37px; width: 8px; height: 10px; background: var(--agent-pants); box-shadow: 12px 0 var(--agent-pants); }
+.agentAccessory { position: absolute; z-index: 6; display: block; }
+.accessory-lens { left: 3px; top: 10px; width: 9px; height: 9px; border: 2px solid #9bb7ed; border-radius: 50%; }
+.accessory-lens::after { content: ""; position: absolute; right: -6px; bottom: -4px; width: 7px; border-top: 2px solid #9bb7ed; rotate: 42deg; }
+.accessory-spark { left: -7px; top: -4px; width: 7px; height: 7px; background: #d4a9ff; clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%); }
+.accessory-brackets::before { content: "<"; position: absolute; left: -10px; top: 4px; color: #9de8e3; font: 700 10px/1 monospace; }
+.accessory-note::before { content: "♪"; position: absolute; left: -8px; top: -5px; color: #f0cf74; font: 700 11px/1 monospace; }
+.accessory-terminal { right: -8px; top: 23px; width: 9px; height: 7px; border: 1px solid #9bd2c9; background: #273b40; }
 .agentBubble { position: absolute; left: 50%; bottom: 78px; min-width: 92px; max-width: 180px; padding: 6px 8px; border: 3px solid #4a4650; color: #514b4d; background: #f1e6cd; box-shadow: 3px 3px 0 rgba(55, 51, 55, .18); transform: translateX(-50%); font-size: 8px; white-space: nowrap; }
 .agentBubble::after { content: ""; position: absolute; left: 50%; bottom: -8px; width: 10px; height: 10px; border-right: 3px solid #4a4650; border-bottom: 3px solid #4a4650; background: #f1e6cd; transform: translateX(-50%) rotate(45deg); }
 .agentName { position: absolute; left: 50%; top: 77px; max-width: 130px; padding: 2px 5px; overflow: hidden; color: #f5ead4; background: rgba(62, 59, 64, .78); transform: translateX(-50%); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }

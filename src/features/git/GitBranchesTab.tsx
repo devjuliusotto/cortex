@@ -1,4 +1,4 @@
-import { GitBranch, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { GitBranch, MousePointerClick, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { gitService } from "@/features/git/gitService";
@@ -43,6 +43,10 @@ export function GitBranchesTab({ actionLoading, branches, onAction, onRefresh, r
           <div>
             <div className="text-sm font-semibold">Current branch</div>
             <div className="mt-1 font-mono text-sm text-primary">{branches?.currentBranch ?? "-"}</div>
+            <div className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+              <MousePointerClick className="h-3.5 w-3.5" />
+              Click a branch card to switch the project working tree used by Cortex and VS Code.
+            </div>
           </div>
           <Button disabled={actionLoading} onClick={onRefresh} size="sm" variant="ghost">
             <RefreshCw className="mr-2 h-4 w-4" />
@@ -112,8 +116,23 @@ function BranchGrid({
         {items.map((branch) => {
           const current = branch.name === currentBranch || branch.isCurrent;
           return (
-            <article className={cn("rounded-md border bg-card/55 p-3", current ? "border-primary/70 shadow-glow" : "border-border")} key={branch.name}>
-              <div className="flex min-w-0 items-start gap-2">
+            <article
+              aria-current={current ? "true" : undefined}
+              className={cn(
+                "group relative rounded-md border bg-card/55 p-3 transition-colors",
+                current ? "border-primary/70 shadow-glow" : "border-border hover:border-primary/60 hover:bg-card",
+                actionLoading && "cursor-wait opacity-60",
+              )}
+              key={branch.name}
+            >
+              <button
+                aria-label={current ? `${branch.name}, current branch` : `Switch project to branch ${branch.name}`}
+                className="absolute inset-0 rounded-md focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-default"
+                disabled={actionLoading || current}
+                onClick={() => onSwitch(branch)}
+                type="button"
+              />
+              <div className="pointer-events-none relative flex min-w-0 items-start gap-2">
                 <GitBranch className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-semibold" title={branch.name}>{branch.name}</div>
@@ -121,12 +140,28 @@ function BranchGrid({
                   {branch.upstream && <div className="mt-2 truncate text-xs text-muted-foreground">tracking {branch.upstream}</div>}
                 </div>
               </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Button disabled={actionLoading || current} onClick={() => onSwitch(branch)} size="sm" variant="outline">
+              <div className="relative z-10 mt-3 flex flex-wrap gap-2">
+                <Button
+                  disabled={actionLoading || current}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onSwitch(branch);
+                  }}
+                  size="sm"
+                  variant="outline"
+                >
                   Switch
                 </Button>
                 {onDelete && (
-                  <Button disabled={actionLoading || current} onClick={() => onDelete(branch)} size="sm" variant="ghost">
+                  <Button
+                    disabled={actionLoading || current}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onDelete(branch);
+                    }}
+                    size="sm"
+                    variant="ghost"
+                  >
                     <Trash2 className="mr-2 h-4 w-4" />
                     Delete
                   </Button>

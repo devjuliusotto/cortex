@@ -29,7 +29,7 @@ export function OfficeViewport({ children }: { children: ReactNode }) {
       if (initialized.current) return;
       const width = entry.contentRect.width;
       const height = entry.contentRect.height;
-      const initialZoom = clamp(Math.min(width / 1500, height / OFFICE_SCENE_HEIGHT) * 0.94, MIN_ZOOM, 0.9);
+      const initialZoom = clamp(Math.min(width / OFFICE_SCENE_WIDTH, height / OFFICE_SCENE_HEIGHT) * 0.94, MIN_ZOOM, 0.9);
       setZoom(initialZoom);
       setPan({ x: 28, y: Math.max(20, Math.round((height - OFFICE_SCENE_HEIGHT * initialZoom) / 2)) });
       initialized.current = true;

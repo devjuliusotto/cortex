@@ -1,9 +1,9 @@
 import type { OfficePoint, OfficeZone } from "./officeTypes";
 
-export const OFFICE_SCENE_WIDTH = 2520;
-export const OFFICE_SCENE_HEIGHT = 920;
+export const OFFICE_SCENE_WIDTH = 1680;
+export const OFFICE_SCENE_HEIGHT = 1200;
 export const AGENT_EXIT_DELAY_MS = 4200;
-export const OFFICE_CORRIDOR_Y = 474;
+export const OFFICE_CORRIDOR_Y = 540;
 
 export const RESEARCH_LIBRARY_LAYOUT = {
   bookshelf: { x: 120, y: 130, width: 430, height: 110 },
@@ -34,24 +34,24 @@ const anchor = (id: string, x: number, y: number, workX = x, workY = y): OfficeA
 
 // These anchors are shared by live agents, replay, and the DOM map renderer.
 export const OFFICE_ZONE_ANCHORS: Record<OfficeZone, OfficeAnchor[]> = {
-  bossDesk: [anchor("missionControl", 1715, 220, 1715, 292)],
+  bossDesk: [anchor("missionControl", 970, 700, 970, 820)],
   codingDesks: [
-    anchor("codingDesk1", 730, 650, 730, 742),
-    anchor("codingDesk2", 1068, 650, 1068, 742),
-    anchor("codingDesk3", 730, 790, 730, 866),
-    anchor("codingDesk4", 1068, 790, 1068, 866),
+    anchor("codingDesk1", 250, 750, 250, 845),
+    anchor("codingDesk2", 570, 750, 570, 845),
+    anchor("codingDesk3", 250, 960, 250, 1055),
+    anchor("codingDesk4", 570, 960, 570, 1055),
   ],
   researchLibrary: [
-    anchor("research1", 250, 280, 250, 326),
-    anchor("research2", 430, 280, 430, 326),
-    anchor("research3", 525, 350, 525, 364),
+    anchor("research1", 190, 300, 190, 370),
+    anchor("research2", 370, 300, 370, 370),
+    anchor("research3", 500, 390, 500, 420),
   ],
-  buildLab: [anchor("build1", 1480, 690, 1480, 744), anchor("build2", 1700, 690, 1700, 744)],
-  testBoard: [anchor("test1", 1840, 690, 1840, 744), anchor("test2", 1840, 810, 1840, 842)],
-  debugCorner: [anchor("debug1", 2110, 222, 2110, 300), anchor("debug2", 2210, 222, 2210, 300)],
-  gitBoard: [anchor("git1", 1580, 820, 1580, 842), anchor("git2", 1740, 820, 1740, 842)],
-  lounge: [anchor("lounge1", 760, 280, 760, 342), anchor("lounge2", 950, 280, 950, 342)],
-  meetingRoom: [anchor("meeting1", 1210, 250), anchor("meeting2", 1320, 250), anchor("meeting3", 1425, 250)],
+  buildLab: [anchor("build1", 940, 1040, 940, 1090), anchor("build2", 1150, 1040, 1150, 1090)],
+  testBoard: [anchor("test1", 1380, 1040, 1380, 1090), anchor("test2", 1530, 1040, 1530, 1090)],
+  debugCorner: [anchor("debug1", 1320, 700, 1320, 820), anchor("debug2", 1510, 700, 1510, 820)],
+  gitBoard: [anchor("git1", 1260, 1110, 1260, 1135), anchor("git2", 1460, 1110, 1460, 1135)],
+  lounge: [anchor("lounge1", 710, 300, 710, 410), anchor("lounge2", 920, 300, 920, 410)],
+  meetingRoom: [anchor("meeting1", 1190, 290), anchor("meeting2", 1350, 290), anchor("meeting3", 1510, 290)],
   entrance: [anchor("entrance1", 110, OFFICE_CORRIDOR_Y), anchor("entrance2", 150, OFFICE_CORRIDOR_Y)],
 };
 

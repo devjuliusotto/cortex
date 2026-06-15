@@ -1,11 +1,15 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   GitBranchesSnapshot,
+  GitBlameSnapshot,
   GitCommitInfo,
+  GitMergePreview,
   GitOverview,
   GitReleaseInfo,
   GitReleaseOptions,
   GitStatusSnapshot,
+  GitStashDetails,
+  GitStashInfo,
 } from "@/features/git/gitTypes";
 
 export const gitService = {
@@ -74,6 +78,33 @@ export const gitService = {
   },
   deleteBranch(path: string, name: string) {
     return invoke("git_delete_branch", { path, name });
+  },
+  previewMerge(path: string, sourceBranch: string) {
+    return invoke<GitMergePreview>("git_preview_merge", { path, sourceBranch });
+  },
+  mergeBranch(path: string, sourceBranch: string) {
+    return invoke("git_merge_branch", { path, sourceBranch });
+  },
+  getStashes(path: string) {
+    return invoke<GitStashInfo[]>("git_get_stashes", { path });
+  },
+  getStashDetails(path: string, index: number) {
+    return invoke<GitStashDetails>("git_get_stash_details", { path, index });
+  },
+  createStash(path: string, message: string, includeUntracked: boolean) {
+    return invoke("git_create_stash", { path, message, includeUntracked });
+  },
+  applyStash(path: string, index: number) {
+    return invoke("git_apply_stash", { path, index });
+  },
+  dropStash(path: string, index: number) {
+    return invoke("git_drop_stash", { path, index });
+  },
+  getTrackedFiles(path: string) {
+    return invoke<string[]>("git_get_tracked_files", { path });
+  },
+  getBlame(path: string, file: string) {
+    return invoke<GitBlameSnapshot>("git_get_blame", { path, file });
   },
   getReleaseInfo(path: string) {
     return invoke<GitReleaseInfo>("git_get_release_info", { path });

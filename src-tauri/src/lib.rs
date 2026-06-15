@@ -1778,7 +1778,98 @@ fn git_switch_branch(path: String, name: String) -> Result<(), String> {
     if name.is_empty() {
         return Err("Branch name cannot be empty.".to_string());
     }
+
+    let remote_names = optional_git_panel_command(&root, &["remote"])
+        .unwrap_or_default()
+        .lines()
+        .map(str::trim)
+        .filter(|remote| !remote.is_empty())
+        .map(ToString::to_string)
+        .collect::<Vec<_>>();
+
+    if let Some((remote, local_name)) = name.split_once('/') {
+        if remote_names.iter().any(|candidate| candidate == remote) && !local_name.is_empty() {
+            let local_ref = format!("refs/heads/{local_name}");
+            if git_panel_command_owned(
+                &root,
+                vec![
+                    "show-ref".into(),
+                    "--verify".into(),
+                    "--quiet".into(),
+                    local_ref,
+                ],
+            )
+            .is_ok()
+            {
+                return git_panel_command_owned(
+                    &root,
+                    vec!["switch".into(), local_name.to_string()],
+                )
+                .map(|_| ());
+            }
+
+            return git_panel_command_owned(
+                &root,
+                vec![
+                    "switch".into(),
+                    "--track".into(),
+                    "-c".into(),
+                    local_name.to_string(),
+                    name.to_string(),
+                ],
+            )
+            .map(|_| ());
+        }
+    }
+
     git_panel_command_owned(&root, vec!["switch".into(), name.to_string()]).map(|_| ())
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GitMergePreview {
+    current_branch: String,
+    source_branch: String,
+    dirty: bool,
+    can_fast_forward: bool,
+    commits: Vec<GitCommitInfo>,
+    files: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GitStashInfo {
+    index: u32,
+    reference: String,
+    message: String,
+    date: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GitStashDetails {
+    stash: GitStashInfo,
+    files: Vec<String>,
+    patch: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GitBlameLine {
+    line_number: u32,
+    hash: String,
+    short_hash: String,
+    author: String,
+    author_time: i64,
+    summary: String,
+    content: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GitBlameSnapshot {
+    file: String,
+    lines: Vec<GitBlameLine>,
 }
 
 #[tauri::command]
@@ -1790,6 +1881,239 @@ fn git_delete_branch(path: String, name: String) -> Result<(), String> {
         return Err("Cannot delete the current branch.".to_string());
     }
     git_panel_command_owned(&root, vec!["branch".into(), "-d".into(), name.to_string()]).map(|_| ())
+}
+
+fn validate_git_ref(root: &Path, value: &str) -> Result<String, String> {
+    let value = value.trim();
+    if value.is_empty() {
+        return Err("Git reference cannot be empty.".to_string());
+    }
+    git_panel_command_owned(
+        root,
+        vec!["rev-parse".into(), "--verify".into(), format!("{value}^{{commit}}")],
+    )?;
+    Ok(value.to_string())
+}
+
+#[tauri::command]
+fn git_preview_merge(path: String, source_branch: String) -> Result<GitMergePreview, String> {
+    let root = git_panel_root(&workspace_path(path)?)?;
+    let source_branch = validate_git_ref(&root, &source_branch)?;
+    let current_branch = git_current_branch(&root).ok_or_else(|| "Current branch was not found.".to_string())?;
+    if source_branch == current_branch {
+        return Err("Choose a branch different from the current branch.".to_string());
+    }
+
+    let status = git_panel_command(&root, &["status", "--short"])?;
+    let log = git_panel_command_owned(
+        &root,
+        vec![
+            "log".into(),
+            "-n".into(),
+            "100".into(),
+            "--date=iso-strict".into(),
+            "--pretty=format:%H%x1f%h%x1f%an%x1f%ad%x1f%s".into(),
+            format!("HEAD..{source_branch}"),
+        ],
+    )?;
+    let files = git_panel_command_owned(
+        &root,
+        vec!["diff".into(), "--name-only".into(), format!("HEAD...{source_branch}")],
+    )?;
+
+    Ok(GitMergePreview {
+        current_branch,
+        source_branch: source_branch.clone(),
+        dirty: !status.trim().is_empty(),
+        can_fast_forward: git_panel_command_owned(
+            &root,
+            vec!["merge-base".into(), "--is-ancestor".into(), "HEAD".into(), source_branch],
+        )
+        .is_ok(),
+        commits: log.lines().filter_map(parse_commit_line).collect(),
+        files: files
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .map(ToString::to_string)
+            .collect(),
+    })
+}
+
+#[tauri::command]
+fn git_merge_branch(path: String, source_branch: String) -> Result<(), String> {
+    let root = git_panel_root(&workspace_path(path)?)?;
+    let source_branch = validate_git_ref(&root, &source_branch)?;
+    let current_branch = git_current_branch(&root).unwrap_or_default();
+    if source_branch == current_branch {
+        return Err("Cannot merge the current branch into itself.".to_string());
+    }
+    if !git_panel_command(&root, &["status", "--short"])?.trim().is_empty() {
+        return Err("Commit or stash local changes before merging.".to_string());
+    }
+    git_panel_command_owned(&root, vec!["merge".into(), "--no-edit".into(), source_branch]).map(|_| ())
+}
+
+fn read_git_stashes(root: &Path) -> Result<Vec<GitStashInfo>, String> {
+    let output = git_panel_command(
+        root,
+        &["stash", "list", "--date=iso-strict", "--format=%gd%x1f%gs%x1f%ci"],
+    )?;
+    Ok(output
+        .lines()
+        .filter_map(|line| {
+            let mut parts = line.splitn(3, '\x1f');
+            let reference = parts.next()?.trim();
+            let message = parts.next()?.trim();
+            let date = parts.next().unwrap_or_default().trim();
+            let index = reference.strip_prefix("stash@{")?.strip_suffix('}')?.parse().ok()?;
+            Some(GitStashInfo {
+                index,
+                reference: reference.to_string(),
+                message: message.to_string(),
+                date: date.to_string(),
+            })
+        })
+        .collect())
+}
+
+fn stash_reference(index: u32) -> String {
+    format!("stash@{{{index}}}")
+}
+
+#[tauri::command]
+fn git_get_stashes(path: String) -> Result<Vec<GitStashInfo>, String> {
+    let root = git_panel_root(&workspace_path(path)?)?;
+    read_git_stashes(&root)
+}
+
+#[tauri::command]
+fn git_get_stash_details(path: String, index: u32) -> Result<GitStashDetails, String> {
+    let root = git_panel_root(&workspace_path(path)?)?;
+    let reference = stash_reference(index);
+    let stash = read_git_stashes(&root)?
+        .into_iter()
+        .find(|stash| stash.index == index)
+        .ok_or_else(|| "Stash was not found.".to_string())?;
+    let files = git_panel_command_owned(
+        &root,
+        vec![
+            "stash".into(),
+            "show".into(),
+            "--name-only".into(),
+            "--include-untracked".into(),
+            reference.clone(),
+        ],
+    )?;
+    let patch = git_panel_command_owned(
+        &root,
+        vec![
+            "stash".into(),
+            "show".into(),
+            "--patch".into(),
+            "--stat".into(),
+            "--include-untracked".into(),
+            reference,
+        ],
+    )?;
+    Ok(GitStashDetails {
+        stash,
+        files: files
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .map(ToString::to_string)
+            .collect(),
+        patch,
+    })
+}
+
+#[tauri::command]
+fn git_create_stash(path: String, message: String, include_untracked: bool) -> Result<(), String> {
+    let root = git_panel_root(&workspace_path(path)?)?;
+    if git_panel_command(&root, &["status", "--short"])?.trim().is_empty() {
+        return Err("There are no local changes to stash.".to_string());
+    }
+    let message = if message.trim().is_empty() {
+        "Cortex stash".to_string()
+    } else {
+        message.trim().to_string()
+    };
+    let mut args = vec!["stash".into(), "push".into()];
+    if include_untracked {
+        args.push("--include-untracked".into());
+    }
+    args.extend(["-m".into(), message]);
+    git_panel_command_owned(&root, args).map(|_| ())
+}
+
+#[tauri::command]
+fn git_apply_stash(path: String, index: u32) -> Result<(), String> {
+    let root = git_panel_root(&workspace_path(path)?)?;
+    git_panel_command_owned(&root, vec!["stash".into(), "apply".into(), stash_reference(index)]).map(|_| ())
+}
+
+#[tauri::command]
+fn git_drop_stash(path: String, index: u32) -> Result<(), String> {
+    let root = git_panel_root(&workspace_path(path)?)?;
+    git_panel_command_owned(&root, vec!["stash".into(), "drop".into(), stash_reference(index)]).map(|_| ())
+}
+
+#[tauri::command]
+fn git_get_tracked_files(path: String) -> Result<Vec<String>, String> {
+    let root = git_panel_root(&workspace_path(path)?)?;
+    let output = git_panel_command(&root, &["ls-files"])?;
+    Ok(output
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .map(ToString::to_string)
+        .collect())
+}
+
+#[tauri::command]
+fn git_get_blame(path: String, file: String) -> Result<GitBlameSnapshot, String> {
+    let root = git_panel_root(&workspace_path(path)?)?;
+    let file = validate_repo_file_path(&file)?;
+    let output = git_panel_command_owned(
+        &root,
+        vec!["blame".into(), "--line-porcelain".into(), "--".into(), file.clone()],
+    )?;
+    let mut lines = Vec::new();
+    let mut hash = String::new();
+    let mut line_number = 0;
+    let mut author = String::new();
+    let mut author_time = 0;
+    let mut summary = String::new();
+
+    for line in output.lines() {
+        if line.starts_with('\t') {
+            lines.push(GitBlameLine {
+                line_number,
+                short_hash: hash.chars().take(8).collect(),
+                hash: hash.clone(),
+                author: author.clone(),
+                author_time,
+                summary: summary.clone(),
+                content: line.trim_start_matches('\t').to_string(),
+            });
+            continue;
+        }
+        let mut header = line.split_whitespace();
+        let first = header.next().unwrap_or_default();
+        if first.len() >= 40 && first.chars().all(|character| character.is_ascii_hexdigit()) {
+            hash = first.to_string();
+            line_number = header.nth(1).and_then(|value| value.parse().ok()).unwrap_or(0);
+        } else if let Some(value) = line.strip_prefix("author ") {
+            author = value.to_string();
+        } else if let Some(value) = line.strip_prefix("author-time ") {
+            author_time = value.parse().unwrap_or(0);
+        } else if let Some(value) = line.strip_prefix("summary ") {
+            summary = value.to_string();
+        }
+    }
+
+    Ok(GitBlameSnapshot { file, lines })
 }
 
 #[tauri::command]
@@ -2110,6 +2434,15 @@ pub fn run() {
             git_create_branch,
             git_switch_branch,
             git_delete_branch,
+            git_preview_merge,
+            git_merge_branch,
+            git_get_stashes,
+            git_get_stash_details,
+            git_create_stash,
+            git_apply_stash,
+            git_drop_stash,
+            git_get_tracked_files,
+            git_get_blame,
             git_get_release_info,
             git_create_release,
             spawn_terminal,
