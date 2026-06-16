@@ -1467,8 +1467,30 @@ fn git_current_branch(root: &Path) -> Option<String> {
         .or_else(|| optional_git_panel_command(root, &["rev-parse", "--short", "HEAD"]))
 }
 
+fn git_current_local_branch(root: &Path) -> Result<String, String> {
+    optional_git_panel_command(root, &["branch", "--show-current"])
+        .ok_or_else(|| "Cannot push while HEAD is detached. Switch to a local branch first.".to_string())
+}
+
 fn git_remote_url(root: &Path) -> Option<String> {
     optional_git_panel_command(root, &["config", "--get", "remote.origin.url"])
+}
+
+fn git_has_upstream(root: &Path) -> bool {
+    optional_git_panel_command(root, &["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"]).is_some()
+}
+
+fn git_push_current_branch(root: &Path) -> Result<(), String> {
+    if git_has_upstream(root) {
+        return git_panel_command(root, &["push"]).map(|_| ());
+    }
+
+    if git_remote_url(root).is_none() {
+        return Err("No origin remote configured. Add a GitHub origin in Git Map before pushing.".to_string());
+    }
+
+    let branch = git_current_local_branch(root)?;
+    git_panel_command_owned(&root, vec!["push".into(), "--set-upstream".into(), "origin".into(), branch]).map(|_| ())
 }
 
 fn git_release_version_from_json(path: &Path) -> Option<String> {
@@ -1686,7 +1708,7 @@ fn git_commit(path: String, message: String) -> Result<(), String> {
 #[tauri::command]
 fn git_push(path: String) -> Result<(), String> {
     let root = git_panel_root(&workspace_path(path)?)?;
-    git_panel_command(&root, &["push"]).map(|_| ())
+    git_push_current_branch(&root)
 }
 
 #[tauri::command]
@@ -2183,7 +2205,7 @@ fn git_create_release(
         git_panel_command_owned(&root, vec!["tag".into(), "-a".into(), tag.clone(), "-m".into(), notes])?;
     }
     if options.push_branch {
-        git_panel_command(&root, &["push"])?;
+        git_push_current_branch(&root)?;
     }
     if options.push_tag {
         git_panel_command_owned(&root, vec!["push".into(), "origin".into(), tag])?;

@@ -9,6 +9,10 @@ type AgentUsage = {
   provider: AgentProvider;
   remainingPercent: number | null;
   totalTokens?: number;
+  hourlyRemainingPercent?: number | null;
+  weeklyRemainingPercent?: number | null;
+  hourlyReset?: string;
+  weeklyReset?: string;
 };
 
 function plainText(text: string) {
@@ -88,16 +92,23 @@ export function AgentUsageBar({ collapsed }: { collapsed: boolean }) {
   const allSessions = useCortexStore((state) => state.sessions);
   const sessions = allSessions.filter((session) => session.workspaceId === activeWorkspaceId);
   const sessionIds = new Set(sessions.map((session) => session.id));
-  const liveInsight = useAgentInsights()
-    .filter((insight) => sessionIds.has(insight.sessionId))
+  const liveInsights = useAgentInsights().filter((insight) => sessionIds.has(insight.sessionId));
+  const liveInsight = liveInsights
     .sort((first, second) => second.updatedAt - first.updatedAt)
     .find((insight) => insight.provider || Object.keys(insight.usage).length > 0);
+  const totalTokens = liveInsights.reduce((sum, insight) => sum + (insight.usage.totalTokens ?? 0), 0);
+  const hourlyRemaining = minDefined(liveInsights.map((insight) => insight.usage.hourlyRemainingPercent));
+  const weeklyRemaining = minDefined(liveInsights.map((insight) => insight.usage.weeklyRemainingPercent));
   const historyUsage = usageFromSessions(sessions);
   const usage: AgentUsage | null = liveInsight
     ? {
         provider: liveInsight.provider === "Agent" ? "Agente IA" : liveInsight.provider ?? historyUsage?.provider ?? "Agente IA",
         remainingPercent: liveInsight.usage.remainingPercent ?? historyUsage?.remainingPercent ?? null,
-        totalTokens: liveInsight.usage.totalTokens,
+        totalTokens: totalTokens || liveInsight.usage.totalTokens,
+        hourlyRemainingPercent: hourlyRemaining ?? liveInsight.usage.hourlyRemainingPercent ?? null,
+        weeklyRemainingPercent: weeklyRemaining ?? liveInsight.usage.weeklyRemainingPercent ?? null,
+        hourlyReset: liveInsight.usage.hourlyReset,
+        weeklyReset: liveInsight.usage.weeklyReset,
       }
     : historyUsage;
   const remaining = usage?.remainingPercent ?? null;
@@ -137,10 +148,32 @@ export function AgentUsageBar({ collapsed }: { collapsed: boolean }) {
       <p className="mt-1.5 truncate text-[10px] text-muted-foreground">
         {usage ? (remaining === null && usage.totalTokens === undefined ? "Aguardando métricas do CLI" : "Leitura local em tempo real") : "Nenhum agente detectado"}
       </p>
+      {usage && (usage.hourlyRemainingPercent != null || usage.weeklyRemainingPercent != null) && (
+        <div className="mt-2 grid grid-cols-2 gap-2 text-[10px] text-muted-foreground">
+          <LimitBadge label="Hora" reset={usage.hourlyReset} value={usage.hourlyRemainingPercent} />
+          <LimitBadge label="Semana" reset={usage.weeklyReset} value={usage.weeklyRemainingPercent} />
+        </div>
+      )}
     </div>
   );
 }
 
 function formatTokens(value: number) {
   return value >= 1_000 ? `${(value / 1_000).toFixed(value >= 10_000 ? 0 : 1)}k` : String(value);
+}
+
+function minDefined(values: Array<number | undefined>) {
+  const defined = values.filter((value): value is number => value !== undefined);
+  return defined.length > 0 ? Math.min(...defined) : undefined;
+}
+
+function LimitBadge({ label, reset, value }: { label: string; reset?: string; value?: number | null }) {
+  return (
+    <div className="rounded border border-border bg-background/50 px-2 py-1" title={reset ? `${label}: reset ${reset}` : undefined}>
+      <span className="text-muted-foreground/80">{label}</span>{" "}
+      <span className={cn(value === undefined || value === null ? "text-muted-foreground" : value < 20 ? "text-cortex-red" : value < 45 ? "text-cortex-amber" : "text-cortex-green")}>
+        {value === undefined || value === null ? "--" : `${value}%`}
+      </span>
+    </div>
+  );
 }

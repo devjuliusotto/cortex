@@ -60,6 +60,7 @@ const approvalPromptPattern =
   /\b(?:codex|claude|approval|approve|permission|authorize|authorization|allow|proceed|confirm|continue|grant|autorizacao|autorização|permissao|permissão|aprovar|autorizar|permitir|continuar)\b/i;
 
 const approvalPromptCooldownMs = 20_000;
+const approvalInputSuppressMs = 8_000;
 
 function plainTerminalText(text: string) {
   return text
@@ -75,6 +76,10 @@ function looksLikeApprovalPrompt(text: string) {
   }
 
   return /[?:]\s*$|\[[yn]\]|y\/n|yes\/no|allow|approve|proceed|continue|autorizar|permitir|aprovar|continuar/.test(clean);
+}
+
+function isApprovalShortcutInput(data: string) {
+  return /^[apynAPYN](?:\r|\n)?$/.test(data);
 }
 
 function normalizePastedText(text: string) {
@@ -658,6 +663,7 @@ function TerminalPane({
   }>({ status: "idle", error: null });
   const approvalPromptBufferRef = useRef("");
   const lastApprovalPromptAtRef = useRef(0);
+  const lastApprovalShortcutAtRef = useRef(0);
   const {
     addCommandHistoryEntry,
     appendTerminalHistory,
@@ -715,6 +721,7 @@ function TerminalPane({
         const nextBuffer = `${approvalPromptBufferRef.current}${plainTerminalText(data)}`.slice(-1200);
         approvalPromptBufferRef.current = nextBuffer;
         if (
+          Date.now() - lastApprovalShortcutAtRef.current > approvalInputSuppressMs &&
           looksLikeApprovalPrompt(nextBuffer) &&
           Date.now() - lastApprovalPromptAtRef.current > approvalPromptCooldownMs
         ) {
@@ -773,6 +780,9 @@ function TerminalPane({
 
     const dataDisposable = terminal.onData((data) => {
       approvalPromptBufferRef.current = "";
+      if (isApprovalShortcutInput(data)) {
+        lastApprovalShortcutAtRef.current = Date.now();
+      }
       setSessionStatus(session.id, "running");
       markAgentInput(session.id);
       clearPendingAgentAttention(session.id);

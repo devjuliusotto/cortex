@@ -7,6 +7,10 @@ export type AgentUsage = {
   credits?: string;
   contextRemaining?: string;
   remainingPercent?: number;
+  hourlyRemainingPercent?: number;
+  weeklyRemainingPercent?: number;
+  hourlyReset?: string;
+  weeklyReset?: string;
 };
 
 export type AgentInsight = {
@@ -21,6 +25,8 @@ export type AgentInsight = {
 const insights = new Map<string, AgentInsight>();
 const listeners = new Set<() => void>();
 let insightsSnapshot: AgentInsight[] = [];
+const recentInputAt = new Map<string, number>();
+const authorizationInputSuppressMs = 8_000;
 
 export function inspectAgentOutput(sessionId: string, rawOutput: string) {
   const output = stripAnsi(rawOutput);
@@ -33,19 +39,21 @@ export function inspectAgentOutput(sessionId: string, rawOutput: string) {
     updatedAt: Date.now(),
   };
   const waitingMessage = detectWaitingMessage(output);
+  const recentlyAnswered = Date.now() - (recentInputAt.get(sessionId) ?? 0) < authorizationInputSuppressMs;
   const hasProgress = /(?:working|thinking|running|executing|completed|done|finished)/i.test(output);
   insights.set(sessionId, {
     ...existing,
     provider: detectProvider(output) ?? existing.provider,
     usage: { ...existing.usage, ...detectUsage(output) },
-    waitingForAuthorization: waitingMessage ? true : hasProgress ? false : existing.waitingForAuthorization,
-    waitingMessage: waitingMessage ?? (hasProgress ? undefined : existing.waitingMessage),
+    waitingForAuthorization: waitingMessage && !recentlyAnswered ? true : hasProgress || recentlyAnswered ? false : existing.waitingForAuthorization,
+    waitingMessage: waitingMessage && !recentlyAnswered ? waitingMessage : hasProgress || recentlyAnswered ? undefined : existing.waitingMessage,
     updatedAt: Date.now(),
   });
   notify();
 }
 
 export function markAgentInput(sessionId: string) {
+  recentInputAt.set(sessionId, Date.now());
   const existing = insights.get(sessionId);
   if (!existing?.waitingForAuthorization) return;
   insights.set(sessionId, { ...existing, waitingForAuthorization: false, waitingMessage: undefined, updatedAt: Date.now() });
@@ -110,7 +118,29 @@ function detectUsage(output: string): AgentUsage {
   if (contextRemaining) usage.contextRemaining = contextRemaining.trim().slice(0, 80);
   if (remainingPercent !== undefined) usage.remainingPercent = remainingPercent;
   else if (usedPercent !== undefined) usage.remainingPercent = Math.max(0, 100 - usedPercent);
+  const hourlyRemaining = detectWindowPercent(output, "hour");
+  const weeklyRemaining = detectWindowPercent(output, "week");
+  const hourlyReset = lastText(output, /(?:hourly|hour|1h)[^\n]*(?:reset|renews?|refreshes?|resets? in)\s*[:=-]?\s*([^\n]+)/gi);
+  const weeklyReset = lastText(output, /(?:weekly|week|7d)[^\n]*(?:reset|renews?|refreshes?|resets? in)\s*[:=-]?\s*([^\n]+)/gi);
+  if (hourlyRemaining !== undefined) usage.hourlyRemainingPercent = hourlyRemaining;
+  if (weeklyRemaining !== undefined) usage.weeklyRemainingPercent = weeklyRemaining;
+  if (hourlyReset) usage.hourlyReset = hourlyReset.trim().slice(0, 80);
+  if (weeklyReset) usage.weeklyReset = weeklyReset.trim().slice(0, 80);
   return usage;
+}
+
+function detectWindowPercent(output: string, window: "hour" | "week") {
+  const unit = window === "hour" ? "(?:hourly|hour|1h)" : "(?:weekly|week|7d)";
+  const remaining = lastPercent(output, [
+    new RegExp(`${unit}[^\\n%]*(?:remaining|left|available)\\D*(\\d{1,3}(?:[.,]\\d+)?)\\s*%`, "gi"),
+    new RegExp(`(\\d{1,3}(?:[.,]\\d+)?)\\s*%[^\\n]*(?:remaining|left|available)[^\\n]*${unit}`, "gi"),
+  ]);
+  if (remaining !== undefined) return remaining;
+  const used = lastPercent(output, [
+    new RegExp(`${unit}[^\\n%]*(?:used|consumed)\\D*(\\d{1,3}(?:[.,]\\d+)?)\\s*%`, "gi"),
+    new RegExp(`(\\d{1,3}(?:[.,]\\d+)?)\\s*%[^\\n]*(?:used|consumed)[^\\n]*${unit}`, "gi"),
+  ]);
+  return used === undefined ? undefined : Math.max(0, 100 - used);
 }
 
 function lastPercent(output: string, patterns: RegExp[]) {

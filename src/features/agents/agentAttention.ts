@@ -1,9 +1,17 @@
 import {
   isPermissionGranted,
+  registerActionTypes,
   requestPermission,
   sendNotification,
 } from "@tauri-apps/plugin-notification";
 import { getCurrentWindow, UserAttentionType } from "@tauri-apps/api/window";
+
+export const AGENT_APPROVAL_ACTION_TYPE = "agent-approval-actions";
+export const AGENT_APPROVAL_ACTIONS = {
+  allowOnce: "allow-once",
+  allowAlways: "allow-always",
+  deny: "deny",
+} as const;
 
 export type AgentAttentionTarget = {
   workspaceId: string;
@@ -15,6 +23,7 @@ export type AgentAttentionTarget = {
 
 let pendingTarget: AgentAttentionTarget | null = null;
 const listeners = new Set<(target: AgentAttentionTarget) => void>();
+let actionTypesRegistered = false;
 
 export function getPendingAgentAttention() {
   return pendingTarget;
@@ -41,9 +50,23 @@ export async function requestAgentAttention(target: AgentAttentionTarget) {
     let granted = await isPermissionGranted();
     if (!granted) granted = (await requestPermission()) === "granted";
     if (granted) {
+      if (!actionTypesRegistered) {
+        await registerActionTypes([
+          {
+            id: AGENT_APPROVAL_ACTION_TYPE,
+            actions: [
+              { id: AGENT_APPROVAL_ACTIONS.allowOnce, title: "Allow once", foreground: false },
+              { id: AGENT_APPROVAL_ACTIONS.allowAlways, title: "Always allow", foreground: false },
+              { id: AGENT_APPROVAL_ACTIONS.deny, title: "Deny", destructive: true, foreground: false },
+            ],
+          },
+        ]);
+        actionTypesRegistered = true;
+      }
       sendNotification({
         title: `${target.sessionName} needs authorization`,
         body: target.message?.slice(0, 160) || "Open Cortex to review and authorize the pending action.",
+        actionTypeId: AGENT_APPROVAL_ACTION_TYPE,
         autoCancel: true,
         extra: {
           workspaceId: target.workspaceId,

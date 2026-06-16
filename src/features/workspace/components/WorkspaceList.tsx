@@ -1,4 +1,5 @@
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { Check, Copy, Folder, FolderOpen, GripVertical, Palette, Play, Plus, Puzzle, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
@@ -33,6 +34,7 @@ export function WorkspaceList({ onWorkspaceOpen }: { onWorkspaceOpen?: (workspac
     workspaces,
     activeWorkspaceId,
     createWorkspace,
+    createWorkspaceFromDirectory,
     deleteWorkspace,
     duplicateWorkspace,
     renameWorkspace,
@@ -62,6 +64,25 @@ export function WorkspaceList({ onWorkspaceOpen }: { onWorkspaceOpen?: (workspac
       window.removeEventListener("blur", close);
     };
   }, [contextMenu]);
+
+  useEffect(() => {
+    if (!("__TAURI_INTERNALS__" in window)) return;
+    let unlisten: (() => void) | undefined;
+    void getCurrentWebview().onDragDropEvent((event) => {
+      if (event.payload.type !== "drop") return;
+      const firstPath = event.payload.paths[0];
+      if (firstPath) {
+        createWorkspaceFromDirectory(firstPath);
+        const activeId = useCortexStore.getState().activeWorkspaceId;
+        if (activeId) {
+          onWorkspaceOpen?.(activeId);
+        }
+      }
+    }).then((listener) => {
+      unlisten = listener;
+    });
+    return () => unlisten?.();
+  }, [createWorkspaceFromDirectory, onWorkspaceOpen]);
 
   function rename(workspace: Workspace) {
     const name = window.prompt("Rename workspace", workspace.name);

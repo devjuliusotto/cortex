@@ -129,6 +129,7 @@ type CortexState = CortexPersistedState & {
   hydrate: () => Promise<void>;
   createMarketingModeDemo: () => void;
   createWorkspace: () => void;
+  createWorkspaceFromDirectory: (directory: string) => void;
   duplicateWorkspace: (workspaceId: string) => void;
   renameWorkspace: (workspaceId: string, name: string) => void;
   reorderWorkspaces: (draggedWorkspaceId: string, targetWorkspaceId: string) => void;
@@ -251,6 +252,16 @@ function now() {
 
 function workspaceName(workspaces: Workspace[]) {
   return `Workspace ${workspaces.length + 1}`;
+}
+
+function workspaceNameFromDirectory(directory: string, workspaces: Workspace[]) {
+  const fallback = workspaceName(workspaces);
+  const name = directory.replace(/[\\/]+$/, "").split(/[\\/]/).filter(Boolean).pop() ?? fallback;
+  const existing = new Set(workspaces.map((workspace) => workspace.name));
+  if (!existing.has(name)) return name;
+  let index = 2;
+  while (existing.has(`${name} ${index}`)) index++;
+  return `${name} ${index}`;
 }
 
 function sessionName(sessions: TerminalSession[], workspaceId: string) {
@@ -1070,6 +1081,35 @@ export const useCortexStore = create<CortexState>((set) => ({
       const workspace: Workspace = {
         id: createId("workspace"),
         name: workspaceName(state.workspaces),
+        autoStartTerminalsOnOpen: true,
+        snippets: [],
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      };
+
+      const standardItems = createStandardWorkspaceItems(workspace.id, timestamp);
+      const next: CortexState = {
+        ...state,
+        workspaces: [...state.workspaces, workspace],
+        sessions: [...state.sessions, standardItems.session],
+        templateInstances: [...state.templateInstances, ...standardItems.templates],
+        layouts: [...state.layouts, standardItems.layout],
+        activeWorkspaceId: workspace.id,
+      };
+      saveState(next);
+      return next;
+    }),
+
+  createWorkspaceFromDirectory: (directory) =>
+    set((state) => {
+      const cleanDirectory = directory.trim();
+      if (!cleanDirectory) return state;
+
+      const timestamp = now();
+      const workspace: Workspace = {
+        id: createId("workspace"),
+        name: workspaceNameFromDirectory(cleanDirectory, state.workspaces),
+        defaultWorkingDirectory: cleanDirectory,
         autoStartTerminalsOnOpen: true,
         snippets: [],
         createdAt: timestamp,

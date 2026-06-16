@@ -6,7 +6,8 @@ import { onAction } from "@tauri-apps/plugin-notification";
 import { Building2, Code2, Download, ExternalLink, Plus, Search, TerminalSquare, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CortexLogo } from "@/components/CortexLogo";
-import { clearPendingAgentAttention, getPendingAgentAttention, type AgentAttentionTarget } from "@/features/agents/agentAttention";
+import { AGENT_APPROVAL_ACTIONS, clearPendingAgentAttention, getPendingAgentAttention, type AgentAttentionTarget } from "@/features/agents/agentAttention";
+import { markAgentInput } from "@/features/agents/agentInsightsStore";
 import { OFFICE_VIEW_ADDON_ENABLED } from "@/config/marketplace";
 import { CommandPalette } from "@/features/command-palette/components/CommandPalette";
 import { MyAgentsPage } from "@/features/my-agents/MyAgentsPage";
@@ -14,7 +15,7 @@ import { MarketplaceModal } from "@/features/marketplace/components/MarketplaceM
 import { createOfficeWindowChannel, openOfficeWindow, publishOfficeSnapshot, requestOfficeSnapshot, requestTerminalFocus, type OfficeWindowSnapshot } from "@/features/office/officeWindow";
 import { SettingsModal } from "@/features/settings/components/SettingsModal";
 import { TerminalPanel } from "@/features/terminal/components/TerminalPanel";
-import { focusTerminal, terminateTerminals } from "@/features/terminal/terminalBridge";
+import { focusTerminal, terminateTerminals, writeTerminal } from "@/features/terminal/terminalBridge";
 import { Sidebar } from "@/layouts/Sidebar";
 import { useCortexStore } from "@/stores/cortexStore";
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
@@ -139,6 +140,7 @@ export function AppShell() {
     }).then((unlisten) => { unlistenFocus = unlisten; });
 
     void onAction((notification) => {
+      const actionId = String((notification as { actionId?: unknown; action?: unknown }).actionId ?? (notification as { action?: unknown }).action ?? "");
       const extra = notification.extra;
       const pending = getPendingAgentAttention();
       const target = extra?.workspaceId && extra?.paneId && extra?.sessionId
@@ -149,7 +151,22 @@ export function AppShell() {
             sessionName: pending?.sessionName ?? "Agent terminal",
           }
         : pending;
-      if (target) openAttentionTarget(target);
+      if (!target) return;
+
+      const inputByAction: Record<string, string> = {
+        [AGENT_APPROVAL_ACTIONS.allowOnce]: "a",
+        [AGENT_APPROVAL_ACTIONS.allowAlways]: "p",
+        [AGENT_APPROVAL_ACTIONS.deny]: "n",
+      };
+      const input = inputByAction[actionId];
+      if (input) {
+        markAgentInput(target.sessionId);
+        clearPendingAgentAttention(target.sessionId);
+        void writeTerminal(target.sessionId, input);
+        return;
+      }
+
+      openAttentionTarget(target);
     }).then((listener) => { notificationListener = listener; });
 
     return () => {
