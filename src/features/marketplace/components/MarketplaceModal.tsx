@@ -4,11 +4,16 @@ import {
   Building2,
   Bug,
   CheckSquare,
+  Download,
   ExternalLink,
   FileText,
   Lightbulb,
   Package,
   Puzzle,
+  RefreshCw,
+  Search,
+  TerminalSquare,
+  Wrench,
   X,
 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -25,6 +30,15 @@ import {
   ARCHIVED_MARKETPLACE_NOTE_TEMPLATES,
   WORKSPACE_TEMPLATES_MARKETPLACE_ENABLED,
 } from "@/features/marketplace/templates";
+import {
+  checkDeveloperToolUpdatesCommand,
+  developerToolCategories,
+  developerToolsCatalog,
+  installDeveloperToolCommand,
+  updateAllDeveloperToolsCommand,
+  updateDeveloperToolCommand,
+} from "@/features/marketplace/developerToolsCatalog";
+import { queueVisibleTerminalCommand } from "@/features/terminal/terminalBridge";
 import { cn } from "@/lib/utils";
 import { useCortexStore } from "@/stores/cortexStore";
 
@@ -33,16 +47,17 @@ type MarketplaceModalProps = {
   onClose: () => void;
 };
 
-type MarketplaceTab = "feedback" | "templates" | "addons";
+type MarketplaceTab = "tools" | "feedback" | "templates" | "addons";
 
 const tabItems: Array<{ id: MarketplaceTab; label: string; icon: typeof FileText }> = [
+  { id: "tools", label: "Developer Tools", icon: Wrench },
   { id: "feedback", label: "Feedback", icon: FileText },
   { id: "templates", label: "Templates", icon: CheckSquare },
   { id: "addons", label: "Add-ons", icon: Puzzle },
 ];
 
 export function MarketplaceModal({ open, onClose }: MarketplaceModalProps) {
-  const [activeTab, setActiveTab] = useState<MarketplaceTab>("feedback");
+  const [activeTab, setActiveTab] = useState<MarketplaceTab>("tools");
 
   if (!open) {
     return null;
@@ -58,8 +73,7 @@ export function MarketplaceModal({ open, onClose }: MarketplaceModalProps) {
               <h2 className="text-sm font-semibold">Marketplace</h2>
             </div>
             <p className="mt-0.5 truncate text-xs text-muted-foreground">
-              Local templates and GitHub feedback for {GITHUB_REPOSITORY.owner}/
-              {GITHUB_REPOSITORY.name}
+              Install and update developer tools from managed package sources
             </p>
           </div>
           <Button size="icon" variant="ghost" onClick={onClose} title="Close marketplace">
@@ -89,12 +103,88 @@ export function MarketplaceModal({ open, onClose }: MarketplaceModalProps) {
           </nav>
 
           <div className="min-w-0 flex-1 overflow-y-auto p-5">
+            {activeTab === "tools" && <DeveloperToolsTab onClose={onClose} />}
             {activeTab === "feedback" && <FeedbackTab />}
             {activeTab === "templates" && <TemplatesTab />}
             {activeTab === "addons" && <AddOnsTab />}
           </div>
         </div>
       </section>
+    </div>
+  );
+}
+
+function DeveloperToolsTab({ onClose }: { onClose: () => void }) {
+  const [query, setQuery] = useState("");
+  const [category, setCategory] = useState<(typeof developerToolCategories)[number]>("All");
+  const { activeWorkspaceId, createSession, workspaces } = useCortexStore();
+  const activeWorkspace = workspaces.find((workspace) => workspace.id === activeWorkspaceId);
+  const filteredTools = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    return developerToolsCatalog.filter((tool) => {
+      const matchesCategory = category === "All" || tool.category === category;
+      const searchable = `${tool.name} ${tool.id} ${tool.description} ${tool.tags.join(" ")}`.toLowerCase();
+      return matchesCategory && (!normalizedQuery || searchable.includes(normalizedQuery));
+    });
+  }, [category, query]);
+
+  const openCommand = (command: string) => {
+    if (!activeWorkspace) {
+      window.alert("Create or select a workspace before installing developer tools.");
+      return;
+    }
+    const sessionId = createSession(activeWorkspace.id, "powershell");
+    queueVisibleTerminalCommand(sessionId, command);
+    onClose();
+  };
+
+  return (
+    <div>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="max-w-2xl">
+          <h3 className="text-base font-semibold">Developer Tools</h3>
+          <p className="mt-1 text-sm leading-6 text-muted-foreground">
+            Cortex stores package IDs only. WinGet resolves the current version, official download,
+            architecture, installer options, and future updates.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" variant="outline" onClick={() => openCommand(checkDeveloperToolUpdatesCommand)}>
+            <RefreshCw className="mr-2 h-4 w-4" />Check updates
+          </Button>
+          <Button size="sm" onClick={() => openCommand(updateAllDeveloperToolsCommand)}>
+            <Download className="mr-2 h-4 w-4" />Update all WinGet
+          </Button>
+        </div>
+      </div>
+
+      <div className="mt-5 flex flex-col gap-3 md:flex-row">
+        <label className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-md border border-border bg-background px-3">
+          <Search className="h-4 w-4 text-muted-foreground" />
+          <input className="min-w-0 flex-1 bg-transparent text-sm outline-none" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search tools, package IDs, or tags" />
+        </label>
+        <select className="h-10 rounded-md border border-border bg-secondary px-3 text-sm outline-none" value={category} onChange={(event) => setCategory(event.target.value as (typeof developerToolCategories)[number])}>
+          {developerToolCategories.map((item) => <option key={item} value={item}>{item}</option>)}
+        </select>
+      </div>
+
+      <div className="mt-5 grid gap-3 md:grid-cols-2">
+        {filteredTools.map((tool) => (
+          <article className="flex flex-col rounded-md border border-border bg-card/55 p-4" key={tool.id}>
+            <div className="flex items-start justify-between gap-3">
+              <div><h4 className="text-sm font-medium">{tool.name}</h4><div className="mt-1 text-[11px] text-primary">{tool.category}</div></div>
+              <Package className="h-4 w-4 shrink-0 text-muted-foreground" />
+            </div>
+            <p className="mt-3 text-xs leading-5 text-muted-foreground">{tool.description}</p>
+            <code className="mt-3 break-all rounded bg-background/70 px-2 py-1.5 text-[10px] text-muted-foreground">{tool.id}</code>
+            <div className="mt-auto flex flex-wrap gap-2 pt-4">
+              <Button size="sm" onClick={() => openCommand(installDeveloperToolCommand(tool.id))}><TerminalSquare className="mr-2 h-3.5 w-3.5" />Install latest</Button>
+              <Button size="sm" variant="outline" onClick={() => openCommand(updateDeveloperToolCommand(tool.id))}><RefreshCw className="mr-2 h-3.5 w-3.5" />Update</Button>
+            </div>
+          </article>
+        ))}
+      </div>
+      {filteredTools.length === 0 && <div className="mt-5 rounded-md border border-dashed border-border p-8 text-center text-sm text-muted-foreground">No tools match this search.</div>}
     </div>
   );
 }
@@ -271,8 +361,8 @@ function AddOnsTab() {
     <div className="max-w-3xl">
       <h3 className="text-base font-semibold">Add-ons</h3>
       <p className="mt-1 text-sm leading-6 text-muted-foreground">
-        Add-ons are reserved for a future local extension model. Cortex v0.1 does not download
-        remote code, run third-party plugins, or include paid marketplace logic.
+        Add-ons are reserved for a future local extension model. Developer Tools use visible
+        WinGet commands, but Cortex still does not load third-party plugin code or include paid marketplace logic.
       </p>
       <div className="mt-5 grid gap-3 md:grid-cols-2">
         <div className="rounded-md border border-border bg-card/55 p-4"><div className="mb-2 flex items-center gap-2 text-sm font-medium"><Building2 className={cn("h-4 w-4", officeEnabled ? "text-cortex-green" : "text-muted-foreground")} />Office View · {OFFICE_VIEW_ADDON_ENABLED && officeEnabled ? "Enabled" : "Disabled"}</div><p className="text-xs leading-5 text-muted-foreground">Built-in visualization for agents across all projects. Disabling it removes Office controls and closes the active Office view.</p><Button className="mt-4" size="sm" variant={officeEnabled ? "outline" : "default"} disabled={!OFFICE_VIEW_ADDON_ENABLED} onClick={() => setFeatureFlag("officeViewEnabled", !officeEnabled)}>{officeEnabled ? "Disable add-on" : "Enable add-on"}</Button></div>

@@ -434,6 +434,53 @@ fn detect_agent_command(command: String) -> Result<bool, String> {
     Ok(status.success())
 }
 
+#[tauri::command]
+fn detect_agent_commands(commands: Vec<String>) -> Result<HashMap<String, bool>, String> {
+    let path = env::var_os("PATH").unwrap_or_default();
+    let directories = env::split_paths(&path).collect::<Vec<_>>();
+
+    #[cfg(windows)]
+    let extensions = env::var("PATHEXT")
+        .unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".to_string())
+        .split(';')
+        .filter(|extension| !extension.is_empty())
+        .map(|extension| extension.to_ascii_lowercase())
+        .collect::<Vec<_>>();
+
+    let mut results = HashMap::new();
+    for command in commands {
+        let command = command.trim().to_string();
+        if command.is_empty()
+            || !command
+                .chars()
+                .all(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '_' | '.'))
+        {
+            return Err("Invalid agent command".into());
+        }
+
+        let installed = directories.iter().any(|directory| {
+            let direct = directory.join(&command);
+            if direct.is_file() {
+                return true;
+            }
+
+            #[cfg(windows)]
+            {
+                if Path::new(&command).extension().is_none() {
+                    return extensions
+                        .iter()
+                        .any(|extension| directory.join(format!("{command}{extension}")).is_file());
+                }
+            }
+
+            false
+        });
+        results.insert(command, installed);
+    }
+
+    Ok(results)
+}
+
 fn resolve_skill_directory(path: &str, workspace_path: Option<&str>) -> Result<PathBuf, String> {
     match path {
         "~/.gemini/skills/" => home_dir().map(PathBuf::from).map(|root| root.join(".gemini").join("skills")),
@@ -2421,6 +2468,7 @@ pub fn run() {
             export_persisted_state,
             import_persisted_state,
             detect_agent_command,
+            detect_agent_commands,
             get_skill_directory_info,
             create_skill_directory,
             open_skill_directory,

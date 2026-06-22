@@ -5,7 +5,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
-import { detectAgents, type AgentDetectionStatus } from "@/features/my-agents/agentDetection";
+import { detectAgentsCached, getCachedAgentStatuses, type AgentDetectionStatus } from "@/features/my-agents/agentDetection";
 import { agentsCatalog, type Agent } from "@/features/my-agents/agentsCatalog";
 import { extensionsCatalog, skillPaths, skillsExplanation, type SkillPath } from "@/features/my-agents/skillsCatalog";
 import { queueVisibleTerminalCommand } from "@/features/terminal/terminalBridge";
@@ -25,21 +25,23 @@ const sectionLabels: Array<{ id: Section; label: string }> = [
 export function MyAgentsPage() {
   const [section, setSection] = useState<Section>("installed");
   const [statuses, setStatuses] = useState<Record<string, AgentDetectionStatus>>(() =>
-    Object.fromEntries(agentsCatalog.map((agent) => [agent.id, "checking"])),
+    getCachedAgentStatuses() ?? Object.fromEntries(agentsCatalog.map((agent) => [agent.id, "checking"])),
   );
   const [checking, setChecking] = useState(false);
   const [extensionUrl, setExtensionUrl] = useState("");
   const { activeWorkspaceId, createSession, workspaces } = useCortexStore();
   const activeWorkspace = workspaces.find((workspace) => workspace.id === activeWorkspaceId);
 
-  const refreshDetection = async () => {
+  const refreshDetection = async (force = false) => {
     setChecking(true);
-    setStatuses(Object.fromEntries(agentsCatalog.map((agent) => [agent.id, "checking"])));
-    setStatuses(await detectAgents(agentsCatalog));
+    if (!getCachedAgentStatuses()) {
+      setStatuses(Object.fromEntries(agentsCatalog.map((agent) => [agent.id, "checking"])));
+    }
+    setStatuses(await detectAgentsCached(agentsCatalog, force));
     setChecking(false);
   };
 
-  useEffect(() => { void refreshDetection(); }, []);
+  useEffect(() => { void refreshDetection(false); }, []);
 
   const installed = useMemo(() => agentsCatalog.filter((agent) => statuses[agent.id] === "installed"), [statuses]);
   const available = useMemo(() => agentsCatalog.filter((agent) => statuses[agent.id] !== "installed"), [statuses]);
@@ -66,7 +68,7 @@ export function MyAgentsPage() {
     <section className="flex min-h-0 flex-1 flex-col overflow-hidden border-l border-border bg-cortex-graphite">
       <header className="flex shrink-0 items-start justify-between gap-4 border-b border-border bg-card/55 px-6 py-5">
         <div><div className="flex items-center gap-2 text-lg font-semibold"><Bot className="h-5 w-5 text-primary" />My Agents</div><p className="mt-1 text-sm text-muted-foreground">Discover, verify and launch local coding agents through visible Cortex terminals.</p></div>
-        <Button size="sm" variant="outline" disabled={checking} onClick={() => void refreshDetection()}><RefreshCw className={cn("mr-2 h-4 w-4", checking && "animate-spin")} />Refresh</Button>
+        <Button size="sm" variant="outline" disabled={checking} onClick={() => void refreshDetection(true)}><RefreshCw className={cn("mr-2 h-4 w-4", checking && "animate-spin")} />Refresh</Button>
       </header>
 
       <nav className="flex shrink-0 gap-1 border-b border-border bg-background/35 px-6 py-2">
