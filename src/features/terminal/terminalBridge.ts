@@ -42,6 +42,7 @@ type SessionSubscriber = {
 
 const processesByAppSession = new Map<string, TerminalProcess>();
 const appSessionByPtySession = new Map<PtySessionId, string>();
+const startingByAppSession = new Map<string, { profileId: TerminalProfileId; promise: Promise<PtySessionId> }>();
 const subscribers = new Map<string, Set<SessionSubscriber>>();
 const terminalFocusHandlers = new Map<string, () => void>();
 const pendingCommands = new Map<string, string>();
@@ -92,12 +93,19 @@ export async function ensureTerminalSession(
     return existing.ptySessionId;
   }
 
+  const starting = startingByAppSession.get(appSessionId);
+  if (starting?.profileId === profileId) {
+    const ptySessionId = await starting.promise;
+    await resizeTerminal(appSessionId, rows, cols);
+    return ptySessionId;
+  }
+
   if (existing) {
     await terminateTerminal(appSessionId);
   }
 
   notifyStatus(appSessionId, "loading", null);
-  try {
+  const startPromise = (async () => {
     const workingDirectory = await validateWorkingDirectory(profileId, cwd);
     const ptySessionId = await invoke<PtySessionId>("spawn_terminal", {
       profileId,
@@ -125,6 +133,10 @@ export async function ensureTerminalSession(
       });
     }
     return ptySessionId;
+  })();
+  startingByAppSession.set(appSessionId, { profileId, promise: startPromise });
+  try {
+    return await startPromise;
   } catch (error) {
     const message = String(error);
     processesByAppSession.set(appSessionId, {
@@ -137,6 +149,10 @@ export async function ensureTerminalSession(
     });
     notifyStatus(appSessionId, "error", message);
     throw error;
+  } finally {
+    if (startingByAppSession.get(appSessionId)?.promise === startPromise) {
+      startingByAppSession.delete(appSessionId);
+    }
   }
 }
 

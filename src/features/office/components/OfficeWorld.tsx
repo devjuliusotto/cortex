@@ -150,7 +150,7 @@ export function AgentSprite({ agent, showWorkspaceLabel, onSelect, onOpen }: { a
       <span className="agentShadow" />
       <span className="agentBody" data-hair={agent.identity.hairStyle}><i className="agentHair" /><i className="agentFace" /><i className="agentShirt" /><i className="agentLegs" /><i className={`agentAccessory accessory-${agent.identity.accessory}`} /></span>
       <StatusDot signal={agent.signal} />
-      <span className="agentName">{showWorkspaceLabel ? `${agent.terminalName} · ${agent.workspaceShortName}` : agent.terminalName}</span>
+      <span className="agentName">{showWorkspaceLabel ? `${agent.identity.name} · ${agent.workspaceShortName}` : agent.identity.name}</span>
     </button>
   );
 }

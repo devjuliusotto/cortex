@@ -20,7 +20,7 @@ export const terminalOutputAgentAdapter: OfficeActivityAdapter = {
       if (input.scope !== "allWorkspaces" && session.workspaceId !== input.currentWorkspaceId) return [];
       const history = session.terminalHistory.slice(-2_400);
       const command = input.commandHistory.filter((entry) => entry.sessionId === session.id).at(-1)?.command ?? "";
-      const provider = providerFromText(`${session.name}\n${command}\n${history}`);
+      const provider = providerFromText(`${session.name}\n${command}`);
       if (!provider) return [];
       const lastSeenAt = Date.parse(session.updatedAt) || Date.now();
       if (Date.now() - lastSeenAt > ACTIVE_WINDOW_MS && session.status === "inactive") return [];

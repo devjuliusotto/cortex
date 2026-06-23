@@ -34,9 +34,9 @@ function identityFor(agent: AgentSnapshot, appearanceIndex: number): OfficeAgent
     gpt: { color: 0x77b987, accessory: "note" },
     gemini: { color: 0x7196df, accessory: "lens" },
     cursor: { color: 0x8b82c4, accessory: "brackets" },
-    aider: { color: 0xd2aa62, accessory: "terminal" },
-    cline: { color: 0x68a8c4, accessory: "terminal" },
-    unknown: { color: 0x8991a5, accessory: "terminal" },
+    aider: { color: 0xd2aa62, accessory: "brackets" },
+    cline: { color: 0x68a8c4, accessory: "spark" },
+    unknown: { color: 0x8991a5, accessory: "note" },
   };
   return { name: agent.name, role: agent.role, ...providers[agent.provider], ...appearancePalettes[appearanceIndex % appearancePalettes.length] };
 }

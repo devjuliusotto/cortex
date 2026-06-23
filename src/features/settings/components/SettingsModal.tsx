@@ -93,11 +93,12 @@ export function SettingsModal({ open: modalOpen, onClose }: { open: boolean; onC
         if (event.event === "Progress") downloaded += event.data.chunkLength;
         setDownloadProgress(total ? `${formatBytes(downloaded)} / ${formatBytes(total)}` : formatBytes(downloaded));
       });
+      await update.install();
       setUpdateState("ready");
-      setMessage("Atualização pronta para instalar.");
+      setMessage("Atualização instalada. Reinicie o Cortex quando quiser usar a nova versão.");
     } catch (error) {
       setUpdateState("error");
-      setMessage(`Falha no download: ${String(error)}`);
+      setMessage(`Falha ao atualizar: ${String(error)}`);
     }
   }
 
@@ -172,7 +173,7 @@ export function SettingsModal({ open: modalOpen, onClose }: { open: boolean; onC
 
             {section === "updates" && <SettingsPage title="Atualizações" description="Versão instalada e releases assinadas.">
               <div className="grid gap-3 sm:grid-cols-2"><Metric label="Versão instalada" value={`v${packageJson.version}`} /><Metric label="Canal" value="Stable / GitHub Releases" /></div>
-              <div className="rounded-md border border-border bg-background/50 p-4"><div className="flex items-start justify-between gap-4"><div><div className="flex items-center gap-2 text-sm font-medium"><UpdateIcon state={updateState} />{updateLabel(updateState)}</div><p className="mt-2 text-xs leading-5 text-muted-foreground">{message}</p>{downloadProgress && <p className="mt-1 text-xs text-muted-foreground">{downloadProgress}</p>}</div><div className="flex gap-2">{updateState === "available" && <Button size="sm" onClick={() => void downloadUpdate()}><Download className="mr-2 h-4 w-4" />Baixar</Button>}{updateState === "ready" && <Button size="sm" onClick={() => update && void update.install().then(() => relaunch())}>Instalar</Button>}<Button size="sm" variant="outline" disabled={["checking", "downloading"].includes(updateState)} onClick={() => void checkForUpdates()}><RefreshCw className="mr-2 h-4 w-4" />Verificar</Button></div></div></div>
+              <div className="rounded-md border border-border bg-background/50 p-4"><div className="flex items-start justify-between gap-4"><div><div className="flex items-center gap-2 text-sm font-medium"><UpdateIcon state={updateState} />{updateLabel(updateState)}</div><p className="mt-2 text-xs leading-5 text-muted-foreground">{message}</p>{downloadProgress && <p className="mt-1 text-xs text-muted-foreground">{downloadProgress}</p>}</div><div className="flex gap-2">{updateState === "available" && <Button size="sm" onClick={() => void downloadUpdate()}><Download className="mr-2 h-4 w-4" />Atualizar</Button>}{updateState === "ready" && <Button size="sm" onClick={() => void relaunch()}>Reiniciar</Button>}<Button size="sm" variant="outline" disabled={["checking", "downloading"].includes(updateState)} onClick={() => void checkForUpdates()}><RefreshCw className="mr-2 h-4 w-4" />Verificar</Button></div></div></div>
             </SettingsPage>}
 
             {section === "about" && <SettingsPage title="Sobre o Cortex" description="Workspace local para terminais e agentes."><InfoCard icon={<Info className="h-5 w-5 text-primary" />} title={`Cortex v${packageJson.version}`} text="Gerenciador local-first de terminais para Windows, com workspaces, painéis e acompanhamento de agentes. Nenhum token ou histórico é enviado pelo Cortex." /></SettingsPage>}

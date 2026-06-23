@@ -15,7 +15,7 @@ import { MarketplaceModal } from "@/features/marketplace/components/MarketplaceM
 import { createOfficeWindowChannel, openOfficeWindow, publishOfficeSnapshot, requestOfficeSnapshot, requestTerminalFocus, type OfficeWindowSnapshot } from "@/features/office/officeWindow";
 import { SettingsModal } from "@/features/settings/components/SettingsModal";
 import { TerminalPanel } from "@/features/terminal/components/TerminalPanel";
-import { focusTerminal, terminateTerminals, writeTerminal } from "@/features/terminal/terminalBridge";
+import { ensureTerminalSession, focusTerminal, terminateTerminals, writeTerminal } from "@/features/terminal/terminalBridge";
 import { Sidebar } from "@/layouts/Sidebar";
 import { useCortexStore } from "@/stores/cortexStore";
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
@@ -50,6 +50,7 @@ export function AppShell() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [availableUpdate, setAvailableUpdate] = useState<Update | null>(null);
   const [installingUpdate, setInstallingUpdate] = useState(false);
+  const [updateReadyVersion, setUpdateReadyVersion] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<"workspace" | "office" | "my-agents">("workspace");
   const {
     activeWorkspaceId,
@@ -248,10 +249,13 @@ export function AppShell() {
     if (!availableUpdate || installingUpdate) return;
     setInstallingUpdate(true);
     try {
+      const version = availableUpdate.version;
       await availableUpdate.downloadAndInstall();
-      await relaunch();
+      setAvailableUpdate(null);
+      setUpdateReadyVersion(version);
     } catch (error) {
       console.warn("Update installation failed", error);
+    } finally {
       setInstallingUpdate(false);
     }
   };
@@ -273,7 +277,19 @@ export function AppShell() {
       )
       .forEach((session) => {
         appendTerminalHistory(session.id, "\r\n--- New shell started ---\r\n");
-        setSessionStatus(session.id, "running");
+        setSessionStatus(session.id, "waiting");
+        void ensureTerminalSession(
+          session.id,
+          session.profileId,
+          24,
+          80,
+          session.cwd ?? activeWorkspace.defaultWorkingDirectory,
+        )
+          .then(() => setSessionStatus(session.id, "running"))
+          .catch((error) => {
+            console.warn("Auto-start terminal failed", error);
+            setSessionStatus(session.id, "error");
+          });
       });
   }, [activeWorkspace, appendTerminalHistory, officeWindowMode, sessions, setSessionStatus, settings.autoStartTerminals]);
 
@@ -457,7 +473,8 @@ export function AppShell() {
       />
       <MarketplaceModal open={marketplaceOpen} onClose={() => setMarketplaceOpen(false)} />
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
-      {availableUpdate && <aside className="fixed bottom-4 left-4 z-[70] w-[min(360px,calc(100vw-2rem))] rounded-lg border border-primary/30 bg-card/95 p-4 shadow-2xl backdrop-blur"><div className="flex items-start gap-3"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-primary/10 text-primary"><Download className="h-4 w-4" /></span><div className="min-w-0 flex-1"><div className="text-sm font-semibold">Cortex {availableUpdate.version} is available</div><p className="mt-1 text-xs leading-5 text-muted-foreground">Update automatically and restart Cortex when the download is complete.</p></div><Button size="icon" variant="ghost" onClick={() => setAvailableUpdate(null)} title="Remind me later"><X className="h-4 w-4" /></Button></div><div className="mt-4 flex justify-end gap-2"><Button size="sm" variant="ghost" onClick={() => setAvailableUpdate(null)}>Later</Button><Button size="sm" disabled={installingUpdate} onClick={() => void installAvailableUpdate()}><Download className="mr-2 h-4 w-4" />{installingUpdate ? "Updating..." : "Update now"}</Button></div></aside>}
+      {availableUpdate && <aside className="fixed bottom-4 left-4 z-[70] w-[min(360px,calc(100vw-2rem))] rounded-lg border border-primary/30 bg-card/95 p-4 shadow-2xl backdrop-blur"><div className="flex items-start gap-3"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-primary/10 text-primary"><Download className="h-4 w-4" /></span><div className="min-w-0 flex-1"><div className="text-sm font-semibold">Cortex {availableUpdate.version} is available</div><p className="mt-1 text-xs leading-5 text-muted-foreground">Update in the background. The new version appears after Cortex restarts.</p></div><Button size="icon" variant="ghost" onClick={() => setAvailableUpdate(null)} title="Remind me later"><X className="h-4 w-4" /></Button></div><div className="mt-4 flex justify-end gap-2"><Button size="sm" variant="ghost" onClick={() => setAvailableUpdate(null)}>Later</Button><Button size="sm" disabled={installingUpdate} onClick={() => void installAvailableUpdate()}><Download className="mr-2 h-4 w-4" />{installingUpdate ? "Updating..." : "Update"}</Button></div></aside>}
+      {updateReadyVersion && <aside className="fixed bottom-4 left-4 z-[70] w-[min(360px,calc(100vw-2rem))] rounded-lg border border-cortex-green/30 bg-card/95 p-4 shadow-2xl backdrop-blur"><div className="flex items-start gap-3"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-cortex-green/10 text-cortex-green"><Download className="h-4 w-4" /></span><div className="min-w-0 flex-1"><div className="text-sm font-semibold">Cortex {updateReadyVersion} is ready</div><p className="mt-1 text-xs leading-5 text-muted-foreground">Restart Cortex when convenient to use the new version.</p></div><Button size="icon" variant="ghost" onClick={() => setUpdateReadyVersion(null)} title="Dismiss"><X className="h-4 w-4" /></Button></div><div className="mt-4 flex justify-end gap-2"><Button size="sm" variant="ghost" onClick={() => setUpdateReadyVersion(null)}>Later</Button><Button size="sm" onClick={() => void relaunch()}>Restart</Button></div></aside>}
     </div>
   );
 }
