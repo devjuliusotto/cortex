@@ -128,11 +128,16 @@ type CortexState = CortexPersistedState & {
   hydrated: boolean;
   hydrate: () => Promise<void>;
   createMarketingModeDemo: () => void;
-  createWorkspace: () => void;
-  createWorkspaceFromDirectory: (directory: string) => void;
+  createWorkspace: () => string;
+  createWorkspaceFromDirectory: (directory: string) => string | null;
+  createWorkspaceFromProject: (project: { name: string; directory: string }) => string | null;
   duplicateWorkspace: (workspaceId: string) => void;
   renameWorkspace: (workspaceId: string, name: string) => void;
-  reorderWorkspaces: (draggedWorkspaceId: string, targetWorkspaceId: string) => void;
+  reorderWorkspaces: (
+    draggedWorkspaceId: string,
+    targetWorkspaceId: string,
+    placement?: "before" | "after",
+  ) => void;
   setWorkspaceDefaultWorkingDirectory: (workspaceId: string, path: string) => void;
   setWorkspaceAutoStartTerminalsOnOpen: (workspaceId: string, enabled: boolean) => void;
   setWorkspaceColor: (workspaceId: string, color: string | undefined) => void;
@@ -1076,10 +1081,13 @@ export const useCortexStore = create<CortexState>((set) => ({
     }),
 
   createWorkspace: () =>
-    set((state) => {
+    {
+      let createdWorkspaceId = "";
+      set((state) => {
       const timestamp = now();
+      createdWorkspaceId = createId("workspace");
       const workspace: Workspace = {
-        id: createId("workspace"),
+        id: createdWorkspaceId,
         name: workspaceName(state.workspaces),
         autoStartTerminalsOnOpen: true,
         snippets: [],
@@ -1098,16 +1106,21 @@ export const useCortexStore = create<CortexState>((set) => ({
       };
       saveState(next);
       return next;
-    }),
+      });
+      return createdWorkspaceId;
+    },
 
   createWorkspaceFromDirectory: (directory) =>
-    set((state) => {
+    {
+      let createdWorkspaceId: string | null = null;
+      set((state) => {
       const cleanDirectory = directory.trim();
       if (!cleanDirectory) return state;
 
       const timestamp = now();
+      createdWorkspaceId = createId("workspace");
       const workspace: Workspace = {
-        id: createId("workspace"),
+        id: createdWorkspaceId,
         name: workspaceNameFromDirectory(cleanDirectory, state.workspaces),
         defaultWorkingDirectory: cleanDirectory,
         autoStartTerminalsOnOpen: true,
@@ -1127,7 +1140,47 @@ export const useCortexStore = create<CortexState>((set) => ({
       };
       saveState(next);
       return next;
-    }),
+      });
+      return createdWorkspaceId;
+    },
+
+  createWorkspaceFromProject: (project) =>
+    {
+      let createdWorkspaceId: string | null = null;
+      set((state) => {
+      const cleanName = project.name.trim();
+      const cleanDirectory = project.directory.trim();
+      if (!cleanName || !cleanDirectory) return state;
+
+      const timestamp = now();
+      createdWorkspaceId = createId("workspace");
+      const workspace: Workspace = {
+        id: createdWorkspaceId,
+        name: cleanName,
+        defaultWorkingDirectory: cleanDirectory,
+        autoStartTerminalsOnOpen: true,
+        snippets: [],
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      };
+
+      const standardItems = createStandardWorkspaceItems(workspace.id, timestamp);
+      const next: CortexState = {
+        ...state,
+        workspaces: [...state.workspaces, workspace],
+        sessions: [
+          ...state.sessions,
+          { ...standardItems.session, cwd: cleanDirectory },
+        ],
+        templateInstances: [...state.templateInstances, ...standardItems.templates],
+        layouts: [...state.layouts, standardItems.layout],
+        activeWorkspaceId: workspace.id,
+      };
+      saveState(next);
+      return next;
+      });
+      return createdWorkspaceId;
+    },
 
   duplicateWorkspace: (workspaceId) =>
     set((state) => {
@@ -1485,7 +1538,7 @@ export const useCortexStore = create<CortexState>((set) => ({
       return next;
     }),
 
-  reorderWorkspaces: (draggedWorkspaceId, targetWorkspaceId) =>
+  reorderWorkspaces: (draggedWorkspaceId, targetWorkspaceId, placement = "before") =>
     set((state) => {
       if (draggedWorkspaceId === targetWorkspaceId) {
         return state;
@@ -1497,7 +1550,9 @@ export const useCortexStore = create<CortexState>((set) => ({
       }
       const workspaces = [...state.workspaces];
       const [draggedWorkspace] = workspaces.splice(draggedIndex, 1);
-      workspaces.splice(targetIndex, 0, draggedWorkspace);
+      const targetIndexAfterRemoval = workspaces.findIndex((workspace) => workspace.id === targetWorkspaceId);
+      const insertIndex = placement === "after" ? targetIndexAfterRemoval + 1 : targetIndexAfterRemoval;
+      workspaces.splice(insertIndex, 0, draggedWorkspace);
       const next = { ...state, workspaces };
       saveState(next);
       return next;
