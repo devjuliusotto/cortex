@@ -12,6 +12,9 @@ Add real manually recorded assets here when they are ready:
 
 ![Cortex screenshot](docs/assets/cortex-screenshot.png)
 
+
+
+
 ```text
 docs/assets/cortex-demo.gif
 docs/assets/cortex-screenshot.png
@@ -38,7 +41,10 @@ Keep demo assets reasonably small. Do not commit large binary recordings unless 
 - Local terminal scrollback persistence with bounded storage.
 - Manual GitHub issue flow only; no background uploads.
 
-## Installation
+
+
+
+## Installations
 
 Download the latest Windows installer from GitHub Releases:
 
