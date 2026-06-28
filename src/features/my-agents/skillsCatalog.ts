@@ -22,6 +22,7 @@ export interface CuratedSkill {
   category: "Discovery" | "Frontend" | "Testing" | "Code Quality" | "Docs" | "DevOps" | "Databases" | "Marketing" | "Workflow";
   installs: string;
   tags: string[];
+  installCommand?: string;
 }
 
 export const skillPaths: SkillPath[] = [
@@ -231,6 +232,7 @@ export const curatedSkillsCatalog: CuratedSkill[] = [
     category: "Frontend",
     installs: "231K",
     tags: ["ui", "ux", "product"],
+    installCommand: "npm install -g uipro-cli; uipro init --ai codex",
   },
   {
     id: "diagnose",
@@ -343,7 +345,10 @@ export const curatedSkillsCatalog: CuratedSkill[] = [
 ];
 
 export function skillInstallCommand(skill: CuratedSkill) {
-  return `npx skills add https://github.com/${skill.repository} --skill ${skill.id}`;
+  if (skill.installCommand) {
+    return skill.installCommand;
+  }
+  return `npx -y skills add https://github.com/${skill.repository} --skill ${skill.id} --agent '*' --copy -y`;
 }
 
 export function skillGitHubUrl(skill: CuratedSkill) {

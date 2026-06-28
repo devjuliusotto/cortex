@@ -153,7 +153,7 @@ type CortexState = CortexPersistedState & {
   deleteSnippet: (workspaceId: string, snippetId: string) => void;
   deleteWorkspace: (workspaceId: string) => void;
   setActiveWorkspace: (workspaceId: string) => void;
-  createSession: (workspaceId: string, profileId?: TerminalProfileId) => string;
+  createSession: (workspaceId: string, profileId?: TerminalProfileId, cwdOverride?: string | null) => string;
   duplicateSession: (sessionId: string) => void;
   renameSession: (sessionId: string, name: string) => void;
   setFeatureFlag: (
@@ -1407,12 +1407,14 @@ export const useCortexStore = create<CortexState>((set) => ({
       return next;
     }),
 
-  createSession: (workspaceId, profileId = "powershell") => {
+  createSession: (workspaceId, profileId = "powershell", cwdOverride) => {
     const sessionId = createId("session");
     set((state) => {
       const timestamp = now();
       const workspace = state.workspaces.find((item) => item.id === workspaceId);
-      const cwd = workspace?.defaultWorkingDirectory?.trim() || undefined;
+      const cwd = cwdOverride === undefined
+        ? workspace?.defaultWorkingDirectory?.trim() || undefined
+        : cwdOverride?.trim() || undefined;
       const session: TerminalSession = {
         id: sessionId,
         workspaceId,

@@ -33,7 +33,11 @@ const sectionLabels: Array<{ id: Section; label: string }> = [
   { id: "extensions", label: "Extensions" },
 ];
 
-export function MyAgentsPage() {
+type MyAgentsPageProps = {
+  onTerminalOpen?: (sessionId: string) => void;
+};
+
+export function MyAgentsPage({ onTerminalOpen }: MyAgentsPageProps) {
   const [section, setSection] = useState<Section>("installed");
   const [statuses, setStatuses] = useState<Record<string, AgentDetectionStatus>>(() =>
     getCachedAgentStatuses() ?? Object.fromEntries(agentsCatalog.map((agent) => [agent.id, "checking"])),
@@ -64,6 +68,7 @@ export function MyAgentsPage() {
     }
     const sessionId = createSession(activeWorkspace.id, "powershell");
     queueVisibleTerminalCommand(sessionId, command);
+    onTerminalOpen?.(sessionId);
   };
 
   const installCustomExtension = () => {
