@@ -2,7 +2,6 @@ import { invoke } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import {
   ChevronDown,
-  ChevronRight,
   FolderOpen,
   GitBranch,
   LoaderCircle,
@@ -11,7 +10,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useCortexStore } from "@/stores/cortexStore";
@@ -170,68 +169,68 @@ export function ProjectSetupModal({ open, onClose, onWorkspaceOpen }: ProjectSet
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4">
-      <section className="flex max-h-[min(860px,calc(100vh-2rem))] w-full max-w-3xl flex-col overflow-hidden rounded-md border border-border bg-background shadow-2xl">
-        <header className="flex items-center justify-between border-b border-border bg-card/80 px-4 py-3">
-          <div>
-            <div className="flex items-center gap-2 text-sm font-semibold">
+      <section className="flex max-h-[min(780px,calc(100vh-2rem))] w-full max-w-2xl flex-col overflow-hidden rounded-md border border-border bg-background shadow-2xl">
+        <header className="flex h-14 items-center justify-between border-b border-border bg-[#050607] px-4">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-primary/20 bg-primary/10">
               <FolderOpen className="h-4 w-4 text-primary" />
-              New Project
+            </span>
+            <div className="min-w-0">
+              <div className="truncate text-sm font-semibold">Novo projeto</div>
+              <div className="truncate text-xs text-muted-foreground">Workspace + terminal</div>
             </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Create a Cortex workspace from a folder, a new directory, or a Git repository.
-            </p>
           </div>
           <Button size="icon" variant="ghost" onClick={onClose} title="Close">
             <X className="h-4 w-4" />
           </Button>
         </header>
 
-        <div className="min-h-0 flex-1 overflow-y-auto p-5">
+        <div className="min-h-0 flex-1 overflow-y-auto p-4">
           <div className="grid gap-4">
-            <div className="grid grid-cols-3 gap-2 rounded-md border border-border bg-card/50 p-1">
-              <ModeButton active={mode === "existing"} label="Existing" onClick={() => applyMode("existing")} />
-              <ModeButton active={mode === "create"} label="Create" onClick={() => applyMode("create")} />
-              <ModeButton active={mode === "clone"} label="Git clone" onClick={() => applyMode("clone")} />
+            <div className="grid grid-cols-3 gap-1 rounded-md border border-border bg-card/55 p-1">
+              <ModeButton active={mode === "existing"} icon={<FolderOpen className="h-4 w-4" />} label="Abrir" onClick={() => applyMode("existing")} />
+              <ModeButton active={mode === "create"} icon={<Plus className="h-4 w-4" />} label="Criar" onClick={() => applyMode("create")} />
+              <ModeButton active={mode === "clone"} icon={<GitBranch className="h-4 w-4" />} label="Clone" onClick={() => applyMode("clone")} />
             </div>
 
-            <label className="grid gap-2">
-              <span className="text-xs font-medium text-muted-foreground">Project name</span>
+            <label className="grid gap-1.5">
+              <span className="text-xs font-medium text-muted-foreground">Nome</span>
               <input
                 className="h-10 rounded-md border border-border bg-card px-3 text-sm outline-none focus:ring-1 focus:ring-ring"
                 onChange={(event) => setProjectName(event.target.value)}
-                placeholder="cortex-app"
+                placeholder="meu-projeto"
                 value={projectName}
               />
             </label>
 
             {mode === "existing" ? (
               <PathPicker
-                label="Project folder"
+                label="Pasta"
                 onBrowse={() => void chooseExistingPath()}
                 onChange={(value) => {
                   setExistingPath(value);
                   fillNamesFromPath(value);
                 }}
-                placeholder="C:\\Projects\\cortex-app"
+                placeholder="C:\\Projects\\meu-projeto"
                 value={existingPath}
               />
             ) : (
               <>
                 <PathPicker
-                  label="Where to put it"
+                  label="Salvar em"
                   onBrowse={() => void chooseParentPath()}
                   onChange={setParentPath}
                   placeholder="C:\\Projects"
                   value={parentPath}
                 />
-                <label className="grid gap-2">
+                <label className="grid gap-1.5">
                   <span className="text-xs font-medium text-muted-foreground">
-                    Folder name {mode === "clone" && <span className="font-normal">(optional)</span>}
+                    Pasta {mode === "clone" && <span className="font-normal">(opcional)</span>}
                   </span>
                   <input
                     className="h-10 rounded-md border border-border bg-card px-3 text-sm outline-none focus:ring-1 focus:ring-ring"
                     onChange={(event) => setFolderName(event.target.value)}
-                    placeholder={mode === "clone" ? "Defaults to project name" : "cortex-app"}
+                    placeholder={mode === "clone" ? "usa o nome do projeto" : "meu-projeto"}
                     value={folderName}
                   />
                 </label>
@@ -239,8 +238,8 @@ export function ProjectSetupModal({ open, onClose, onWorkspaceOpen }: ProjectSet
             )}
 
             {mode === "clone" && (
-              <label className="grid gap-2">
-                <span className="text-xs font-medium text-muted-foreground">Git repository URL</span>
+              <label className="grid gap-1.5">
+                <span className="text-xs font-medium text-muted-foreground">Repositório</span>
                 <div className="flex items-center gap-2">
                   <span className="grid h-10 w-10 place-items-center rounded-md border border-border bg-card text-muted-foreground">
                     <GitBranch className="h-4 w-4" />
@@ -255,16 +254,23 @@ export function ProjectSetupModal({ open, onClose, onWorkspaceOpen }: ProjectSet
               </label>
             )}
 
-            <div className="rounded-md border border-border bg-card/40">
+            {draftProjectPath && (
+              <div className="min-w-0 rounded-md border border-border bg-card/45 px-3 py-2">
+                <div className="mb-1 text-[10px] uppercase text-muted-foreground">Caminho</div>
+                <div className="truncate font-mono text-xs text-primary" title={draftProjectPath}>{draftProjectPath}</div>
+              </div>
+            )}
+
+            <div className="rounded-md border border-border bg-card/45">
               <button
-                className="flex h-11 w-full items-center justify-between px-3 text-left text-sm"
+                className="flex h-10 w-full items-center justify-between px-3 text-left text-sm"
                 onClick={() => setSkillsOpen((value) => !value)}
                 type="button"
               >
                 <span className="flex items-center gap-2">
-                  {skillsOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                  <ChevronDown className={cn("h-4 w-4 transition-transform", !skillsOpen && "-rotate-90")} />
                   <Puzzle className="h-4 w-4 text-primary" />
-                  Project skills
+                  Skills
                 </span>
                 <span className="text-xs text-muted-foreground">
                   {localSkillPaths.length + installedSkills.length}
@@ -273,12 +279,9 @@ export function ProjectSetupModal({ open, onClose, onWorkspaceOpen }: ProjectSet
               {skillsOpen && (
                 <div className="border-t border-border p-3">
                   <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs leading-5 text-muted-foreground">
-                      Add local skills from this PC. They will be copied into the project's .agents/skills folder.
-                    </p>
                     <Button size="sm" variant="outline" onClick={() => void chooseLocalSkills()}>
                       <Plus className="mr-2 h-4 w-4" />
-                      Add
+                      Adicionar
                     </Button>
                   </div>
                   <div className="mt-3 space-y-2">
@@ -295,7 +298,7 @@ export function ProjectSetupModal({ open, onClose, onWorkspaceOpen }: ProjectSet
                     ))}
                     {installedSkills.length === 0 && localSkillPaths.length === 0 && (
                       <div className="rounded-md border border-dashed border-border p-3 text-xs text-muted-foreground">
-                        No skills selected.
+                        Nenhuma skill.
                       </div>
                     )}
                   </div>
@@ -316,11 +319,11 @@ export function ProjectSetupModal({ open, onClose, onWorkspaceOpen }: ProjectSet
 
         <footer className="flex items-center justify-end gap-2 border-t border-border bg-card/60 px-4 py-3">
           <Button variant="ghost" onClick={onClose} disabled={busy}>
-            Cancel
+            Cancelar
           </Button>
           <Button onClick={() => void submitProject()} disabled={!canSubmit}>
             {busy ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
-            Open project
+            Abrir
           </Button>
         </footer>
       </section>
@@ -328,16 +331,17 @@ export function ProjectSetupModal({ open, onClose, onWorkspaceOpen }: ProjectSet
   );
 }
 
-function ModeButton({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) {
+function ModeButton({ active, icon, label, onClick }: { active: boolean; icon: ReactNode; label: string; onClick: () => void }) {
   return (
     <button
       className={cn(
-        "h-9 rounded text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground",
+        "flex h-9 items-center justify-center gap-2 rounded text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground",
         active && "bg-background text-foreground shadow-sm",
       )}
       onClick={onClick}
       type="button"
     >
+      {icon}
       {label}
     </button>
   );
@@ -357,7 +361,7 @@ function PathPicker({
   value: string;
 }) {
   return (
-    <label className="grid gap-2">
+    <label className="grid gap-1.5">
       <span className="text-xs font-medium text-muted-foreground">{label}</span>
       <div className="flex gap-2">
         <input
@@ -367,7 +371,7 @@ function PathPicker({
           value={value}
         />
         <Button variant="outline" onClick={onBrowse}>
-          Browse
+          Buscar
         </Button>
       </div>
     </label>

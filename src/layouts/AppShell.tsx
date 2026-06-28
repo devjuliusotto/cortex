@@ -269,13 +269,14 @@ export function AppShell() {
     }
 
     autoStartedWorkspaceIds.current.add(activeWorkspace.id);
-    sessions
+    const sessionsToStart = sessions
       .filter(
         (session) =>
           session.workspaceId === activeWorkspace.id &&
           ["inactive", "completed", "error"].includes(session.status),
-      )
-      .forEach((session) => {
+      );
+    const timer = window.setTimeout(() => {
+      sessionsToStart.forEach((session) => {
         appendTerminalHistory(session.id, "\r\n--- New shell started ---\r\n");
         setSessionStatus(session.id, "waiting");
         void ensureTerminalSession(
@@ -291,6 +292,8 @@ export function AppShell() {
             setSessionStatus(session.id, "error");
           });
       });
+    }, 120);
+    return () => window.clearTimeout(timer);
   }, [activeWorkspace, appendTerminalHistory, officeWindowMode, sessions, setSessionStatus, settings.autoStartTerminals]);
 
   useEffect(() => {

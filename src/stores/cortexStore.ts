@@ -259,9 +259,20 @@ function workspaceName(workspaces: Workspace[]) {
   return `Workspace ${workspaces.length + 1}`;
 }
 
+function normalizeWindowsDisplayPath(path: string) {
+  return path
+    .trim()
+    .replace(/^Microsoft\.PowerShell\.Core\\FileSystem::/i, "")
+    .replace(/^\\\\\?\\UNC\\/i, "\\\\")
+    .replace(/^\/\/\?\/UNC\//i, "//")
+    .replace(/^\\\\\?\\/i, "")
+    .replace(/^\/\/\?\//i, "");
+}
+
 function workspaceNameFromDirectory(directory: string, workspaces: Workspace[]) {
   const fallback = workspaceName(workspaces);
-  const name = directory.replace(/[\\/]+$/, "").split(/[\\/]/).filter(Boolean).pop() ?? fallback;
+  const cleanDirectory = normalizeWindowsDisplayPath(directory);
+  const name = cleanDirectory.replace(/[\\/]+$/, "").split(/[\\/]/).filter(Boolean).pop() ?? fallback;
   const existing = new Set(workspaces.map((workspace) => workspace.name));
   if (!existing.has(name)) return name;
   let index = 2;
@@ -283,7 +294,7 @@ function createLeaf(tabIds: string[] = [], activeTabId: string | null = tabIds[0
   };
 }
 
-function createStandardWorkspaceItems(workspaceId: string, timestamp: string) {
+function createStandardWorkspaceItems(workspaceId: string, timestamp: string, cwd?: string) {
   const terminalId = createId("session");
   const commandHistoryId = createId("template");
   const gitMapId = createId("template");
@@ -296,6 +307,7 @@ function createStandardWorkspaceItems(workspaceId: string, timestamp: string) {
     workspaceId,
     name: "PowerShell",
     profileId: "powershell",
+    cwd,
     status: "running",
     terminalHistory: "",
     createdAt: timestamp,
@@ -1114,7 +1126,7 @@ export const useCortexStore = create<CortexState>((set) => ({
     {
       let createdWorkspaceId: string | null = null;
       set((state) => {
-      const cleanDirectory = directory.trim();
+      const cleanDirectory = normalizeWindowsDisplayPath(directory);
       if (!cleanDirectory) return state;
 
       const timestamp = now();
@@ -1129,7 +1141,7 @@ export const useCortexStore = create<CortexState>((set) => ({
         updatedAt: timestamp,
       };
 
-      const standardItems = createStandardWorkspaceItems(workspace.id, timestamp);
+      const standardItems = createStandardWorkspaceItems(workspace.id, timestamp, cleanDirectory);
       const next: CortexState = {
         ...state,
         workspaces: [...state.workspaces, workspace],
@@ -1149,7 +1161,7 @@ export const useCortexStore = create<CortexState>((set) => ({
       let createdWorkspaceId: string | null = null;
       set((state) => {
       const cleanName = project.name.trim();
-      const cleanDirectory = project.directory.trim();
+      const cleanDirectory = normalizeWindowsDisplayPath(project.directory);
       if (!cleanName || !cleanDirectory) return state;
 
       const timestamp = now();
@@ -1164,14 +1176,11 @@ export const useCortexStore = create<CortexState>((set) => ({
         updatedAt: timestamp,
       };
 
-      const standardItems = createStandardWorkspaceItems(workspace.id, timestamp);
+      const standardItems = createStandardWorkspaceItems(workspace.id, timestamp, cleanDirectory);
       const next: CortexState = {
         ...state,
         workspaces: [...state.workspaces, workspace],
-        sessions: [
-          ...state.sessions,
-          { ...standardItems.session, cwd: cleanDirectory },
-        ],
+        sessions: [...state.sessions, standardItems.session],
         templateInstances: [...state.templateInstances, ...standardItems.templates],
         layouts: [...state.layouts, standardItems.layout],
         activeWorkspaceId: workspace.id,
@@ -1361,7 +1370,7 @@ export const useCortexStore = create<CortexState>((set) => ({
 
   setWorkspaceDefaultWorkingDirectory: (workspaceId, path) =>
     set((state) => {
-      const cleanPath = path.trim();
+      const cleanPath = normalizeWindowsDisplayPath(path);
       const next = {
         ...state,
         workspaces: state.workspaces.map((workspace) =>
@@ -1402,6 +1411,9 @@ export const useCortexStore = create<CortexState>((set) => ({
 
   setActiveWorkspace: (workspaceId) =>
     set((state) => {
+      if (state.activeWorkspaceId === workspaceId) {
+        return state;
+      }
       const next = { ...state, activeWorkspaceId: workspaceId };
       saveState(next);
       return next;
@@ -1413,8 +1425,8 @@ export const useCortexStore = create<CortexState>((set) => ({
       const timestamp = now();
       const workspace = state.workspaces.find((item) => item.id === workspaceId);
       const cwd = cwdOverride === undefined
-        ? workspace?.defaultWorkingDirectory?.trim() || undefined
-        : cwdOverride?.trim() || undefined;
+        ? normalizeWindowsDisplayPath(workspace?.defaultWorkingDirectory ?? "") || undefined
+        : normalizeWindowsDisplayPath(cwdOverride ?? "") || undefined;
       const session: TerminalSession = {
         id: sessionId,
         workspaceId,

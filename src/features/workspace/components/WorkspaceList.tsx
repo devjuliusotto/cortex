@@ -2,7 +2,7 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { Check, Copy, Folder, FolderOpen, GripVertical, Palette, Play, Plus, Puzzle, Trash2 } from "lucide-react";
 import type { DragEvent, ReactNode } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { StatusIndicator } from "@/features/terminal/components/StatusIndicator";
 import { terminateTerminals } from "@/features/terminal/terminalBridge";
@@ -54,6 +54,19 @@ export function WorkspaceList({ onWorkspaceOpen }: { onWorkspaceOpen?: (workspac
   const contextWorkspace = contextMenu
     ? workspaces.find((workspace) => workspace.id === contextMenu.workspaceId)
     : undefined;
+  const workspaceStatuses = useMemo(() => {
+    const counts = new Map<string, { count: number; waiting: boolean }>();
+    for (const session of sessions) {
+      if (session.status !== "running" && session.status !== "waiting") {
+        continue;
+      }
+      const current = counts.get(session.workspaceId) ?? { count: 0, waiting: false };
+      current.count += 1;
+      current.waiting ||= session.status === "waiting";
+      counts.set(session.workspaceId, current);
+    }
+    return counts;
+  }, [sessions]);
 
   useEffect(() => {
     if (!contextMenu) {
@@ -152,16 +165,10 @@ export function WorkspaceList({ onWorkspaceOpen }: { onWorkspaceOpen?: (workspac
         ) : (
           workspaces.map((workspace) => {
             const active = workspace.id === activeWorkspaceId;
-            const activeTerminalSessions = sessions.filter(
-              (session) =>
-                session.workspaceId === workspace.id &&
-                (session.status === "running" || session.status === "waiting"),
-            );
-            const workspaceStatus: SessionStatus | null = activeTerminalSessions.some(
-              (session) => session.status === "waiting",
-            )
+            const workspaceStatusInfo = workspaceStatuses.get(workspace.id);
+            const workspaceStatus: SessionStatus | null = workspaceStatusInfo?.waiting
               ? "waiting"
-              : activeTerminalSessions.length > 0
+              : workspaceStatusInfo?.count
                 ? "running"
                 : null;
 
@@ -268,10 +275,10 @@ export function WorkspaceList({ onWorkspaceOpen }: { onWorkspaceOpen?: (workspac
                       {workspaceStatus && (
                         <span
                           className="flex shrink-0 items-center gap-1.5 rounded border border-border bg-background/50 px-1.5 py-0.5 text-[10px] uppercase text-muted-foreground"
-                          title={`${activeTerminalSessions.length} terminal${activeTerminalSessions.length === 1 ? "" : "s"} running or loading`}
+                          title={`${workspaceStatusInfo?.count ?? 0} terminal${workspaceStatusInfo?.count === 1 ? "" : "s"} running or loading`}
                         >
                           <StatusIndicator status={workspaceStatus} />
-                          {activeTerminalSessions.length}
+                          {workspaceStatusInfo?.count ?? 0}
                         </span>
                       )}
                     </span>
