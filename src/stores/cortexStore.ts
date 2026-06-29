@@ -128,11 +128,16 @@ type CortexState = CortexPersistedState & {
   hydrated: boolean;
   hydrate: () => Promise<void>;
   createMarketingModeDemo: () => void;
-  createWorkspace: () => void;
-  createWorkspaceFromDirectory: (directory: string) => void;
+  createWorkspace: () => string;
+  createWorkspaceFromDirectory: (directory: string) => string | null;
+  createWorkspaceFromProject: (project: { name: string; directory: string }) => string | null;
   duplicateWorkspace: (workspaceId: string) => void;
   renameWorkspace: (workspaceId: string, name: string) => void;
-  reorderWorkspaces: (draggedWorkspaceId: string, targetWorkspaceId: string) => void;
+  reorderWorkspaces: (
+    draggedWorkspaceId: string,
+    targetWorkspaceId: string,
+    placement?: "before" | "after",
+  ) => void;
   setWorkspaceDefaultWorkingDirectory: (workspaceId: string, path: string) => void;
   setWorkspaceAutoStartTerminalsOnOpen: (workspaceId: string, enabled: boolean) => void;
   setWorkspaceColor: (workspaceId: string, color: string | undefined) => void;
@@ -148,7 +153,7 @@ type CortexState = CortexPersistedState & {
   deleteSnippet: (workspaceId: string, snippetId: string) => void;
   deleteWorkspace: (workspaceId: string) => void;
   setActiveWorkspace: (workspaceId: string) => void;
-  createSession: (workspaceId: string, profileId?: TerminalProfileId) => string;
+  createSession: (workspaceId: string, profileId?: TerminalProfileId, cwdOverride?: string | null) => string;
   duplicateSession: (sessionId: string) => void;
   renameSession: (sessionId: string, name: string) => void;
   setFeatureFlag: (
@@ -254,9 +259,20 @@ function workspaceName(workspaces: Workspace[]) {
   return `Workspace ${workspaces.length + 1}`;
 }
 
+function normalizeWindowsDisplayPath(path: string) {
+  return path
+    .trim()
+    .replace(/^Microsoft\.PowerShell\.Core\\FileSystem::/i, "")
+    .replace(/^\\\\\?\\UNC\\/i, "\\\\")
+    .replace(/^\/\/\?\/UNC\//i, "//")
+    .replace(/^\\\\\?\\/i, "")
+    .replace(/^\/\/\?\//i, "");
+}
+
 function workspaceNameFromDirectory(directory: string, workspaces: Workspace[]) {
   const fallback = workspaceName(workspaces);
-  const name = directory.replace(/[\\/]+$/, "").split(/[\\/]/).filter(Boolean).pop() ?? fallback;
+  const cleanDirectory = normalizeWindowsDisplayPath(directory);
+  const name = cleanDirectory.replace(/[\\/]+$/, "").split(/[\\/]/).filter(Boolean).pop() ?? fallback;
   const existing = new Set(workspaces.map((workspace) => workspace.name));
   if (!existing.has(name)) return name;
   let index = 2;
@@ -278,7 +294,7 @@ function createLeaf(tabIds: string[] = [], activeTabId: string | null = tabIds[0
   };
 }
 
-function createStandardWorkspaceItems(workspaceId: string, timestamp: string) {
+function createStandardWorkspaceItems(workspaceId: string, timestamp: string, cwd?: string) {
   const terminalId = createId("session");
   const commandHistoryId = createId("template");
   const gitMapId = createId("template");
@@ -291,6 +307,7 @@ function createStandardWorkspaceItems(workspaceId: string, timestamp: string) {
     workspaceId,
     name: "PowerShell",
     profileId: "powershell",
+    cwd,
     status: "running",
     terminalHistory: "",
     createdAt: timestamp,
@@ -1076,10 +1093,13 @@ export const useCortexStore = create<CortexState>((set) => ({
     }),
 
   createWorkspace: () =>
-    set((state) => {
+    {
+      let createdWorkspaceId = "";
+      set((state) => {
       const timestamp = now();
+      createdWorkspaceId = createId("workspace");
       const workspace: Workspace = {
-        id: createId("workspace"),
+        id: createdWorkspaceId,
         name: workspaceName(state.workspaces),
         autoStartTerminalsOnOpen: true,
         snippets: [],
@@ -1098,16 +1118,21 @@ export const useCortexStore = create<CortexState>((set) => ({
       };
       saveState(next);
       return next;
-    }),
+      });
+      return createdWorkspaceId;
+    },
 
   createWorkspaceFromDirectory: (directory) =>
-    set((state) => {
-      const cleanDirectory = directory.trim();
+    {
+      let createdWorkspaceId: string | null = null;
+      set((state) => {
+      const cleanDirectory = normalizeWindowsDisplayPath(directory);
       if (!cleanDirectory) return state;
 
       const timestamp = now();
+      createdWorkspaceId = createId("workspace");
       const workspace: Workspace = {
-        id: createId("workspace"),
+        id: createdWorkspaceId,
         name: workspaceNameFromDirectory(cleanDirectory, state.workspaces),
         defaultWorkingDirectory: cleanDirectory,
         autoStartTerminalsOnOpen: true,
@@ -1116,7 +1141,7 @@ export const useCortexStore = create<CortexState>((set) => ({
         updatedAt: timestamp,
       };
 
-      const standardItems = createStandardWorkspaceItems(workspace.id, timestamp);
+      const standardItems = createStandardWorkspaceItems(workspace.id, timestamp, cleanDirectory);
       const next: CortexState = {
         ...state,
         workspaces: [...state.workspaces, workspace],
@@ -1127,7 +1152,44 @@ export const useCortexStore = create<CortexState>((set) => ({
       };
       saveState(next);
       return next;
-    }),
+      });
+      return createdWorkspaceId;
+    },
+
+  createWorkspaceFromProject: (project) =>
+    {
+      let createdWorkspaceId: string | null = null;
+      set((state) => {
+      const cleanName = project.name.trim();
+      const cleanDirectory = normalizeWindowsDisplayPath(project.directory);
+      if (!cleanName || !cleanDirectory) return state;
+
+      const timestamp = now();
+      createdWorkspaceId = createId("workspace");
+      const workspace: Workspace = {
+        id: createdWorkspaceId,
+        name: cleanName,
+        defaultWorkingDirectory: cleanDirectory,
+        autoStartTerminalsOnOpen: true,
+        snippets: [],
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      };
+
+      const standardItems = createStandardWorkspaceItems(workspace.id, timestamp, cleanDirectory);
+      const next: CortexState = {
+        ...state,
+        workspaces: [...state.workspaces, workspace],
+        sessions: [...state.sessions, standardItems.session],
+        templateInstances: [...state.templateInstances, ...standardItems.templates],
+        layouts: [...state.layouts, standardItems.layout],
+        activeWorkspaceId: workspace.id,
+      };
+      saveState(next);
+      return next;
+      });
+      return createdWorkspaceId;
+    },
 
   duplicateWorkspace: (workspaceId) =>
     set((state) => {
@@ -1308,7 +1370,7 @@ export const useCortexStore = create<CortexState>((set) => ({
 
   setWorkspaceDefaultWorkingDirectory: (workspaceId, path) =>
     set((state) => {
-      const cleanPath = path.trim();
+      const cleanPath = normalizeWindowsDisplayPath(path);
       const next = {
         ...state,
         workspaces: state.workspaces.map((workspace) =>
@@ -1349,17 +1411,22 @@ export const useCortexStore = create<CortexState>((set) => ({
 
   setActiveWorkspace: (workspaceId) =>
     set((state) => {
+      if (state.activeWorkspaceId === workspaceId) {
+        return state;
+      }
       const next = { ...state, activeWorkspaceId: workspaceId };
       saveState(next);
       return next;
     }),
 
-  createSession: (workspaceId, profileId = "powershell") => {
+  createSession: (workspaceId, profileId = "powershell", cwdOverride) => {
     const sessionId = createId("session");
     set((state) => {
       const timestamp = now();
       const workspace = state.workspaces.find((item) => item.id === workspaceId);
-      const cwd = workspace?.defaultWorkingDirectory?.trim() || undefined;
+      const cwd = cwdOverride === undefined
+        ? normalizeWindowsDisplayPath(workspace?.defaultWorkingDirectory ?? "") || undefined
+        : normalizeWindowsDisplayPath(cwdOverride ?? "") || undefined;
       const session: TerminalSession = {
         id: sessionId,
         workspaceId,
@@ -1485,7 +1552,7 @@ export const useCortexStore = create<CortexState>((set) => ({
       return next;
     }),
 
-  reorderWorkspaces: (draggedWorkspaceId, targetWorkspaceId) =>
+  reorderWorkspaces: (draggedWorkspaceId, targetWorkspaceId, placement = "before") =>
     set((state) => {
       if (draggedWorkspaceId === targetWorkspaceId) {
         return state;
@@ -1497,7 +1564,9 @@ export const useCortexStore = create<CortexState>((set) => ({
       }
       const workspaces = [...state.workspaces];
       const [draggedWorkspace] = workspaces.splice(draggedIndex, 1);
-      workspaces.splice(targetIndex, 0, draggedWorkspace);
+      const targetIndexAfterRemoval = workspaces.findIndex((workspace) => workspace.id === targetWorkspaceId);
+      const insertIndex = placement === "after" ? targetIndexAfterRemoval + 1 : targetIndexAfterRemoval;
+      workspaces.splice(insertIndex, 0, draggedWorkspace);
       const next = { ...state, workspaces };
       saveState(next);
       return next;

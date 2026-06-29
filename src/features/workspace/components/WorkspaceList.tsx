@@ -1,12 +1,13 @@
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { Check, Copy, Folder, FolderOpen, GripVertical, Palette, Play, Plus, Puzzle, Trash2 } from "lucide-react";
-import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
+import type { DragEvent, ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { StatusIndicator } from "@/features/terminal/components/StatusIndicator";
 import { terminateTerminals } from "@/features/terminal/terminalBridge";
 import { SkillManagerModal } from "@/features/skills/components/SkillManagerModal";
+import { ProjectSetupModal } from "@/features/workspace/components/ProjectSetupModal";
 import { cn } from "@/lib/utils";
 import { useCortexStore, type SessionStatus, type Workspace } from "@/stores/cortexStore";
 
@@ -25,15 +26,20 @@ type ContextMenuState = {
   y: number;
 } | null;
 
+type DropTargetState = {
+  placement: "before" | "after";
+  workspaceId: string;
+} | null;
+
 export function WorkspaceList({ onWorkspaceOpen }: { onWorkspaceOpen?: (workspaceId: string) => void }) {
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
+  const [projectSetupOpen, setProjectSetupOpen] = useState(false);
   const [skillsWorkspace, setSkillsWorkspace] = useState<Workspace | null>(null);
   const [draggedWorkspaceId, setDraggedWorkspaceId] = useState<string | null>(null);
-  const [dropTargetId, setDropTargetId] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<DropTargetState>(null);
   const {
     workspaces,
     activeWorkspaceId,
-    createWorkspace,
     createWorkspaceFromDirectory,
     deleteWorkspace,
     duplicateWorkspace,
@@ -48,6 +54,19 @@ export function WorkspaceList({ onWorkspaceOpen }: { onWorkspaceOpen?: (workspac
   const contextWorkspace = contextMenu
     ? workspaces.find((workspace) => workspace.id === contextMenu.workspaceId)
     : undefined;
+  const workspaceStatuses = useMemo(() => {
+    const counts = new Map<string, { count: number; waiting: boolean }>();
+    for (const session of sessions) {
+      if (session.status !== "running" && session.status !== "waiting") {
+        continue;
+      }
+      const current = counts.get(session.workspaceId) ?? { count: 0, waiting: false };
+      current.count += 1;
+      current.waiting ||= session.status === "waiting";
+      counts.set(session.workspaceId, current);
+    }
+    return counts;
+  }, [sessions]);
 
   useEffect(() => {
     if (!contextMenu) {
@@ -115,6 +134,17 @@ export function WorkspaceList({ onWorkspaceOpen }: { onWorkspaceOpen?: (workspac
     deleteWorkspace(workspace.id);
   }
 
+  function updateDropTarget(event: DragEvent<HTMLElement>, workspaceId: string) {
+    if (!draggedWorkspaceId || draggedWorkspaceId === workspaceId) {
+      setDropTarget(null);
+      return;
+    }
+
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const placement = event.clientY < bounds.top + bounds.height / 2 ? "before" : "after";
+    setDropTarget({ workspaceId, placement });
+  }
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex items-center justify-between border-b border-border p-3">
@@ -122,7 +152,7 @@ export function WorkspaceList({ onWorkspaceOpen }: { onWorkspaceOpen?: (workspac
           <Folder className="h-3.5 w-3.5" />
           Folders / Workspaces
         </div>
-        <Button size="icon" variant="ghost" onClick={createWorkspace} title="Create workspace">
+        <Button size="icon" variant="ghost" onClick={() => setProjectSetupOpen(true)} title="Create project">
           <Plus className="h-4 w-4" />
         </Button>
       </div>
@@ -130,21 +160,15 @@ export function WorkspaceList({ onWorkspaceOpen }: { onWorkspaceOpen?: (workspac
       <div className="min-h-0 flex-1 space-y-1 overflow-y-auto p-[var(--cortex-workspace-list-padding)]">
         {workspaces.length === 0 ? (
           <div className="rounded-md border border-dashed border-border p-3 text-xs leading-5 text-muted-foreground">
-            Create a workspace to start organizing terminal sessions.
+            Create or clone a project to start organizing terminal sessions.
           </div>
         ) : (
           workspaces.map((workspace) => {
             const active = workspace.id === activeWorkspaceId;
-            const activeTerminalSessions = sessions.filter(
-              (session) =>
-                session.workspaceId === workspace.id &&
-                (session.status === "running" || session.status === "waiting"),
-            );
-            const workspaceStatus: SessionStatus | null = activeTerminalSessions.some(
-              (session) => session.status === "waiting",
-            )
+            const workspaceStatusInfo = workspaceStatuses.get(workspace.id);
+            const workspaceStatus: SessionStatus | null = workspaceStatusInfo?.waiting
               ? "waiting"
-              : activeTerminalSessions.length > 0
+              : workspaceStatusInfo?.count
                 ? "running"
                 : null;
 
@@ -155,36 +179,31 @@ export function WorkspaceList({ onWorkspaceOpen }: { onWorkspaceOpen?: (workspac
                   active && "border-primary/20 bg-secondary shadow-glow",
                   !active && "hover:bg-secondary/70",
                   draggedWorkspaceId === workspace.id && "opacity-45",
-                  dropTargetId === workspace.id && draggedWorkspaceId !== workspace.id && "border-primary/60 bg-primary/10",
+                  dropTarget?.workspaceId === workspace.id && draggedWorkspaceId !== workspace.id && "bg-primary/10",
                 )}
-                draggable
                 key={workspace.id}
                 onDragEnd={() => {
                   setDraggedWorkspaceId(null);
-                  setDropTargetId(null);
-                }}
-                onDragEnter={() => {
-                  if (draggedWorkspaceId && draggedWorkspaceId !== workspace.id) {
-                    setDropTargetId(workspace.id);
-                  }
+                  setDropTarget(null);
                 }}
                 onDragOver={(event) => {
                   event.preventDefault();
                   event.dataTransfer.dropEffect = "move";
+                  updateDropTarget(event, workspace.id);
                 }}
                 onDragStart={(event) => {
-                  setDraggedWorkspaceId(workspace.id);
-                  event.dataTransfer.effectAllowed = "move";
-                  event.dataTransfer.setData("text/plain", workspace.id);
+                  event.preventDefault();
                 }}
                 onDrop={(event) => {
                   event.preventDefault();
-                  const draggedId = draggedWorkspaceId ?? event.dataTransfer.getData("text/plain");
+                  event.stopPropagation();
+                  const draggedId = draggedWorkspaceId ?? event.dataTransfer.getData("application/x-cortex-workspace");
                   if (draggedId && draggedId !== workspace.id) {
-                    reorderWorkspaces(draggedId, workspace.id);
+                    const placement = dropTarget?.workspaceId === workspace.id ? dropTarget.placement : "before";
+                    reorderWorkspaces(draggedId, workspace.id, placement);
                   }
                   setDraggedWorkspaceId(null);
-                  setDropTargetId(null);
+                  setDropTarget(null);
                 }}
                 onContextMenu={(event) => {
                   event.preventDefault();
@@ -196,6 +215,14 @@ export function WorkspaceList({ onWorkspaceOpen }: { onWorkspaceOpen?: (workspac
                   });
                 }}
               >
+                {dropTarget?.workspaceId === workspace.id && draggedWorkspaceId !== workspace.id && (
+                  <span
+                    className={cn(
+                      "pointer-events-none absolute left-2 right-2 h-0.5 rounded-full bg-primary shadow-glow",
+                      dropTarget.placement === "before" ? "top-0" : "bottom-0",
+                    )}
+                  />
+                )}
                 <button
                   className="flex min-w-0 w-full items-center gap-[var(--cortex-workspace-item-gap)] text-left"
                   onClick={() => {
@@ -209,10 +236,25 @@ export function WorkspaceList({ onWorkspaceOpen }: { onWorkspaceOpen?: (workspac
                       : workspace.name
                   }
                 >
-                  <GripVertical
-                    aria-hidden="true"
-                    className="h-4 w-4 shrink-0 cursor-grab text-muted-foreground/60 active:cursor-grabbing"
-                  />
+                  <span
+                    className="grid h-7 w-5 shrink-0 cursor-grab place-items-center rounded text-muted-foreground/60 hover:bg-background/60 hover:text-foreground active:cursor-grabbing"
+                    draggable
+                    onClick={(event) => event.stopPropagation()}
+                    onDragEnd={() => {
+                      setDraggedWorkspaceId(null);
+                      setDropTarget(null);
+                    }}
+                    onDragStart={(event) => {
+                      event.stopPropagation();
+                      setDraggedWorkspaceId(workspace.id);
+                      event.dataTransfer.effectAllowed = "move";
+                      event.dataTransfer.setData("application/x-cortex-workspace", workspace.id);
+                      event.dataTransfer.setData("text/plain", workspace.id);
+                    }}
+                    title="Drag to reorder"
+                  >
+                    <GripVertical aria-hidden="true" className="h-4 w-4" />
+                  </span>
                   <span className="relative grid h-5 w-5 shrink-0 place-items-center">
                     <Folder
                       className={cn(
@@ -233,10 +275,10 @@ export function WorkspaceList({ onWorkspaceOpen }: { onWorkspaceOpen?: (workspac
                       {workspaceStatus && (
                         <span
                           className="flex shrink-0 items-center gap-1.5 rounded border border-border bg-background/50 px-1.5 py-0.5 text-[10px] uppercase text-muted-foreground"
-                          title={`${activeTerminalSessions.length} terminal${activeTerminalSessions.length === 1 ? "" : "s"} running or loading`}
+                          title={`${workspaceStatusInfo?.count ?? 0} terminal${workspaceStatusInfo?.count === 1 ? "" : "s"} running or loading`}
                         >
                           <StatusIndicator status={workspaceStatus} />
-                          {activeTerminalSessions.length}
+                          {workspaceStatusInfo?.count ?? 0}
                         </span>
                       )}
                     </span>
@@ -366,6 +408,11 @@ export function WorkspaceList({ onWorkspaceOpen }: { onWorkspaceOpen?: (workspac
         open={Boolean(skillsWorkspace)}
         workspace={skillsWorkspace}
         onClose={() => setSkillsWorkspace(null)}
+      />
+      <ProjectSetupModal
+        open={projectSetupOpen}
+        onClose={() => setProjectSetupOpen(false)}
+        onWorkspaceOpen={onWorkspaceOpen}
       />
     </div>
   );

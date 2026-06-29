@@ -45,6 +45,7 @@ import { useCortexStore } from "@/stores/cortexStore";
 type MarketplaceModalProps = {
   open: boolean;
   onClose: () => void;
+  onTerminalOpen?: (sessionId: string) => void;
 };
 
 type MarketplaceTab = "tools" | "feedback" | "templates" | "addons";
@@ -56,7 +57,7 @@ const tabItems: Array<{ id: MarketplaceTab; label: string; icon: typeof FileText
   { id: "addons", label: "Add-ons", icon: Puzzle },
 ];
 
-export function MarketplaceModal({ open, onClose }: MarketplaceModalProps) {
+export function MarketplaceModal({ open, onClose, onTerminalOpen }: MarketplaceModalProps) {
   const [activeTab, setActiveTab] = useState<MarketplaceTab>("tools");
 
   if (!open) {
@@ -103,7 +104,7 @@ export function MarketplaceModal({ open, onClose }: MarketplaceModalProps) {
           </nav>
 
           <div className="min-w-0 flex-1 overflow-y-auto p-5">
-            {activeTab === "tools" && <DeveloperToolsTab onClose={onClose} />}
+            {activeTab === "tools" && <DeveloperToolsTab onClose={onClose} onTerminalOpen={onTerminalOpen} />}
             {activeTab === "feedback" && <FeedbackTab />}
             {activeTab === "templates" && <TemplatesTab />}
             {activeTab === "addons" && <AddOnsTab />}
@@ -114,7 +115,7 @@ export function MarketplaceModal({ open, onClose }: MarketplaceModalProps) {
   );
 }
 
-function DeveloperToolsTab({ onClose }: { onClose: () => void }) {
+function DeveloperToolsTab({ onClose, onTerminalOpen }: { onClose: () => void; onTerminalOpen?: (sessionId: string) => void }) {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<(typeof developerToolCategories)[number]>("All");
   const { activeWorkspaceId, createSession, workspaces } = useCortexStore();
@@ -133,8 +134,9 @@ function DeveloperToolsTab({ onClose }: { onClose: () => void }) {
       window.alert("Create or select a workspace before installing developer tools.");
       return;
     }
-    const sessionId = createSession(activeWorkspace.id, "powershell");
+    const sessionId = createSession(activeWorkspace.id, "powershell", null);
     queueVisibleTerminalCommand(sessionId, command);
+    onTerminalOpen?.(sessionId);
     onClose();
   };
 

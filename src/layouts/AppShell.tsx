@@ -269,13 +269,14 @@ export function AppShell() {
     }
 
     autoStartedWorkspaceIds.current.add(activeWorkspace.id);
-    sessions
+    const sessionsToStart = sessions
       .filter(
         (session) =>
           session.workspaceId === activeWorkspace.id &&
           ["inactive", "completed", "error"].includes(session.status),
-      )
-      .forEach((session) => {
+      );
+    const timer = window.setTimeout(() => {
+      sessionsToStart.forEach((session) => {
         appendTerminalHistory(session.id, "\r\n--- New shell started ---\r\n");
         setSessionStatus(session.id, "waiting");
         void ensureTerminalSession(
@@ -291,6 +292,8 @@ export function AppShell() {
             setSessionStatus(session.id, "error");
           });
       });
+    }, 120);
+    return () => window.clearTimeout(timer);
   }, [activeWorkspace, appendTerminalHistory, officeWindowMode, sessions, setSessionStatus, settings.autoStartTerminals]);
 
   useEffect(() => {
@@ -448,7 +451,17 @@ export function AppShell() {
         </header>
 
         {activeView === "my-agents" ? (
-          <MyAgentsPage />
+          <MyAgentsPage
+            onTerminalOpen={(sessionId) => {
+              if (activeWorkspaceId) {
+                setWorkspaceView(false);
+                setActiveItem(activeWorkspaceId, sessionId);
+              }
+              setActiveView("workspace");
+              navigate("/");
+              window.setTimeout(() => focusTerminal(sessionId), 120);
+            }}
+          />
         ) : (
           <>
             <div className={officeViewEnabled ? "hidden" : "contents"}>
@@ -471,7 +484,19 @@ export function AppShell() {
         onOfficeToggle={toggleOfficeView}
         onTerminalViewOpen={() => setWorkspaceView(false)}
       />
-      <MarketplaceModal open={marketplaceOpen} onClose={() => setMarketplaceOpen(false)} />
+      <MarketplaceModal
+        open={marketplaceOpen}
+        onClose={() => setMarketplaceOpen(false)}
+        onTerminalOpen={(sessionId) => {
+          if (activeWorkspaceId) {
+            setWorkspaceView(false);
+            setActiveItem(activeWorkspaceId, sessionId);
+          }
+          setActiveView("workspace");
+          navigate("/");
+          window.setTimeout(() => focusTerminal(sessionId), 120);
+        }}
+      />
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
       {availableUpdate && <aside className="fixed bottom-4 left-4 z-[70] w-[min(360px,calc(100vw-2rem))] rounded-lg border border-primary/30 bg-card/95 p-4 shadow-2xl backdrop-blur"><div className="flex items-start gap-3"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-primary/10 text-primary"><Download className="h-4 w-4" /></span><div className="min-w-0 flex-1"><div className="text-sm font-semibold">Cortex {availableUpdate.version} is available</div><p className="mt-1 text-xs leading-5 text-muted-foreground">Update in the background. The new version appears after Cortex restarts.</p></div><Button size="icon" variant="ghost" onClick={() => setAvailableUpdate(null)} title="Remind me later"><X className="h-4 w-4" /></Button></div><div className="mt-4 flex justify-end gap-2"><Button size="sm" variant="ghost" onClick={() => setAvailableUpdate(null)}>Later</Button><Button size="sm" disabled={installingUpdate} onClick={() => void installAvailableUpdate()}><Download className="mr-2 h-4 w-4" />{installingUpdate ? "Updating..." : "Update"}</Button></div></aside>}
       {updateReadyVersion && <aside className="fixed bottom-4 left-4 z-[70] w-[min(360px,calc(100vw-2rem))] rounded-lg border border-cortex-green/30 bg-card/95 p-4 shadow-2xl backdrop-blur"><div className="flex items-start gap-3"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-cortex-green/10 text-cortex-green"><Download className="h-4 w-4" /></span><div className="min-w-0 flex-1"><div className="text-sm font-semibold">Cortex {updateReadyVersion} is ready</div><p className="mt-1 text-xs leading-5 text-muted-foreground">Restart Cortex when convenient to use the new version.</p></div><Button size="icon" variant="ghost" onClick={() => setUpdateReadyVersion(null)} title="Dismiss"><X className="h-4 w-4" /></Button></div><div className="mt-4 flex justify-end gap-2"><Button size="sm" variant="ghost" onClick={() => setUpdateReadyVersion(null)}>Later</Button><Button size="sm" onClick={() => void relaunch()}>Restart</Button></div></aside>}

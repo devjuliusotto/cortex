@@ -781,6 +781,109 @@ fn workspace_path(path: String) -> Result<PathBuf, String> {
         .map_err(|_| format!("Workspace path was not found: {trimmed}"))
 }
 
+fn derive_git_project_folder(url: &str) -> String {
+    url.trim()
+        .trim_end_matches('/')
+        .rsplit(['/', ':'])
+        .next()
+        .unwrap_or("project")
+        .trim_end_matches(".git")
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() || matches!(character, '-' | '_' | '.') {
+                character
+            } else {
+                '-'
+            }
+        })
+        .collect::<String>()
+        .trim_matches(['-', '.'])
+        .to_string()
+}
+
+fn ensure_child_folder_name(name: &str) -> Result<String, String> {
+    let clean = name.trim();
+    if clean.is_empty() {
+        return Err("Project folder name is empty.".to_string());
+    }
+    let path = Path::new(clean);
+    if path.components().count() != 1
+        || path.components().any(|component| {
+            matches!(
+                component,
+                std::path::Component::ParentDir
+                    | std::path::Component::RootDir
+                    | std::path::Component::Prefix(_)
+            )
+        })
+    {
+        return Err("Use a single folder name for the project.".to_string());
+    }
+    Ok(clean.to_string())
+}
+
+#[tauri::command]
+fn create_project_directory(path: String) -> Result<String, String> {
+    let clean = path.trim();
+    if clean.is_empty() {
+        return Err("Project path is empty.".to_string());
+    }
+    let project = PathBuf::from(clean);
+    fs::create_dir_all(&project).map_err(|error| error.to_string())?;
+    project
+        .canonicalize()
+        .map(|path| path.to_string_lossy().into_owned())
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn clone_project_repository(
+    parent_path: String,
+    git_url: String,
+    folder_name: Option<String>,
+) -> Result<String, String> {
+    let clean_parent = parent_path.trim();
+    let clean_url = git_url.trim();
+    if clean_parent.is_empty() {
+        return Err("Project parent path is empty.".to_string());
+    }
+    if clean_url.is_empty() {
+        return Err("Git URL is empty.".to_string());
+    }
+
+    let parent = PathBuf::from(clean_parent);
+    fs::create_dir_all(&parent).map_err(|error| error.to_string())?;
+    let parent = parent.canonicalize().map_err(|error| error.to_string())?;
+    let folder = match folder_name.as_deref().map(str::trim).filter(|value| !value.is_empty()) {
+        Some(value) => ensure_child_folder_name(value)?,
+        None => {
+            let derived = derive_git_project_folder(clean_url);
+            ensure_child_folder_name(if derived.is_empty() { "project" } else { &derived })?
+        }
+    };
+    let destination = parent.join(folder);
+    if destination.exists() {
+        return Err(format!(
+            "Project folder already exists: {}",
+            destination.to_string_lossy()
+        ));
+    }
+
+    run_git_internal(
+        &parent,
+        &vec![
+            "clone".to_string(),
+            clean_url.to_string(),
+            destination.to_string_lossy().to_string(),
+        ],
+        Duration::from_secs(300),
+    )?;
+    destination
+        .canonicalize()
+        .map(|path| path.to_string_lossy().into_owned())
+        .map_err(|error| error.to_string())
+}
+
 fn parse_skill_frontmatter(skill_file: &Path) -> (String, Option<String>) {
     let raw = fs::read_to_string(skill_file).unwrap_or_default();
     let mut name = skill_file
@@ -2483,6 +2586,8 @@ pub fn run() {
             read_clipboard_text,
             write_clipboard_text,
             validate_working_directory,
+            create_project_directory,
+            clone_project_repository,
             inspect_github_skill,
             inspect_local_skill,
             install_github_skill,
