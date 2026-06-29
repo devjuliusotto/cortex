@@ -169,6 +169,35 @@ export function GitMapPanel({ paneId, template, workspaceId }: Props) {
       return;
     }
 
+    let inFlight = false;
+
+    const pollStatus = async () => {
+      if (inFlight) {
+        return;
+      }
+      inFlight = true;
+      try {
+        await refreshStatusRef.current?.();
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    void pollStatus();
+    const intervalId = setInterval(() => {
+      void pollStatus();
+    }, 5000);
+
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [activeTab, marketingDemo, overview?.isRepo, repoPath]);
+
+  useEffect(() => {
+    if (marketingDemo || activeTab !== "changes" || !repoPath || !overview?.isRepo) {
+      return;
+    }
+
     let disposed = false;
     let watchedRoot: string | null = null;
     let debounceId: ReturnType<typeof setTimeout> | null = null;

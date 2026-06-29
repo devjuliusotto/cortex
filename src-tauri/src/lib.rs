@@ -2222,10 +2222,16 @@ fn git_create_release(
         update_json_version(&root.join("package.json"), version)?;
     }
     if options.update_tauri_conf {
-        update_json_version(&root.join("src-tauri").join("tauri.conf.json"), version)?;
+        let tauri_conf = root.join("src-tauri").join("tauri.conf.json");
+        if tauri_conf.exists() {
+            update_json_version(&tauri_conf, version)?;
+        }
     }
     if options.update_cargo_toml {
-        update_cargo_version(&root.join("src-tauri").join("Cargo.toml"), version)?;
+        let cargo_toml = root.join("src-tauri").join("Cargo.toml");
+        if cargo_toml.exists() {
+            update_cargo_version(&cargo_toml, version)?;
+        }
     }
     if options.commit_changes {
         let mut add_args = vec!["add".to_string()];

@@ -1,5 +1,5 @@
 import { Tag } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { gitService } from "@/features/git/gitService";
 import type { GitReleaseInfo, GitReleaseOptions } from "@/features/git/gitTypes";
@@ -26,6 +26,16 @@ export function GitReleasesTab({ actionLoading, info, onAction, repoPath }: Prop
   const [notes, setNotes] = useState("");
   const [options, setOptions] = useState<GitReleaseOptions>(defaultOptions);
   const tag = version.trim() ? `v${version.trim()}` : "v0.0.0";
+  const supportsTauriConf = Boolean(info?.tauriVersion);
+  const supportsCargoToml = Boolean(info?.cargoVersion);
+
+  useEffect(() => {
+    setOptions((current) => ({
+      ...current,
+      updateTauriConf: supportsTauriConf ? current.updateTauriConf : false,
+      updateCargoToml: supportsCargoToml ? current.updateCargoToml : false,
+    }));
+  }, [supportsCargoToml, supportsTauriConf]);
 
   const preview = useMemo(() => {
     const items = [];
@@ -88,16 +98,20 @@ export function GitReleasesTab({ actionLoading, info, onAction, repoPath }: Prop
           value={notes}
         />
         <div className="mt-4 grid gap-2">
-          {Object.entries(options).map(([key, value]) => (
+          {releaseOptionKeys.map((key) => {
+            const disabled = (key === "updateTauriConf" && !supportsTauriConf) || (key === "updateCargoToml" && !supportsCargoToml);
+            return (
             <label className="flex items-center gap-2 text-sm" key={key}>
               <input
-                checked={value}
+                checked={options[key]}
+                disabled={disabled}
                 onChange={(event) => setOptions((current) => ({ ...current, [key]: event.target.checked }))}
                 type="checkbox"
               />
-              {optionLabel(key as keyof GitReleaseOptions)}
+              <span className={disabled ? "text-muted-foreground" : undefined}>{optionLabel(key)}</span>
             </label>
-          ))}
+            );
+          })}
         </div>
         <div className="mt-4 rounded-md border border-border bg-background/35 p-3">
           <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Preview</div>
@@ -112,6 +126,16 @@ export function GitReleasesTab({ actionLoading, info, onAction, repoPath }: Prop
     </div>
   );
 }
+
+const releaseOptionKeys: Array<keyof GitReleaseOptions> = [
+  "updatePackageJson",
+  "updateTauriConf",
+  "updateCargoToml",
+  "commitChanges",
+  "createGitTag",
+  "pushBranch",
+  "pushTag",
+];
 
 function VersionTile({ label, value }: { label: string; value?: string | null }) {
   return (

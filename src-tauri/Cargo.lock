@@ -653,7 +653,7 @@ dependencies = [
 
 [[package]]
 name = "cortex"
-version = "0.1.38"
+version = "0.1.40"
 dependencies = [
  "notify",
  "portable-pty",
