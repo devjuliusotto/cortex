@@ -30,6 +30,14 @@ type ProjectSkillInfo = {
   compatibleAgents: string[];
 };
 
+type CortexSkillSource = {
+  name: string;
+  description?: string;
+  path: string;
+  origin: string;
+  compatibleAgents: string[];
+};
+
 export function ProjectSetupModal({ open, onClose, onWorkspaceOpen }: ProjectSetupModalProps) {
   const createWorkspaceFromProject = useCortexStore((state) => state.createWorkspaceFromProject);
   const [mode, setMode] = useState<ProjectMode>("create");
@@ -40,6 +48,8 @@ export function ProjectSetupModal({ open, onClose, onWorkspaceOpen }: ProjectSet
   const [gitUrl, setGitUrl] = useState("");
   const [skillsOpen, setSkillsOpen] = useState(false);
   const [localSkillPaths, setLocalSkillPaths] = useState<string[]>([]);
+  const [cortexSkills, setCortexSkills] = useState<CortexSkillSource[]>([]);
+  const [selectedCortexSkillPaths, setSelectedCortexSkillPaths] = useState<string[]>([]);
   const [installedSkills, setInstalledSkills] = useState<ProjectSkillInfo[]>([]);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("");
@@ -56,6 +66,9 @@ export function ProjectSetupModal({ open, onClose, onWorkspaceOpen }: ProjectSet
     setError("");
     setStatus("");
     setInstalledSkills([]);
+    void invoke<CortexSkillSource[]>("list_cortex_skills")
+      .then(setCortexSkills)
+      .catch(() => setCortexSkills([]));
   }, [open]);
 
   useEffect(() => {
@@ -113,6 +126,13 @@ export function ProjectSetupModal({ open, onClose, onWorkspaceOpen }: ProjectSet
     }
   }
 
+  function toggleCortexSkill(path: string) {
+    setSelectedCortexSkillPaths((current) =>
+      current.includes(path) ? current.filter((item) => item !== path) : [...current, path],
+    );
+    setSkillsOpen(true);
+  }
+
   function fillNamesFromPath(path: string) {
     const name = baseName(path);
     if (!projectName.trim()) setProjectName(name);
@@ -146,7 +166,8 @@ export function ProjectSetupModal({ open, onClose, onWorkspaceOpen }: ProjectSet
         setStatus(`Cloned repository: ${finalPath}`);
       }
 
-      for (const skillPath of localSkillPaths) {
+      const skillPaths = Array.from(new Set([...localSkillPaths, ...selectedCortexSkillPaths]));
+      for (const skillPath of skillPaths) {
         setStatus((current) => `${current}\nInstalling skill: ${skillPath}`);
         await invoke<ProjectSkillInfo>("install_local_skill", {
           projectPath: finalPath,
@@ -273,7 +294,7 @@ export function ProjectSetupModal({ open, onClose, onWorkspaceOpen }: ProjectSet
                   Skills
                 </span>
                 <span className="text-xs text-muted-foreground">
-                  {localSkillPaths.length + installedSkills.length}
+                  {localSkillPaths.length + selectedCortexSkillPaths.length + installedSkills.length}
                 </span>
               </button>
               {skillsOpen && (
@@ -288,6 +309,17 @@ export function ProjectSetupModal({ open, onClose, onWorkspaceOpen }: ProjectSet
                     {installedSkills.map((skill) => (
                       <SkillRow key={skill.installedPath ?? skill.name} name={skill.name} detail="Already installed" />
                     ))}
+                    {selectedCortexSkillPaths.map((path) => {
+                      const skill = cortexSkills.find((item) => item.path === path);
+                      return (
+                        <SkillRow
+                          key={path}
+                          name={skill?.name ?? baseName(path)}
+                          detail={skill ? `Cortex skill · ${skill.origin}` : path}
+                          onRemove={() => toggleCortexSkill(path)}
+                        />
+                      );
+                    })}
                     {localSkillPaths.map((path) => (
                       <SkillRow
                         key={path}
@@ -296,12 +328,44 @@ export function ProjectSetupModal({ open, onClose, onWorkspaceOpen }: ProjectSet
                         onRemove={() => setLocalSkillPaths((current) => current.filter((item) => item !== path))}
                       />
                     ))}
-                    {installedSkills.length === 0 && localSkillPaths.length === 0 && (
+                    {installedSkills.length === 0 && selectedCortexSkillPaths.length === 0 && localSkillPaths.length === 0 && (
                       <div className="rounded-md border border-dashed border-border p-3 text-xs text-muted-foreground">
                         Nenhuma skill.
                       </div>
                     )}
                   </div>
+                  {cortexSkills.length > 0 && (
+                    <div className="mt-4">
+                      <div className="mb-2 text-xs font-medium text-muted-foreground">Skills do Cortex</div>
+                      <div className="max-h-44 space-y-2 overflow-y-auto">
+                        {cortexSkills.map((skill) => {
+                          const selected = selectedCortexSkillPaths.includes(skill.path);
+                          return (
+                            <button
+                              className={cn(
+                                "w-full rounded-md border p-3 text-left transition-colors",
+                                selected ? "border-primary/40 bg-primary/10" : "border-border bg-background/50 hover:bg-secondary",
+                              )}
+                              key={skill.path}
+                              onClick={() => toggleCortexSkill(skill.path)}
+                              type="button"
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <div className="truncate text-sm font-medium">{skill.name}</div>
+                                  <div className="mt-1 truncate text-[11px] text-primary">{skill.origin}</div>
+                                </div>
+                                <span className="shrink-0 rounded border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                                  {selected ? "selected" : `${skill.compatibleAgents.length} agents`}
+                                </span>
+                              </div>
+                              {skill.description && <p className="mt-2 text-xs leading-5 text-muted-foreground">{skill.description}</p>}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

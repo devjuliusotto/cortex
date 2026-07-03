@@ -81,6 +81,24 @@ struct ProjectSkillInfo {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+struct CortexSkillSource {
+    name: String,
+    description: Option<String>,
+    path: String,
+    origin: String,
+    compatible_agents: Vec<String>,
+    compatibility_note: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AgentInstallResult {
+    code: Option<i32>,
+    output: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct GitBranchInfo {
     name: String,
     is_current: bool,
@@ -252,7 +270,10 @@ fn is_allowed_external_url(url: &str) -> bool {
     else {
         return false;
     };
-    let authority = without_scheme.split(['/', '?', '#']).next().unwrap_or_default();
+    let authority = without_scheme
+        .split(['/', '?', '#'])
+        .next()
+        .unwrap_or_default();
     let host = if let Some(rest) = authority.strip_prefix('[') {
         rest.split(']').next().unwrap_or_default()
     } else {
@@ -418,15 +439,17 @@ fn import_persisted_state(path: String) -> Result<Value, String> {
 fn detect_agent_command(command: String) -> Result<bool, String> {
     let command = command.trim();
     if command.is_empty()
-        || !command
-            .chars()
-            .all(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '_' | '.'))
+        || !command.chars().all(|character| {
+            character.is_ascii_alphanumeric() || matches!(character, '-' | '_' | '.')
+        })
     {
         return Err("Invalid agent command".into());
     }
 
     let status = if cfg!(windows) {
-        std::process::Command::new("where.exe").arg(command).status()
+        std::process::Command::new("where.exe")
+            .arg(command)
+            .status()
     } else {
         std::process::Command::new("which").arg(command).status()
     }
@@ -451,9 +474,9 @@ fn detect_agent_commands(commands: Vec<String>) -> Result<HashMap<String, bool>,
     for command in commands {
         let command = command.trim().to_string();
         if command.is_empty()
-            || !command
-                .chars()
-                .all(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '_' | '.'))
+            || !command.chars().all(|character| {
+                character.is_ascii_alphanumeric() || matches!(character, '-' | '_' | '.')
+            })
         {
             return Err("Invalid agent command".into());
         }
@@ -467,9 +490,9 @@ fn detect_agent_commands(commands: Vec<String>) -> Result<HashMap<String, bool>,
             #[cfg(windows)]
             {
                 if Path::new(&command).extension().is_none() {
-                    return extensions
-                        .iter()
-                        .any(|extension| directory.join(format!("{command}{extension}")).is_file());
+                    return extensions.iter().any(|extension| {
+                        directory.join(format!("{command}{extension}")).is_file()
+                    });
                 }
             }
 
@@ -481,19 +504,118 @@ fn detect_agent_commands(commands: Vec<String>) -> Result<HashMap<String, bool>,
     Ok(results)
 }
 
+#[tauri::command]
+fn run_agent_install_command(
+    command: String,
+    cwd: Option<String>,
+) -> Result<AgentInstallResult, String> {
+    let command = command.trim();
+    if command.is_empty() {
+        return Err("Install command is empty.".into());
+    }
+    if command.len() > 4_000 {
+        return Err("Install command is too long.".into());
+    }
+
+    let working_directory = resolve_working_directory("powershell", cwd).cwd;
+    let mut process = if cfg!(windows) {
+        let mut process = Command::new("powershell.exe");
+        process.args([
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            command,
+        ]);
+        process
+    } else {
+        let mut process = Command::new("sh");
+        process.args(["-lc", command]);
+        process
+    };
+    if let Some(directory) = working_directory {
+        process.current_dir(directory);
+    }
+    process
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    #[cfg(windows)]
+    {
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        process.creation_flags(CREATE_NO_WINDOW);
+    }
+
+    let output = process.output().map_err(|error| {
+        if error.kind() == std::io::ErrorKind::NotFound {
+            "PowerShell was not found in PATH.".to_string()
+        } else {
+            error.to_string()
+        }
+    })?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let combined = format!("{}{}", stdout, stderr);
+    let tail = output_tail(&combined, 1_200);
+    if output.status.success() {
+        return Ok(AgentInstallResult {
+            code: output.status.code(),
+            output: tail,
+        });
+    }
+
+    let detail = if tail.trim().is_empty() {
+        format!(
+            "Install command failed with exit code {:?}.",
+            output.status.code()
+        )
+    } else {
+        tail
+    };
+    Err(detail)
+}
+
+fn output_tail(output: &str, max_chars: usize) -> String {
+    let trimmed = output.trim();
+    if trimmed.chars().count() <= max_chars {
+        return trimmed.to_string();
+    }
+    let tail = trimmed
+        .chars()
+        .rev()
+        .take(max_chars)
+        .collect::<String>()
+        .chars()
+        .rev()
+        .collect::<String>();
+    format!("...{tail}")
+}
+
 fn resolve_skill_directory(path: &str, workspace_path: Option<&str>) -> Result<PathBuf, String> {
     match path {
-        "~/.gemini/skills/" => home_dir().map(PathBuf::from).map(|root| root.join(".gemini").join("skills")),
-        "~/.agents/skills/" => home_dir().map(PathBuf::from).map(|root| root.join(".agents").join("skills")),
-        ".gemini/skills/" => workspace_path.map(PathBuf::from).map(|root| root.join(".gemini").join("skills")),
-        ".agents/skills/" => workspace_path.map(PathBuf::from).map(|root| root.join(".agents").join("skills")),
+        "~/.gemini/skills/" => home_dir()
+            .map(PathBuf::from)
+            .map(|root| root.join(".gemini").join("skills")),
+        "~/.agents/skills/" => home_dir()
+            .map(PathBuf::from)
+            .map(|root| root.join(".agents").join("skills")),
+        ".gemini/skills/" => workspace_path
+            .map(PathBuf::from)
+            .map(|root| root.join(".gemini").join("skills")),
+        ".agents/skills/" => workspace_path
+            .map(PathBuf::from)
+            .map(|root| root.join(".agents").join("skills")),
         _ => None,
     }
     .ok_or_else(|| "Skill directory is not available".to_string())
 }
 
 #[tauri::command]
-fn get_skill_directory_info(path: String, workspace_path: Option<String>) -> Result<SkillDirectoryInfo, String> {
+fn get_skill_directory_info(
+    path: String,
+    workspace_path: Option<String>,
+) -> Result<SkillDirectoryInfo, String> {
     let resolved = resolve_skill_directory(&path, workspace_path.as_deref())?;
     Ok(SkillDirectoryInfo {
         exists: resolved.is_dir(),
@@ -502,7 +624,10 @@ fn get_skill_directory_info(path: String, workspace_path: Option<String>) -> Res
 }
 
 #[tauri::command]
-fn create_skill_directory(path: String, workspace_path: Option<String>) -> Result<SkillDirectoryInfo, String> {
+fn create_skill_directory(
+    path: String,
+    workspace_path: Option<String>,
+) -> Result<SkillDirectoryInfo, String> {
     let resolved = resolve_skill_directory(&path, workspace_path.as_deref())?;
     fs::create_dir_all(&resolved).map_err(|error| error.to_string())?;
     Ok(SkillDirectoryInfo {
@@ -519,11 +644,20 @@ fn open_skill_directory(path: String, workspace_path: Option<String>) -> Result<
     }
 
     #[cfg(windows)]
-    std::process::Command::new("explorer.exe").arg(&resolved).spawn().map_err(|error| error.to_string())?;
+    std::process::Command::new("explorer.exe")
+        .arg(&resolved)
+        .spawn()
+        .map_err(|error| error.to_string())?;
     #[cfg(target_os = "macos")]
-    std::process::Command::new("open").arg(&resolved).spawn().map_err(|error| error.to_string())?;
+    std::process::Command::new("open")
+        .arg(&resolved)
+        .spawn()
+        .map_err(|error| error.to_string())?;
     #[cfg(all(unix, not(target_os = "macos")))]
-    std::process::Command::new("xdg-open").arg(&resolved).spawn().map_err(|error| error.to_string())?;
+    std::process::Command::new("xdg-open")
+        .arg(&resolved)
+        .spawn()
+        .map_err(|error| error.to_string())?;
     Ok(())
 }
 
@@ -600,7 +734,11 @@ fn write_clipboard_text(text: String) -> Result<(), String> {
     #[cfg(windows)]
     {
         let mut child = std::process::Command::new("powershell.exe")
-            .args(["-NoProfile", "-Command", "Set-Clipboard -Value ([Console]::In.ReadToEnd())"])
+            .args([
+                "-NoProfile",
+                "-Command",
+                "Set-Clipboard -Value ([Console]::In.ReadToEnd())",
+            ])
             .stdin(std::process::Stdio::piped())
             .spawn()
             .map_err(|error| error.to_string())?;
@@ -612,7 +750,9 @@ fn write_clipboard_text(text: String) -> Result<(), String> {
                 .map_err(|error| error.to_string())?;
         }
 
-        let output = child.wait_with_output().map_err(|error| error.to_string())?;
+        let output = child
+            .wait_with_output()
+            .map_err(|error| error.to_string())?;
         if output.status.success() {
             return Ok(());
         }
@@ -777,8 +917,32 @@ fn workspace_path(path: String) -> Result<PathBuf, String> {
         return Err("Workspace path is empty.".to_string());
     }
     let path = PathBuf::from(trimmed);
-    path.canonicalize()
-        .map_err(|_| format!("Workspace path was not found: {trimmed}"))
+    canonical_path(&path).map_err(|_| format!("Workspace path was not found: {trimmed}"))
+}
+
+fn canonical_path(path: &Path) -> Result<PathBuf, std::io::Error> {
+    let canonical = path.canonicalize()?;
+    Ok(PathBuf::from(normalize_windows_verbatim_path(
+        &canonical.to_string_lossy(),
+    )))
+}
+
+fn normalize_windows_verbatim_path(path: &str) -> String {
+    if let Some(rest) = path.strip_prefix(r"\\?\UNC\") {
+        return format!(r"\\{rest}");
+    }
+    if let Some(rest) = path.strip_prefix(r"\\?\") {
+        return rest.to_string();
+    }
+    path.to_string()
+}
+
+fn path_for_external_process(path: &Path) -> PathBuf {
+    PathBuf::from(normalize_windows_verbatim_path(&path.to_string_lossy()))
+}
+
+fn path_string_for_ui(path: &Path) -> String {
+    normalize_windows_verbatim_path(&path.to_string_lossy())
 }
 
 fn derive_git_project_folder(url: &str) -> String {
@@ -830,9 +994,8 @@ fn create_project_directory(path: String) -> Result<String, String> {
     }
     let project = PathBuf::from(clean);
     fs::create_dir_all(&project).map_err(|error| error.to_string())?;
-    project
-        .canonicalize()
-        .map(|path| path.to_string_lossy().into_owned())
+    canonical_path(&project)
+        .map(|path| path_string_for_ui(&path))
         .map_err(|error| error.to_string())
 }
 
@@ -853,15 +1016,23 @@ fn clone_project_repository(
 
     let parent = PathBuf::from(clean_parent);
     fs::create_dir_all(&parent).map_err(|error| error.to_string())?;
-    let parent = parent.canonicalize().map_err(|error| error.to_string())?;
-    let folder = match folder_name.as_deref().map(str::trim).filter(|value| !value.is_empty()) {
+    let parent = canonical_path(&parent).map_err(|error| error.to_string())?;
+    let folder = match folder_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
         Some(value) => ensure_child_folder_name(value)?,
         None => {
             let derived = derive_git_project_folder(clean_url);
-            ensure_child_folder_name(if derived.is_empty() { "project" } else { &derived })?
+            ensure_child_folder_name(if derived.is_empty() {
+                "project"
+            } else {
+                &derived
+            })?
         }
     };
-    let destination = parent.join(folder);
+    let destination = parent.join(&folder);
     if destination.exists() {
         return Err(format!(
             "Project folder already exists: {}",
@@ -874,13 +1045,12 @@ fn clone_project_repository(
         &vec![
             "clone".to_string(),
             clean_url.to_string(),
-            destination.to_string_lossy().to_string(),
+            folder.to_string(),
         ],
         Duration::from_secs(300),
     )?;
-    destination
-        .canonicalize()
-        .map(|path| path.to_string_lossy().into_owned())
+    canonical_path(&destination)
+        .map(|path| path_string_for_ui(&path))
         .map_err(|error| error.to_string())
 }
 
@@ -918,7 +1088,9 @@ fn parse_skill_frontmatter(skill_file: &Path) -> (String, Option<String>) {
 }
 
 fn has_path(root: &Path, candidates: &[&str]) -> bool {
-    candidates.iter().any(|candidate| root.join(candidate).exists())
+    candidates
+        .iter()
+        .any(|candidate| root.join(candidate).exists())
 }
 
 fn detect_skill_compatibility(skill_root: &Path) -> (Vec<String>, String) {
@@ -1010,6 +1182,76 @@ fn inspect_skill_directory(skill_root: &Path, source: String) -> Result<ProjectS
     })
 }
 
+fn cortex_skill_roots(app: &AppHandle) -> Vec<(PathBuf, String)> {
+    let mut roots = Vec::new();
+    if let Ok(current) = env::current_dir() {
+        roots.push((current.join("skills"), "Cortex workspace".to_string()));
+        roots.push((
+            current.join(".agents").join("skills"),
+            "Cortex workspace".to_string(),
+        ));
+    }
+    if let Ok(resource_dir) = app.path().resource_dir() {
+        roots.push((resource_dir.join("skills"), "Cortex resources".to_string()));
+        roots.push((
+            resource_dir.join(".agents").join("skills"),
+            "Cortex resources".to_string(),
+        ));
+    }
+    if let Some(home) = home_dir() {
+        let home = PathBuf::from(home);
+        roots.push((
+            home.join(".agents").join("skills"),
+            "Cortex user skills".to_string(),
+        ));
+        roots.push((
+            home.join(".codex").join("skills"),
+            "Cortex user skills".to_string(),
+        ));
+    }
+    roots
+}
+
+#[tauri::command]
+fn list_cortex_skills(app: AppHandle) -> Result<Vec<CortexSkillSource>, String> {
+    let mut skills = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for (root, origin) in cortex_skill_roots(&app) {
+        if !root.is_dir() {
+            continue;
+        }
+        for entry in fs::read_dir(&root).map_err(|error| error.to_string())? {
+            let entry = entry.map_err(|error| error.to_string())?;
+            let path = entry.path();
+            if !path.is_dir() || !path.join("SKILL.md").is_file() {
+                continue;
+            }
+            let canonical = canonical_path(&path).map_err(|error| error.to_string())?;
+            let path_key = path_string_for_ui(&canonical);
+            if !seen.insert(path_key.clone()) {
+                continue;
+            }
+            let info = inspect_skill_directory(&canonical, path_key.clone())?;
+            skills.push(CortexSkillSource {
+                name: info.name,
+                description: info.description,
+                path: path_key,
+                origin: origin.clone(),
+                compatible_agents: info.compatible_agents,
+                compatibility_note: info.compatibility_note,
+            });
+        }
+    }
+    skills.sort_by(|first, second| {
+        first
+            .name
+            .to_lowercase()
+            .cmp(&second.name.to_lowercase())
+            .then_with(|| first.path.cmp(&second.path))
+    });
+    Ok(skills)
+}
+
 fn parse_github_skill_url(url: &str) -> Result<(String, Option<String>, Option<String>), String> {
     let trimmed = url.trim().trim_end_matches('/');
     let without_scheme = trimmed
@@ -1099,7 +1341,11 @@ fn copy_skill_directory(source: &Path, destination: &Path) -> Result<(), String>
         if entry.file_name() == ".git" {
             continue;
         }
-        if entry.file_type().map_err(|error| error.to_string())?.is_symlink() {
+        if entry
+            .file_type()
+            .map_err(|error| error.to_string())?
+            .is_symlink()
+        {
             continue;
         }
         let target = destination.join(entry.file_name());
@@ -1123,11 +1369,35 @@ fn add_private_skill_exclude(project: &Path, folder_name: &str) -> Result<(), St
     let rule = format!("/.agents/skills/{folder_name}/");
     let current = fs::read_to_string(&exclude_path).unwrap_or_default();
     if !current.lines().any(|line| line.trim() == rule) {
-        let separator = if current.is_empty() || current.ends_with('\n') { "" } else { "\n" };
+        let separator = if current.is_empty() || current.ends_with('\n') {
+            ""
+        } else {
+            "\n"
+        };
         fs::write(exclude_path, format!("{current}{separator}{rule}\n"))
             .map_err(|error| error.to_string())?;
     }
     Ok(())
+}
+
+fn remove_private_skill_exclude(project: &Path, folder_name: &str) -> Result<(), String> {
+    let exclude_path = project.join(".git").join("info").join("exclude");
+    if !exclude_path.is_file() {
+        return Ok(());
+    }
+    let rule = format!("/.agents/skills/{folder_name}/");
+    let current = fs::read_to_string(&exclude_path).unwrap_or_default();
+    let next = current
+        .lines()
+        .filter(|line| line.trim() != rule)
+        .collect::<Vec<_>>()
+        .join("\n");
+    let output = if next.is_empty() {
+        String::new()
+    } else {
+        format!("{next}\n")
+    };
+    fs::write(exclude_path, output).map_err(|error| error.to_string())
 }
 
 fn install_skill_directory(
@@ -1142,7 +1412,9 @@ fn install_skill_directory(
     }
     let destination = project.join(".agents").join("skills").join(&folder_name);
     if destination.exists() {
-        return Err(format!("A project skill named '{folder_name}' is already installed."));
+        return Err(format!(
+            "A project skill named '{folder_name}' is already installed."
+        ));
     }
     copy_skill_directory(skill_root, &destination)?;
     add_private_skill_exclude(project, &folder_name)?;
@@ -1174,7 +1446,10 @@ fn install_github_skill(project_path: String, url: String) -> Result<ProjectSkil
 }
 
 #[tauri::command]
-fn install_local_skill(project_path: String, source_path: String) -> Result<ProjectSkillInfo, String> {
+fn install_local_skill(
+    project_path: String,
+    source_path: String,
+) -> Result<ProjectSkillInfo, String> {
     let project = workspace_path(project_path)?;
     let skill_root = workspace_path(source_path.clone())?;
     install_skill_directory(&project, &skill_root, source_path)
@@ -1201,11 +1476,37 @@ fn list_project_skills(project_path: String) -> Result<Vec<ProjectSkillInfo>, St
     Ok(skills)
 }
 
+#[tauri::command]
+fn delete_project_skill(project_path: String, installed_path: String) -> Result<(), String> {
+    let project = workspace_path(project_path)?;
+    let skills_root = canonical_path(&project.join(".agents").join("skills"))
+        .map_err(|_| "Project skills folder was not found.".to_string())?;
+    let target = canonical_path(&PathBuf::from(installed_path.trim()))
+        .map_err(|_| "Project skill folder was not found.".to_string())?;
+    if !target.starts_with(&skills_root) || target == skills_root {
+        return Err(
+            "Only skills inside this project's .agents/skills folder can be deleted.".into(),
+        );
+    }
+    if !target.join("SKILL.md").is_file() {
+        return Err("The selected folder is not a project skill.".into());
+    }
+    let folder_name = target
+        .file_name()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| "Project skill folder name is invalid.".to_string())?
+        .to_string();
+    fs::remove_dir_all(&target).map_err(|error| error.to_string())?;
+    remove_private_skill_exclude(&project, &folder_name)?;
+    Ok(())
+}
+
 fn run_git_internal(cwd: &Path, args: &[String], timeout: Duration) -> Result<String, String> {
+    let external_cwd = path_for_external_process(cwd);
     let mut command = Command::new("git");
     command
         .args(args)
-        .current_dir(cwd)
+        .current_dir(&external_cwd)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
@@ -1239,7 +1540,9 @@ fn run_git_internal(cwd: &Path, args: &[String], timeout: Duration) -> Result<St
         }
     }
 
-    let output = child.wait_with_output().map_err(|error| error.to_string())?;
+    let output = child
+        .wait_with_output()
+        .map_err(|error| error.to_string())?;
     if output.status.success() {
         return String::from_utf8(output.stdout).map_err(|error| error.to_string());
     }
@@ -1253,7 +1556,10 @@ fn run_git_internal(cwd: &Path, args: &[String], timeout: Duration) -> Result<St
 }
 
 fn git_panel_command(cwd: &Path, args: &[&str]) -> Result<String, String> {
-    let owned_args = args.iter().map(|value| value.to_string()).collect::<Vec<_>>();
+    let owned_args = args
+        .iter()
+        .map(|value| value.to_string())
+        .collect::<Vec<_>>();
     run_git_internal(cwd, &owned_args, Duration::from_secs(20))
 }
 
@@ -1263,7 +1569,9 @@ fn git_panel_command_owned(cwd: &Path, args: Vec<String>) -> Result<String, Stri
 
 fn git_panel_root(workspace: &Path) -> Result<PathBuf, String> {
     let root = git_panel_command(workspace, &["rev-parse", "--show-toplevel"])?;
-    Ok(PathBuf::from(root.trim()).canonicalize().unwrap_or_else(|_| PathBuf::from(root.trim())))
+    Ok(PathBuf::from(root.trim())
+        .canonicalize()
+        .unwrap_or_else(|_| PathBuf::from(root.trim())))
 }
 
 fn optional_git_panel_command(cwd: &Path, args: &[&str]) -> Option<String> {
@@ -1289,11 +1597,12 @@ fn parse_git_status(status: &str) -> Vec<GitFileChange> {
                 return None;
             }
 
-            let (path, original_path) = if let Some((old_path, new_path)) = raw_path.split_once(" -> ") {
-                (new_path.to_string(), Some(old_path.to_string()))
-            } else {
-                (raw_path.to_string(), None)
-            };
+            let (path, original_path) =
+                if let Some((old_path, new_path)) = raw_path.split_once(" -> ") {
+                    (new_path.to_string(), Some(old_path.to_string()))
+                } else {
+                    (raw_path.to_string(), None)
+                };
 
             let status = if x == '?' && y == '?' {
                 "Untracked"
@@ -1325,7 +1634,10 @@ fn git_status_files(root: &Path) -> Result<Vec<GitFileChange>, String> {
 
 fn git_status_counts(files: &[GitFileChange]) -> (usize, usize, usize) {
     let staged_count = files.iter().filter(|file| file.staged).count();
-    let untracked_count = files.iter().filter(|file| file.status == "Untracked").count();
+    let untracked_count = files
+        .iter()
+        .filter(|file| file.status == "Untracked")
+        .count();
     let modified_count = files
         .iter()
         .filter(|file| file.status != "Untracked" && !file.staged)
@@ -1583,7 +1895,8 @@ fn git_watch_stop(state: State<'_, GitWatchState>, root: String) -> Result<(), S
 
 fn validate_repo_file_path(file: &str) -> Result<String, String> {
     let trimmed = file.trim().replace('\\', "/");
-    if trimmed.is_empty() || trimmed.starts_with('/') || trimmed.contains("../") || trimmed == ".." {
+    if trimmed.is_empty() || trimmed.starts_with('/') || trimmed.contains("../") || trimmed == ".."
+    {
         return Err("Invalid repository file path.".to_string());
     }
     Ok(trimmed)
@@ -1607,7 +1920,12 @@ fn parse_commit_line(line: &str) -> Option<GitCommitInfo> {
 fn git_latest_commit(root: &Path) -> Option<GitCommitInfo> {
     let output = optional_git_panel_command(
         root,
-        &["log", "-1", "--date=iso-strict", "--pretty=format:%H%x1f%h%x1f%an%x1f%ad%x1f%s"],
+        &[
+            "log",
+            "-1",
+            "--date=iso-strict",
+            "--pretty=format:%H%x1f%h%x1f%an%x1f%ad%x1f%s",
+        ],
     )?;
     parse_commit_line(&output)
 }
@@ -1618,8 +1936,9 @@ fn git_current_branch(root: &Path) -> Option<String> {
 }
 
 fn git_current_local_branch(root: &Path) -> Result<String, String> {
-    optional_git_panel_command(root, &["branch", "--show-current"])
-        .ok_or_else(|| "Cannot push while HEAD is detached. Switch to a local branch first.".to_string())
+    optional_git_panel_command(root, &["branch", "--show-current"]).ok_or_else(|| {
+        "Cannot push while HEAD is detached. Switch to a local branch first.".to_string()
+    })
 }
 
 fn git_remote_url(root: &Path) -> Option<String> {
@@ -1627,7 +1946,11 @@ fn git_remote_url(root: &Path) -> Option<String> {
 }
 
 fn git_has_upstream(root: &Path) -> bool {
-    optional_git_panel_command(root, &["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"]).is_some()
+    optional_git_panel_command(
+        root,
+        &["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"],
+    )
+    .is_some()
 }
 
 fn git_push_current_branch(root: &Path) -> Result<(), String> {
@@ -1636,17 +1959,32 @@ fn git_push_current_branch(root: &Path) -> Result<(), String> {
     }
 
     if git_remote_url(root).is_none() {
-        return Err("No origin remote configured. Add a GitHub origin in Git Map before pushing.".to_string());
+        return Err(
+            "No origin remote configured. Add a GitHub origin in Git Map before pushing."
+                .to_string(),
+        );
     }
 
     let branch = git_current_local_branch(root)?;
-    git_panel_command_owned(&root, vec!["push".into(), "--set-upstream".into(), "origin".into(), branch]).map(|_| ())
+    git_panel_command_owned(
+        &root,
+        vec![
+            "push".into(),
+            "--set-upstream".into(),
+            "origin".into(),
+            branch,
+        ],
+    )
+    .map(|_| ())
 }
 
 fn git_release_version_from_json(path: &Path) -> Option<String> {
     let content = fs::read_to_string(path).ok()?;
     let value = serde_json::from_str::<Value>(&content).ok()?;
-    value.get("version").and_then(Value::as_str).map(ToString::to_string)
+    value
+        .get("version")
+        .and_then(Value::as_str)
+        .map(ToString::to_string)
 }
 
 fn git_release_version_from_cargo(path: &Path) -> Option<String> {
@@ -1724,9 +2062,15 @@ fn git_set_origin(path: String, url: String) -> Result<(), String> {
     let root = git_panel_root(&workspace_path(path)?)?;
     let url = validate_remote_url(&url)?;
     if git_remote_url(&root).is_some() {
-        git_panel_command_owned(&root, vec!["remote".into(), "set-url".into(), "origin".into(), url])
+        git_panel_command_owned(
+            &root,
+            vec!["remote".into(), "set-url".into(), "origin".into(), url],
+        )
     } else {
-        git_panel_command_owned(&root, vec!["remote".into(), "add".into(), "origin".into(), url])
+        git_panel_command_owned(
+            &root,
+            vec!["remote".into(), "add".into(), "origin".into(), url],
+        )
     }
     .map(|_| ())
 }
@@ -1810,8 +2154,11 @@ fn git_stage_file(path: String, file: String) -> Result<(), String> {
 fn git_unstage_file(path: String, file: String) -> Result<(), String> {
     let root = git_panel_root(&workspace_path(path)?)?;
     let file = validate_repo_file_path(&file)?;
-    git_panel_command_owned(&root, vec!["restore".into(), "--staged".into(), "--".into(), file])
-        .map(|_| ())
+    git_panel_command_owned(
+        &root,
+        vec!["restore".into(), "--staged".into(), "--".into(), file],
+    )
+    .map(|_| ())
 }
 
 #[tauri::command]
@@ -1841,7 +2188,9 @@ fn git_discard_file(path: String, file: String) -> Result<(), String> {
             file.clone(),
         ],
     )
-    .or_else(|_| git_panel_command_owned(&root, vec!["clean".into(), "-f".into(), "--".into(), file]))
+    .or_else(|_| {
+        git_panel_command_owned(&root, vec!["clean".into(), "-f".into(), "--".into(), file])
+    })
     .map(|_| ())
 }
 
@@ -1852,7 +2201,11 @@ fn git_commit(path: String, message: String) -> Result<(), String> {
     if message.is_empty() {
         return Err("Commit message cannot be empty.".to_string());
     }
-    git_panel_command_owned(&root, vec!["commit".into(), "-m".into(), message.to_string()]).map(|_| ())
+    git_panel_command_owned(
+        &root,
+        vec!["commit".into(), "-m".into(), message.to_string()],
+    )
+    .map(|_| ())
 }
 
 #[tauri::command]
@@ -1907,7 +2260,12 @@ fn git_get_commit_details(path: String, hash: String) -> Result<GitCommitInfo, S
     let mut commit = parse_commit_line(&line).ok_or_else(|| "Commit was not found.".to_string())?;
     let files = git_panel_command_owned(
         &root,
-        vec!["show".into(), "--name-only".into(), "--pretty=format:".into(), hash.to_string()],
+        vec![
+            "show".into(),
+            "--name-only".into(),
+            "--pretty=format:".into(),
+            hash.to_string(),
+        ],
     )?;
     commit.files = files
         .lines()
@@ -1928,7 +2286,11 @@ fn git_get_branches(path: String) -> Result<GitBranchesSnapshot, String> {
         is_repo: true,
         current_branch: Some(branch),
         dirty: status.lines().any(|line| !line.starts_with("## ")),
-        local: branches.iter().filter(|item| !item.is_remote).cloned().collect(),
+        local: branches
+            .iter()
+            .filter(|item| !item.is_remote)
+            .cloned()
+            .collect(),
         remote: branches.into_iter().filter(|item| item.is_remote).collect(),
     })
 }
@@ -2062,7 +2424,11 @@ fn validate_git_ref(root: &Path, value: &str) -> Result<String, String> {
     }
     git_panel_command_owned(
         root,
-        vec!["rev-parse".into(), "--verify".into(), format!("{value}^{{commit}}")],
+        vec![
+            "rev-parse".into(),
+            "--verify".into(),
+            format!("{value}^{{commit}}"),
+        ],
     )?;
     Ok(value.to_string())
 }
@@ -2071,7 +2437,8 @@ fn validate_git_ref(root: &Path, value: &str) -> Result<String, String> {
 fn git_preview_merge(path: String, source_branch: String) -> Result<GitMergePreview, String> {
     let root = git_panel_root(&workspace_path(path)?)?;
     let source_branch = validate_git_ref(&root, &source_branch)?;
-    let current_branch = git_current_branch(&root).ok_or_else(|| "Current branch was not found.".to_string())?;
+    let current_branch =
+        git_current_branch(&root).ok_or_else(|| "Current branch was not found.".to_string())?;
     if source_branch == current_branch {
         return Err("Choose a branch different from the current branch.".to_string());
     }
@@ -2090,7 +2457,11 @@ fn git_preview_merge(path: String, source_branch: String) -> Result<GitMergePrev
     )?;
     let files = git_panel_command_owned(
         &root,
-        vec!["diff".into(), "--name-only".into(), format!("HEAD...{source_branch}")],
+        vec![
+            "diff".into(),
+            "--name-only".into(),
+            format!("HEAD...{source_branch}"),
+        ],
     )?;
 
     Ok(GitMergePreview {
@@ -2099,7 +2470,12 @@ fn git_preview_merge(path: String, source_branch: String) -> Result<GitMergePrev
         dirty: !status.trim().is_empty(),
         can_fast_forward: git_panel_command_owned(
             &root,
-            vec!["merge-base".into(), "--is-ancestor".into(), "HEAD".into(), source_branch],
+            vec![
+                "merge-base".into(),
+                "--is-ancestor".into(),
+                "HEAD".into(),
+                source_branch,
+            ],
         )
         .is_ok(),
         commits: log.lines().filter_map(parse_commit_line).collect(),
@@ -2120,16 +2496,28 @@ fn git_merge_branch(path: String, source_branch: String) -> Result<(), String> {
     if source_branch == current_branch {
         return Err("Cannot merge the current branch into itself.".to_string());
     }
-    if !git_panel_command(&root, &["status", "--short"])?.trim().is_empty() {
+    if !git_panel_command(&root, &["status", "--short"])?
+        .trim()
+        .is_empty()
+    {
         return Err("Commit or stash local changes before merging.".to_string());
     }
-    git_panel_command_owned(&root, vec!["merge".into(), "--no-edit".into(), source_branch]).map(|_| ())
+    git_panel_command_owned(
+        &root,
+        vec!["merge".into(), "--no-edit".into(), source_branch],
+    )
+    .map(|_| ())
 }
 
 fn read_git_stashes(root: &Path) -> Result<Vec<GitStashInfo>, String> {
     let output = git_panel_command(
         root,
-        &["stash", "list", "--date=iso-strict", "--format=%gd%x1f%gs%x1f%ci"],
+        &[
+            "stash",
+            "list",
+            "--date=iso-strict",
+            "--format=%gd%x1f%gs%x1f%ci",
+        ],
     )?;
     Ok(output
         .lines()
@@ -2138,7 +2526,11 @@ fn read_git_stashes(root: &Path) -> Result<Vec<GitStashInfo>, String> {
             let reference = parts.next()?.trim();
             let message = parts.next()?.trim();
             let date = parts.next().unwrap_or_default().trim();
-            let index = reference.strip_prefix("stash@{")?.strip_suffix('}')?.parse().ok()?;
+            let index = reference
+                .strip_prefix("stash@{")?
+                .strip_suffix('}')?
+                .parse()
+                .ok()?;
             Some(GitStashInfo {
                 index,
                 reference: reference.to_string(),
@@ -2203,7 +2595,10 @@ fn git_get_stash_details(path: String, index: u32) -> Result<GitStashDetails, St
 #[tauri::command]
 fn git_create_stash(path: String, message: String, include_untracked: bool) -> Result<(), String> {
     let root = git_panel_root(&workspace_path(path)?)?;
-    if git_panel_command(&root, &["status", "--short"])?.trim().is_empty() {
+    if git_panel_command(&root, &["status", "--short"])?
+        .trim()
+        .is_empty()
+    {
         return Err("There are no local changes to stash.".to_string());
     }
     let message = if message.trim().is_empty() {
@@ -2222,13 +2617,21 @@ fn git_create_stash(path: String, message: String, include_untracked: bool) -> R
 #[tauri::command]
 fn git_apply_stash(path: String, index: u32) -> Result<(), String> {
     let root = git_panel_root(&workspace_path(path)?)?;
-    git_panel_command_owned(&root, vec!["stash".into(), "apply".into(), stash_reference(index)]).map(|_| ())
+    git_panel_command_owned(
+        &root,
+        vec!["stash".into(), "apply".into(), stash_reference(index)],
+    )
+    .map(|_| ())
 }
 
 #[tauri::command]
 fn git_drop_stash(path: String, index: u32) -> Result<(), String> {
     let root = git_panel_root(&workspace_path(path)?)?;
-    git_panel_command_owned(&root, vec!["stash".into(), "drop".into(), stash_reference(index)]).map(|_| ())
+    git_panel_command_owned(
+        &root,
+        vec!["stash".into(), "drop".into(), stash_reference(index)],
+    )
+    .map(|_| ())
 }
 
 #[tauri::command]
@@ -2249,7 +2652,12 @@ fn git_get_blame(path: String, file: String) -> Result<GitBlameSnapshot, String>
     let file = validate_repo_file_path(&file)?;
     let output = git_panel_command_owned(
         &root,
-        vec!["blame".into(), "--line-porcelain".into(), "--".into(), file.clone()],
+        vec![
+            "blame".into(),
+            "--line-porcelain".into(),
+            "--".into(),
+            file.clone(),
+        ],
     )?;
     let mut lines = Vec::new();
     let mut hash = String::new();
@@ -2275,7 +2683,10 @@ fn git_get_blame(path: String, file: String) -> Result<GitBlameSnapshot, String>
         let first = header.next().unwrap_or_default();
         if first.len() >= 40 && first.chars().all(|character| character.is_ascii_hexdigit()) {
             hash = first.to_string();
-            line_number = header.nth(1).and_then(|value| value.parse().ok()).unwrap_or(0);
+            line_number = header
+                .nth(1)
+                .and_then(|value| value.parse().ok())
+                .unwrap_or(0);
         } else if let Some(value) = line.strip_prefix("author ") {
             author = value.to_string();
         } else if let Some(value) = line.strip_prefix("author-time ") {
@@ -2298,7 +2709,9 @@ fn git_get_release_info(path: String) -> Result<GitReleaseInfo, String> {
         current_branch: git_current_branch(&root),
         clean: files.is_empty(),
         package_version: git_release_version_from_json(&root.join("package.json")),
-        tauri_version: git_release_version_from_json(&root.join("src-tauri").join("tauri.conf.json")),
+        tauri_version: git_release_version_from_json(
+            &root.join("src-tauri").join("tauri.conf.json"),
+        ),
         cargo_version: git_release_version_from_cargo(&root.join("src-tauri").join("Cargo.toml")),
         latest_tag: optional_git_panel_command(&root, &["describe", "--tags", "--abbrev=0"]),
     })
@@ -2317,7 +2730,17 @@ fn git_create_release(
         return Err("Version cannot be empty.".to_string());
     }
     let tag = format!("v{version}");
-    if git_panel_command_owned(&root, vec!["rev-parse".into(), "-q".into(), "--verify".into(), format!("refs/tags/{tag}")]).is_ok() {
+    if git_panel_command_owned(
+        &root,
+        vec![
+            "rev-parse".into(),
+            "-q".into(),
+            "--verify".into(),
+            format!("refs/tags/{tag}"),
+        ],
+    )
+    .is_ok()
+    {
         return Err(format!("Tag {tag} already exists."));
     }
 
@@ -2350,7 +2773,10 @@ fn git_create_release(
         if add_args.len() > 1 {
             git_panel_command_owned(&root, add_args)?;
         }
-        git_panel_command_owned(&root, vec!["commit".into(), "-m".into(), format!("Release {tag}")])?;
+        git_panel_command_owned(
+            &root,
+            vec!["commit".into(), "-m".into(), format!("Release {tag}")],
+        )?;
     }
     if options.create_git_tag {
         let notes = if notes.trim().is_empty() {
@@ -2358,7 +2784,10 @@ fn git_create_release(
         } else {
             notes.trim().to_string()
         };
-        git_panel_command_owned(&root, vec!["tag".into(), "-a".into(), tag.clone(), "-m".into(), notes])?;
+        git_panel_command_owned(
+            &root,
+            vec!["tag".into(), "-a".into(), tag.clone(), "-m".into(), notes],
+        )?;
     }
     if options.push_branch {
         git_push_current_branch(&root)?;
@@ -2385,7 +2814,10 @@ fn parse_branch_line(status: &str) -> (String, Option<String>, u32, u32) {
                 branch = branch_part.to_string();
             }
 
-            if let Some(summary) = rest.split_once('[').and_then(|(_, value)| value.split_once(']')) {
+            if let Some(summary) = rest
+                .split_once('[')
+                .and_then(|(_, value)| value.split_once(']'))
+            {
                 for part in summary.0.split(',') {
                     let clean = part.trim();
                     if let Some(value) = clean.strip_prefix("ahead ") {
@@ -2425,7 +2857,11 @@ fn read_git_branches(root: &str, current_branch: &str) -> Result<Vec<GitBranchIn
     for line in branches.lines() {
         let mut parts = line.splitn(5, '\t');
         let refname = parts.next().map(str::trim).unwrap_or_default();
-        let Some(name) = parts.next().map(str::trim).filter(|value| !value.is_empty()) else {
+        let Some(name) = parts
+            .next()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        else {
             continue;
         };
         if name.ends_with("/HEAD") {
@@ -2477,8 +2913,8 @@ fn spawn_terminal(
 #[cfg(test)]
 mod tests {
     use super::{
-        parse_github_skill_url, sanitize_skill_name, windows_path_to_wsl_path,
-        wsl_mount_path_to_windows_path,
+        normalize_windows_verbatim_path, parse_github_skill_url, sanitize_skill_name,
+        windows_path_to_wsl_path, wsl_mount_path_to_windows_path,
     };
 
     #[test]
@@ -2504,6 +2940,22 @@ mod tests {
             Some(r"C:\Users\Name\OneDrive - Org\Projects\Test".into())
         );
         assert_eq!(wsl_mount_path_to_windows_path("/home/name/project"), None);
+    }
+
+    #[test]
+    fn normalizes_windows_verbatim_paths_for_git_and_ui() {
+        assert_eq!(
+            normalize_windows_verbatim_path(r"\\?\C:\Users\julius.otto\Projekte\DMH-KontaktApp"),
+            r"C:\Users\julius.otto\Projekte\DMH-KontaktApp"
+        );
+        assert_eq!(
+            normalize_windows_verbatim_path(r"\\?\UNC\server\share\project"),
+            r"\\server\share\project"
+        );
+        assert_eq!(
+            normalize_windows_verbatim_path(r"C:\Users\julius.otto\Projekte"),
+            r"C:\Users\julius.otto\Projekte"
+        );
     }
 
     #[test]
@@ -2578,6 +3030,7 @@ pub fn run() {
             import_persisted_state,
             detect_agent_command,
             detect_agent_commands,
+            run_agent_install_command,
             get_skill_directory_info,
             create_skill_directory,
             open_skill_directory,
@@ -2588,11 +3041,13 @@ pub fn run() {
             validate_working_directory,
             create_project_directory,
             clone_project_repository,
+            list_cortex_skills,
             inspect_github_skill,
             inspect_local_skill,
             install_github_skill,
             install_local_skill,
             list_project_skills,
+            delete_project_skill,
             git_detect_repo,
             git_init_repo,
             git_set_origin,

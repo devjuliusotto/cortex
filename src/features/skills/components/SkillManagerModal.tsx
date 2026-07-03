@@ -9,6 +9,7 @@ import {
   Puzzle,
   Search,
   TerminalSquare,
+  Trash2,
   X,
 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
@@ -25,6 +26,15 @@ type ProjectSkillInfo = {
   privateToProject: boolean;
 };
 
+type CortexSkillSource = {
+  name: string;
+  description?: string;
+  path: string;
+  origin: string;
+  compatibleAgents: string[];
+  compatibilityNote: string;
+};
+
 type SkillManagerModalProps = {
   open: boolean;
   workspace: Workspace | null;
@@ -32,9 +42,11 @@ type SkillManagerModalProps = {
 };
 
 export function SkillManagerModal({ open, workspace, onClose }: SkillManagerModalProps) {
-  const [sourceType, setSourceType] = useState<"github" | "local">("github");
+  const [sourceType, setSourceType] = useState<"github" | "local" | "cortex">("github");
   const [githubUrl, setGithubUrl] = useState("");
   const [localPath, setLocalPath] = useState("");
+  const [selectedCortexPath, setSelectedCortexPath] = useState("");
+  const [cortexSkills, setCortexSkills] = useState<CortexSkillSource[]>([]);
   const [preview, setPreview] = useState<ProjectSkillInfo | null>(null);
   const [installedSkills, setInstalledSkills] = useState<ProjectSkillInfo[]>([]);
   const [status, setStatus] = useState("");
@@ -42,7 +54,7 @@ export function SkillManagerModal({ open, workspace, onClose }: SkillManagerModa
   const [busy, setBusy] = useState(false);
 
   const projectPath = workspace?.defaultWorkingDirectory?.trim() ?? "";
-  const source = sourceType === "github" ? githubUrl.trim() : localPath.trim();
+  const source = sourceType === "github" ? githubUrl.trim() : sourceType === "local" ? localPath.trim() : selectedCortexPath.trim();
 
   async function refreshInstalled() {
     if (!projectPath) {
@@ -58,6 +70,15 @@ export function SkillManagerModal({ open, workspace, onClose }: SkillManagerModa
     }
   }
 
+  async function refreshCortexSkills() {
+    try {
+      setCortexSkills(await invoke<CortexSkillSource[]>("list_cortex_skills"));
+    } catch (reason) {
+      setError(String(reason));
+      setCortexSkills([]);
+    }
+  }
+
   useEffect(() => {
     if (!open) {
       return;
@@ -66,6 +87,7 @@ export function SkillManagerModal({ open, workspace, onClose }: SkillManagerModa
     setError("");
     setStatus("");
     void refreshInstalled();
+    void refreshCortexSkills();
   }, [open, projectPath]);
 
   if (!open || !workspace) {
@@ -135,6 +157,27 @@ export function SkillManagerModal({ open, workspace, onClose }: SkillManagerModa
     }
   }
 
+  async function deleteSkill(skill: ProjectSkillInfo) {
+    if (!projectPath || !skill.installedPath) return;
+    if (!window.confirm(`Delete project skill "${skill.name}"?`)) return;
+    setBusy(true);
+    setError("");
+    setStatus((current) => [current, `[delete] ${skill.name}`].filter(Boolean).join("\n"));
+    try {
+      await invoke("delete_project_skill", {
+        projectPath,
+        installedPath: skill.installedPath,
+      });
+      setStatus((current) => `${current}\nDeleted: ${skill.name}`);
+      await refreshInstalled();
+    } catch (reason) {
+      setError(String(reason));
+      setStatus((current) => `${current}\nDelete failed.`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function chooseLocalSkill() {
     const selected = await openDialog({
       directory: true,
@@ -193,6 +236,15 @@ export function SkillManagerModal({ open, workspace, onClose }: SkillManagerModa
                       setPreview(null);
                     }}
                   />
+                  <SourceButton
+                    active={sourceType === "cortex"}
+                    icon={<Puzzle className="h-4 w-4" />}
+                    label="Cortex skills"
+                    onClick={() => {
+                      setSourceType("cortex");
+                      setPreview(null);
+                    }}
+                  />
                 </div>
 
                 {sourceType === "github" ? (
@@ -210,7 +262,7 @@ export function SkillManagerModal({ open, workspace, onClose }: SkillManagerModa
                       value={githubUrl}
                     />
                   </label>
-                ) : (
+                ) : sourceType === "local" ? (
                   <div className="grid gap-2">
                     <span className="text-xs font-medium text-muted-foreground">
                       Folder containing SKILL.md
@@ -228,6 +280,43 @@ export function SkillManagerModal({ open, workspace, onClose }: SkillManagerModa
                       <Button variant="outline" onClick={() => void chooseLocalSkill()}>
                         Browse
                       </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid gap-2">
+                    <span className="text-xs font-medium text-muted-foreground">
+                      Skills already available in Cortex
+                    </span>
+                    <div className="max-h-60 space-y-2 overflow-y-auto rounded-md border border-border bg-card/45 p-2">
+                      {cortexSkills.length === 0 ? (
+                        <div className="rounded-md border border-dashed border-border p-3 text-xs text-muted-foreground">
+                          No Cortex skills found.
+                        </div>
+                      ) : (
+                        cortexSkills.map((skill) => (
+                          <button
+                            className={`w-full rounded-md border p-3 text-left transition-colors ${selectedCortexPath === skill.path ? "border-primary/40 bg-primary/10" : "border-border bg-background/50 hover:bg-secondary"}`}
+                            key={skill.path}
+                            onClick={() => {
+                              setSelectedCortexPath(skill.path);
+                              setPreview(null);
+                            }}
+                            type="button"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="truncate text-sm font-medium">{skill.name}</div>
+                                <div className="mt-1 truncate text-[11px] text-primary">{skill.origin}</div>
+                              </div>
+                              <span className="shrink-0 rounded border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                                {skill.compatibleAgents.length}
+                              </span>
+                            </div>
+                            {skill.description && <p className="mt-2 line-clamp-2 text-xs leading-5 text-muted-foreground">{skill.description}</p>}
+                            <code className="mt-2 block truncate text-[10px] text-muted-foreground">{skill.path}</code>
+                          </button>
+                        ))
+                      )}
                     </div>
                   </div>
                 )}
@@ -271,7 +360,14 @@ export function SkillManagerModal({ open, workspace, onClose }: SkillManagerModa
                       No project skills found in <code>.agents/skills</code>.
                     </div>
                   ) : (
-                    installedSkills.map((skill) => <SkillCard key={skill.installedPath ?? skill.name} skill={skill} compact />)
+                    installedSkills.map((skill) => (
+                      <SkillCard
+                        key={skill.installedPath ?? skill.name}
+                        skill={skill}
+                        compact
+                        onDelete={skill.installedPath ? () => void deleteSkill(skill) : undefined}
+                      />
+                    ))
                   )}
                 </div>
               </aside>
@@ -296,7 +392,7 @@ function SourceButton({ active, icon, label, onClick }: { active: boolean; icon:
   );
 }
 
-function SkillCard({ skill, compact = false }: { skill: ProjectSkillInfo; compact?: boolean }) {
+function SkillCard({ skill, compact = false, onDelete }: { skill: ProjectSkillInfo; compact?: boolean; onDelete?: () => void }) {
   return (
     <article className="rounded-md border border-border bg-card/60 p-3">
       <div className="flex items-start justify-between gap-3">
@@ -309,9 +405,16 @@ function SkillCard({ skill, compact = false }: { skill: ProjectSkillInfo; compac
             <p className="mt-2 text-xs leading-5 text-muted-foreground">{skill.description}</p>
           )}
         </div>
-        <span className="flex shrink-0 items-center gap-1 rounded border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground">
-          <Lock className="h-3 w-3" /> private
-        </span>
+        <div className="flex shrink-0 items-center gap-1">
+          <span className="flex items-center gap-1 rounded border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground">
+            <Lock className="h-3 w-3" /> private
+          </span>
+          {onDelete && (
+            <Button size="icon" variant="ghost" onClick={onDelete} title="Delete skill">
+              <Trash2 className="h-4 w-4 text-cortex-red" />
+            </Button>
+          )}
+        </div>
       </div>
       <div className="mt-3 flex flex-wrap gap-1.5">
         {skill.compatibleAgents.map((agent) => (
