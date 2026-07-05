@@ -195,12 +195,19 @@ code {
 
 .navTabs {
   overflow: hidden;
+  max-width: min(68vw, 820px);
+  overflow-x: auto;
   gap: 2px;
   border: 1px solid rgb(255 255 255 / 0.12);
   border-radius: 999px;
   padding: 4px;
   background: rgb(8 11 15 / 0.62);
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06);
+  scrollbar-width: none;
+}
+
+.navTabs::-webkit-scrollbar {
+  display: none;
 }
 
 .navTabs {
@@ -1716,6 +1723,146 @@ code {
   border-bottom: 1px solid var(--line);
 }
 
+.agentsPage,
+.marketplacePage {
+  display: grid;
+  gap: 46px;
+}
+
+.agentHeroGrid,
+.marketplaceHero {
+  display: grid;
+  grid-template-columns: minmax(0, 0.86fr) minmax(420px, 0.74fr);
+  gap: 54px;
+  align-items: center;
+}
+
+.agentHeroGrid h2,
+.marketplaceHero h2,
+.agentFlow h2 {
+  margin: 0;
+  font-size: clamp(38px, 5.8vw, 88px);
+  line-height: 0.94;
+  letter-spacing: -0.04em;
+}
+
+.agentHeroGrid p,
+.marketplaceHero p {
+  max-width: 680px;
+  margin-top: 26px;
+  color: var(--muted-strong);
+  font-size: 18px;
+  line-height: 1.7;
+}
+
+.agentNameStrip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  padding: 20px 0;
+}
+
+.agentNameStrip span,
+.toolMatrix span {
+  border: 1px solid rgb(86 240 255 / 0.24);
+  border-radius: 999px;
+  padding: 10px 13px;
+  color: var(--cyan);
+  background: rgb(86 240 255 / 0.055);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.agentFeatureGrid,
+.marketplaceGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.agentFeature,
+.marketplaceCard {
+  min-height: 260px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 24px;
+  background:
+    linear-gradient(135deg, rgb(86 240 255 / 0.08), transparent 42%),
+    rgb(20 25 34 / 0.74);
+}
+
+.agentFeature span {
+  display: inline-flex;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  color: var(--green);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 11px;
+}
+
+.agentFeature h3,
+.marketplaceCard h3 {
+  margin: 42px 0 12px;
+  font-size: 26px;
+  line-height: 1;
+  letter-spacing: -0.03em;
+}
+
+.agentFeature p,
+.marketplaceCard p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.agentFlow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(340px, 0.7fr);
+  gap: 42px;
+  align-items: start;
+  border-top: 1px solid var(--line);
+  padding-top: 58px;
+}
+
+.agentFlow ol {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.agentFlow li {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 18px;
+  color: var(--muted-strong);
+  background: rgb(255 255 255 / 0.035);
+  line-height: 1.55;
+}
+
+.toolMatrix {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.toolMatrix div {
+  min-height: 110px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background:
+    repeating-linear-gradient(90deg, transparent 0 28px, rgb(86 240 255 / 0.045) 29px 30px),
+    rgb(8 11 15 / 0.78);
+}
+
 .workflowGrid {
   display: grid;
   grid-template-columns: minmax(0, 0.92fr) minmax(360px, 0.72fr);
@@ -2308,7 +2455,7 @@ code {
 
 .stats {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
   gap: 1px;
   padding-top: 48px;
 }
@@ -2845,6 +2992,9 @@ code {
   .introStrip,
   .homeGitFlow,
   .coreSection,
+  .agentHeroGrid,
+  .marketplaceHero,
+  .agentFlow,
   .downloadHeader,
   .workflowGrid,
   .roadmapSection,
@@ -2901,6 +3051,8 @@ code {
 
   .gallery,
   .featureGrid,
+  .agentFeatureGrid,
+  .marketplaceGrid,
   .supportGrid,
   .legalGrid,
   .homeValueGrid,
@@ -2946,6 +3098,10 @@ code {
   }
 
   .stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .toolMatrix {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -3208,6 +3364,12 @@ code {
   }
 
   .stats {
+    grid-template-columns: 1fr;
+  }
+
+  .agentFeatureGrid,
+  .marketplaceGrid,
+  .toolMatrix {
     grid-template-columns: 1fr;
   }
 

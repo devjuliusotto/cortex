@@ -21,6 +21,7 @@ const legalCopy = {
     "Cortex does not collect, transmit, sell, analyze, or share personal data.",
     "Settings, workspaces, notes, and terminal data stay locally on your device.",
     "The app does not include advertising, tracking, analytics, telemetry, or user profiling.",
+    "Cortex can launch local AI agent CLIs, but it does not call AI APIs or upload prompts by itself.",
     "The website does not set cookies and does not use analytics.",
     "Downloads and source code are hosted on GitHub; when you open external links, those services' policies apply.",
   ],
@@ -41,12 +42,20 @@ const productHighlights = [
     text: "Each workspace keeps its own path, layout, notes, history, commands, and terminals separated by project.",
   },
   {
-    title: "Parallel agents",
-    text: "Open multiple terminals for AI agents, scripts, and servers without mixing context between projects.",
+    title: "My Agents",
+    text: "Detect, install, and launch local coding agents such as Gemini CLI, Claude Code, Codex, Aider, OpenCode, Continue, Copilot CLI, and Shell GPT.",
+  },
+  {
+    title: "Office View",
+    text: "A visual workspace shows active, completed, waiting, and error states across running agent terminals.",
   },
   {
     title: "Terminal GUI",
     text: "Use tabs, panes, Git Map, notes, and the command palette to operate your terminal with less friction.",
+  },
+  {
+    title: "Developer tools Marketplace",
+    text: "Install and update common Windows developer tools with visible WinGet commands instead of hidden installers.",
   },
   {
     title: "Windows-first",
@@ -54,11 +63,11 @@ const productHighlights = [
   },
   {
     title: "Local-first",
-    text: "No telemetry, analytics, cloud sync, AI, or background external calls. State stays in local app data.",
+    text: "No telemetry, analytics, cloud sync, or background model calls. State stays in local app data.",
   },
   {
     title: "Release helper",
-    text: "Saved commands and Git Map help prepare versions, tags, changelogs, and publishing without leaving context.",
+    text: "Git Map helps prepare versions, tags, changelogs, and publishing without leaving the workspace.",
   },
 ];
 
@@ -69,8 +78,18 @@ const coreSections = [
     view: "workspace",
   },
   {
+    title: "Agent control surface",
+    text: "My Agents turns local CLI agents into a managed catalog: check what is installed, review install commands, and open the agent in the active workspace.",
+    view: "my-agents",
+  },
+  {
+    title: "Office View",
+    text: "Watch parallel agent work as a visual status floor, then jump back into the exact terminal that needs attention.",
+    view: "office",
+  },
+  {
     title: "Git Map",
-    text: "Understand branches, commits, changes, and releases without pulling focus away from agents running in the terminal.",
+    text: "Understand overview, changes, history, branches, merges, stashes, blame, and releases without pulling focus away from the terminal.",
     view: "git",
   },
   {
@@ -78,13 +97,19 @@ const coreSections = [
     text: "Save prompts, setup commands, checklists, and history per project. Lose less context between AI sessions.",
     view: "commands",
   },
+  {
+    title: "Marketplace without hidden runtime code",
+    text: "Install developer tools, open feedback issues, manage Office View, and prepare for optional templates while keeping commands visible.",
+    view: "marketplace",
+  },
 ];
 
 const metrics = [
-  ["0.1.18", "current release"],
-  ["5", "Git Map tabs"],
+  ["0.1.46", "app version"],
+  ["8", "Git Map tabs"],
+  ["8", "agent CLIs catalogued"],
+  ["19", "WinGet tools"],
   ["0", "telemetry"],
-  ["Local", "app state"],
 ];
 
 const gallery = [
@@ -96,22 +121,22 @@ const gallery = [
   {
     title: "Git Map",
     sources: imageExtensions.map(extension => `/media/2.${extension}`),
-    description: "Overview, changes, history, branches, and releases without switching tools.",
+    description: "Overview, changes, history, branches, merge, stashes, blame, and releases without switching tools.",
   },
   {
-    title: "Command Palette",
+    title: "My Agents",
     sources: imageExtensions.map(extension => `/media/3.${extension}`),
-    description: "Saved commands, snippets, and recurring actions for the current project.",
+    description: "Detect installed agent CLIs, review install commands, and launch them in the current workspace.",
   },
   {
-    title: "Split panes",
+    title: "Office View",
     sources: imageExtensions.map(extension => `/media/4.${extension}`),
-    description: "Draggable splitters and layouts persisted per workspace.",
+    description: "A visual agent floor for running, waiting, completed, and errored terminal sessions.",
   },
   {
-    title: "Local setup",
+    title: "Marketplace",
     sources: imageExtensions.map(extension => `/media/5.${extension}`),
-    description: "Profiles, cwd, auto-start, and notes stored locally.",
+    description: "WinGet developer tools, feedback, templates, add-ons, and Office View controls.",
   },
 ];
 
@@ -120,7 +145,7 @@ const docs = [
     id: "start",
     label: "Quick start",
     title: "Install and create your first workspace",
-    summary: "Download the installer, create a workspace, and set the project folder that will receive terminals and agents.",
+    summary: "Download the installer, create a workspace, and set the project folder that will receive terminals, notes, Git Map, and agents.",
     steps: [
       "Download the Windows installer from GitHub Releases.",
       "Create a workspace for each important project.",
@@ -144,16 +169,29 @@ const docs = [
   },
   {
     id: "agents",
-    label: "AI agents",
-    title: "Run agents in parallel",
-    summary: "Use panes and tabs to keep agents, servers, tests, and shells running without losing which terminal belongs to each task.",
+    label: "My Agents",
+    title: "Discover and launch local agent CLIs",
+    summary: "My Agents detects installed coding agents, previews install commands, and opens the selected agent in the active workspace.",
     steps: [
-      "Create a session for each agent or long-running process.",
-      "Use splits to keep the agent, server, and Git Map visible.",
-      "Save recurring commands to start agents with one click.",
-      "Use notes to record the goal, prompt, and next steps.",
+      "Open My Agents from the sidebar.",
+      "Refresh detection to check installed CLIs.",
+      "Review the install command before running a background install.",
+      "Open the agent in a new PowerShell session tied to the active workspace.",
     ],
-    command: "codex --workspace .",
+    command: "codex",
+  },
+  {
+    id: "office",
+    label: "Office View",
+    title: "Visualize parallel agent work",
+    summary: "Office View turns terminal activity into a status map across workspaces and can also run in a separate window.",
+    steps: [
+      "Enable Office View from Marketplace add-ons if it is disabled.",
+      "Use the Terminal/Office switch in the workspace header.",
+      "Open Office in a separate window for a second monitor.",
+      "Select a terminal from Office View to jump back into the active session.",
+    ],
+    command: "Cortex Office View",
   },
   {
     id: "git",
@@ -163,10 +201,23 @@ const docs = [
     steps: [
       "Open a workspace with a folder that contains `.git`.",
       "Review changes, stage, unstage, commit, fetch, pull, and push.",
-      "Check commit and branch details without leaving the app.",
+      "Use merge preview, stashes, blame, history, and branch details without leaving the app.",
       "Use the Releases tab to prepare tags and release notes.",
     ],
     command: "git status",
+  },
+  {
+    id: "marketplace",
+    label: "Marketplace",
+    title: "Install tools and manage add-ons",
+    summary: "The Marketplace exposes visible commands for WinGet developer tools, feedback, templates, and built-in add-ons.",
+    steps: [
+      "Search the Developer Tools catalog by name, package ID, or category.",
+      "Run install, update, check updates, or update all through visible WinGet commands.",
+      "Open prefilled GitHub issues manually from the Feedback tab.",
+      "Enable or disable Office View from Add-ons.",
+    ],
+    command: "winget install --id Git.Git --exact --source winget",
   },
   {
     id: "privacy",
@@ -175,7 +226,7 @@ const docs = [
     summary: "Cortex was designed as a local tool, not a remote service.",
     steps: [
       "No tracking, analytics, telemetry, or cloud sync.",
-      "No AI features or background external calls.",
+      "No built-in AI model calls or automatic prompt uploads.",
       "Update checks use GitHub Releases only when you choose to check.",
       "Feedback opens GitHub Issues in the browser and does not send data automatically.",
     ],
@@ -219,7 +270,8 @@ const demoProjects = [
 const roadmapItems = [
   "More persistent terminal runtime through a local tray process.",
   "Workspace profile import and export.",
-  "Optional local templates in the Marketplace.",
+  "Optional local templates and add-ons in the Marketplace.",
+  "A stricter extension model before any third-party runtime code is allowed.",
   "Signed Windows installer.",
 ];
 
@@ -227,6 +279,8 @@ const pages = [
   { id: "home", label: "Home" },
   { id: "demo", label: "Demo" },
   { id: "features", label: "Features" },
+  { id: "agents", label: "Agents" },
+  { id: "marketplace", label: "Marketplace" },
   { id: "docs", label: "Docs" },
   { id: "installer-exit-codes", label: "Exit Codes", path: installerExitCodesPath },
   { id: "privacy", label: "Privacy" },
@@ -340,7 +394,7 @@ function AppMockup({ compact = false }) {
             <div className="mockPanel">
               <span className="panelTitle">Git Map</span>
               <p>Overview, changes, history, branches and releases stay visible beside the shell.</p>
-              <div className="snippet">Release v0.1.18</div>
+              <div className="snippet">Release v0.1.46</div>
               <div className="snippet">git push origin main</div>
             </div>
           )}
@@ -429,6 +483,50 @@ const officeAgents = [
   { id: "wait", label: "Waiting", detail: "needs your input", status: "waiting" },
 ];
 
+const agentCards = [
+  {
+    title: "Installed",
+    text: "Cortex checks local commands and separates installed agents from available ones.",
+    meta: "where codex",
+  },
+  {
+    title: "Available",
+    text: "Install commands are visible before they run. Background installs report success or errors in the app.",
+    meta: "npm install -g @google/gemini-cli",
+  },
+  {
+    title: "Skills",
+    text: "Curated public skills, global folders, and workspace skill folders are managed from the same page.",
+    meta: "30 curated skills",
+  },
+  {
+    title: "Extensions",
+    text: "Gemini CLI extensions can be installed from GitHub with command previews and local workspace context.",
+    meta: "gemini extensions install",
+  },
+];
+
+const agentNames = ["Gemini CLI", "Claude Code", "Aider", "Codex CLI", "OpenCode", "Continue CLI", "GitHub Copilot CLI", "Shell GPT"];
+
+const marketplaceCards = [
+  {
+    title: "Developer Tools",
+    text: "Install Git, GitHub CLI, PowerShell, Node.js, Python, Rust, VS Code, Docker, kubectl, cloud CLIs, and more through WinGet.",
+  },
+  {
+    title: "Feedback",
+    text: "Build a prefilled GitHub issue for bugs, feature requests, templates, or general feedback. Submission stays manual.",
+  },
+  {
+    title: "Templates",
+    text: "Workspace templates are staged behind a disabled flag so Cortex can add them later without crowding the default UI.",
+  },
+  {
+    title: "Add-ons",
+    text: "Office View is managed as a built-in add-on. There is still no third-party plugin runtime in this version.",
+  },
+];
+
 function PixelAgent({ agent, index }) {
   return (
     <div className={`pixelDesk ${agent.status}`} style={{ "--agent-delay": `${index * -0.7}s` }}>
@@ -489,6 +587,85 @@ function OfficeViewShowcase() {
   );
 }
 
+function AgentsPage() {
+  return (
+    <section className="section agentsPage" id="agents">
+      <div className="agentHeroGrid">
+        <div>
+          <span className="sectionEyebrow">My Agents</span>
+          <h2>Local coding agents, organized like part of the workspace.</h2>
+          <p>
+            Cortex does not ship an AI model. It gives local agent CLIs a practical control
+            surface: detection, install commands, launch buttons, skills, and extension setup.
+          </p>
+        </div>
+        <DocScreenshot activeId="my-agents" />
+      </div>
+
+      <div className="agentNameStrip" aria-label="Supported agent catalog">
+        {agentNames.map(name => <span key={name}>{name}</span>)}
+      </div>
+
+      <div className="agentFeatureGrid">
+        {agentCards.map(card => (
+          <article className="agentFeature" key={card.title}>
+            <span>{card.meta}</span>
+            <h3>{card.title}</h3>
+            <p>{card.text}</p>
+          </article>
+        ))}
+      </div>
+
+      <section className="agentFlow">
+        <div>
+          <span className="sectionEyebrow">Agent workflow</span>
+          <h2>Install visibly. Run locally. Keep every agent tied to a project.</h2>
+        </div>
+        <ol>
+          <li>Choose the active workspace so commands inherit the right project folder.</li>
+          <li>Review the exact install or run command before Cortex creates a terminal.</li>
+          <li>Use panes, Git Map, notes, Office View, and notifications to track the work.</li>
+        </ol>
+      </section>
+    </section>
+  );
+}
+
+function MarketplacePage() {
+  return (
+    <section className="section marketplacePage" id="marketplace">
+      <div className="marketplaceHero">
+        <div>
+          <span className="sectionEyebrow">Marketplace</span>
+          <h2>Useful installs without hiding what runs on your machine.</h2>
+          <p>
+            The Marketplace is intentionally conservative: visible WinGet commands, manual
+            GitHub feedback, disabled template staging, and built-in add-on controls.
+          </p>
+        </div>
+        <DocScreenshot activeId="marketplace" />
+      </div>
+
+      <div className="marketplaceGrid">
+        {marketplaceCards.map(card => (
+          <article className="marketplaceCard" key={card.title}>
+            <h3>{card.title}</h3>
+            <p>{card.text}</p>
+          </article>
+        ))}
+      </div>
+
+      <section className="toolMatrix" aria-label="Developer tool categories">
+        {["Essentials", "Languages", "IDEs", "Databases", "Cloud & DevOps"].map(category => (
+          <div key={category}>
+            <span>{category}</span>
+          </div>
+        ))}
+      </section>
+    </section>
+  );
+}
+
 function ProductPreview({ view }) {
   const activeId = view === "commands" ? "workspace" : view;
 
@@ -531,7 +708,7 @@ function MediaShowcase() {
           The idea is simple: each project loads its own operational context.
         </p>
       </div>
-      <p className="demoNotice">This website is still under construction.</p>
+      <p className="demoNotice">The demo mirrors the current local-first workflow: workspace, terminal, Git Map, notes, commands, agents, and Marketplace stay in one context.</p>
 
       <div className="interactiveDemo">
         <aside className="demoSidebar">
@@ -637,14 +814,32 @@ function DocScreenshot({ activeId }) {
     },
     git: {
       title: "Git Map",
-      tabs: ["Overview", "Changes", "History", "Releases"],
-      body: ["main · clean", "v0.1.18 ready", "3 commits ahead"],
+      tabs: ["Overview", "Changes", "History", "Branches", "Merge", "Stashes", "Blame", "Releases"],
+      body: ["main · clean", "v0.1.46 ready", "merge preview", "stashes: 2"],
       terminal: "git push origin main",
+    },
+    office: {
+      title: "Office View",
+      tabs: ["Working", "Complete", "Waiting"],
+      body: ["Codex: editing feature", "Tests: 42 passed", "Claude: waiting for input"],
+      terminal: "open office window",
+    },
+    "my-agents": {
+      title: "My Agents",
+      tabs: ["Installed", "Available", "Skills", "Extensions"],
+      body: ["Codex CLI installed", "Gemini CLI available", "30 curated skills"],
+      terminal: "npm install -g @openai/codex",
+    },
+    marketplace: {
+      title: "Marketplace",
+      tabs: ["Tools", "Feedback", "Templates", "Add-ons"],
+      body: ["19 WinGet packages", "Office View enabled", "Manual GitHub issues"],
+      terminal: "winget upgrade --all --source winget",
     },
     privacy: {
       title: "Local-first",
       tabs: ["App data", "No telemetry", "Manual update"],
-      body: ["No analytics", "No cloud sync", "No background API"],
+      body: ["No analytics", "No cloud sync", "No background AI calls"],
       terminal: "%APPDATA%\\dev.cortex.workspace",
     },
   }[activeId] ?? {
@@ -1190,17 +1385,17 @@ export function App() {
                 <article>
                   <span>01</span>
                   <h3>Learn Git without fear</h3>
-                  <p>See changed files, branches, commits, and releases in a visual interface. Understand the flow before memorizing every command.</p>
+                  <p>See changed files, branches, commits, merge previews, stashes, blame, and releases in a visual interface. Understand the flow before memorizing every command.</p>
                 </article>
                 <article>
                   <span>02</span>
-                  <h3>One panel for each project</h3>
-                  <p>Each workspace stores path, terminals, notes, history, saved commands, and layout. Switching projects does not mix context.</p>
+                  <h3>Agents stay manageable</h3>
+                  <p>Detect local coding agents, launch them into the right workspace, and watch parallel work through terminal panes or Office View.</p>
                 </article>
                 <article>
                   <span>03</span>
-                  <h3>Run agents in parallel</h3>
-                  <p>Use panes for Codex, servers, tests, and scripts at the same time. You know which agent belongs to which project and task.</p>
+                  <h3>Tools install transparently</h3>
+                  <p>Marketplace actions use visible WinGet and CLI commands. Cortex organizes the workflow without adding hidden cloud services.</p>
                 </article>
               </div>
               <div className="postHeroFlow">
@@ -1237,13 +1432,14 @@ export function App() {
                   <h2>From terminal to release without losing context.</h2>
                   <p>
                     Cortex does not replace Git, your shell, or your editor. It organizes the surroundings:
-                    the right path, the right tabs, recurring commands, and release context in the same workspace.
+                    the right path, the right tabs, local agents, developer tools, and release context in the same workspace.
                   </p>
                 </div>
                 <ol className="workflowSteps">
                   <li>Open the workspace and restore layout, terminal, notes, and Git Map.</li>
-                  <li>Run saved or recent commands from the Command Palette.</li>
-                  <li>Review status, commits, branches, and release info through Git Map.</li>
+                  <li>Launch local agent CLIs from My Agents or the Command Palette.</li>
+                  <li>Review status, commits, branches, stashes, blame, and release info through Git Map.</li>
+                  <li>Install or update developer tools through visible Marketplace commands.</li>
                   <li>Publish the version using your local flow and GitHub Releases.</li>
                 </ol>
               </div>
@@ -1270,6 +1466,8 @@ export function App() {
           </>
         )}
 
+        {activePage === "agents" && <AgentsPage />}
+        {activePage === "marketplace" && <MarketplacePage />}
         {activePage === "docs" && <Documentation />}
         {activePage === "installer-exit-codes" && <InstallerExitCodesPage />}
         {activePage === "privacy" && <LegalPrivacyPage />}
